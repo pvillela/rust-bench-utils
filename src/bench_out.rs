@@ -6,7 +6,7 @@ use basic_stats::{
     core::{sample_mean, sample_stdev},
 };
 
-/// Contains the data resulting from a benchmark of a closures.
+/// Contains the data resulting from benchmarking a closure.
 ///
 /// It is returned by the core benchmarking functions in this library.
 /// Its methods provide descriptive statistics about the latency sample of the
