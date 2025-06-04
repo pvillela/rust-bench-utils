@@ -114,7 +114,6 @@ impl BenchState {
     fn reset(&mut self) {
         self.hist.reset();
         self.sum = 0;
-        self.sum2 = 0;
         self.sum_ln = 0.;
         self.sum2_ln = 0.;
     }

@@ -1,6 +1,6 @@
 //! Module defining the key data structure produced by [`crate::bench_one`].
 
-use crate::{SummaryStats, Timing, new_timing, summary_stats};
+use crate::{SummaryStats, Timing, summary_stats};
 use basic_stats::{
     aok::AokFloat,
     core::{sample_mean, sample_stdev},
@@ -14,29 +14,30 @@ use basic_stats::{
 pub struct BenchOut {
     pub(super) hist: Timing,
     pub(super) sum: i64,
-    pub(super) sum2: i64,
     pub(super) sum_ln: f64,
     pub(super) sum2_ln: f64,
 }
 
 impl BenchOut {
+    #[cfg(feature = "_collect")]
     /// Creates a new empty instance.
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
+        use crate::new_timing;
+
         let hist = new_timing(20 * 1000 * 1000, 5);
         let sum = 0;
-        let sum2 = 0;
         let sum_ln = 0.;
         let sum2_ln = 0.;
 
         Self {
             hist,
             sum,
-            sum2,
             sum_ln,
             sum2_ln,
         }
     }
 
+    #[cfg(feature = "_collect")]
     /// Updates `self` with an elapsed time observation for the function.
     #[inline(always)]
     pub fn capture_data(&mut self, elapsed: u64) {
@@ -46,7 +47,6 @@ impl BenchOut {
 
         assert!(elapsed > 0, "latency must be > 0");
         self.sum += elapsed as i64;
-        self.sum2 += elapsed.pow(2) as i64;
         let ln = (elapsed as f64).ln();
         self.sum_ln += ln;
         self.sum2_ln += ln.powi(2);

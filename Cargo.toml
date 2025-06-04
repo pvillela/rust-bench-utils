@@ -29,5 +29,6 @@ sha2 = "0.10.9"
 
 
 [features]
-default = ["_bench_one"]
-_bench_one = []
+default = ["_bench_one", "_collect"]
+_collect = []                        # for use by `bench_diff`
+_bench_one = ["_collect"]

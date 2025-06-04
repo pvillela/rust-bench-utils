@@ -3,8 +3,9 @@ use hdrhistogram::Histogram;
 /// Alias of [`Histogram<u64>`].
 pub(crate) type Timing = Histogram<u64>;
 
+#[cfg(feature = "_collect")]
 /// Constructs a [`Timing`]. The arguments correspond to [Histogram::high] and [Histogram::sigfig].
-pub(crate) fn new_timing(hist_high: u64, hist_sigfig: u8) -> Timing {
+pub fn new_timing(hist_high: u64, hist_sigfig: u8) -> Timing {
     let mut hist = Histogram::<u64>::new_with_max(hist_high, hist_sigfig)
         .expect("should not happen given histogram construction");
     hist.auto(true);
@@ -55,6 +56,6 @@ impl SummaryStats {
 }
 
 /// Computes a [`SummaryStats`] from a [`Histogram<u64>`].
-pub(crate) fn summary_stats(hist: &Histogram<u64>) -> SummaryStats {
+pub fn summary_stats(hist: &Histogram<u64>) -> SummaryStats {
     SummaryStats::new(hist)
 }
