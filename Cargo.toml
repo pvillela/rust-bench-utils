@@ -1,0 +1,33 @@
+[package]
+name = "bench_utils"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Simple utilities to measure latency and synthesise functions with predictable latency."
+repository = "https://github.com/pvillela/rust-bench-utils/tree/main"
+documentation = "https://docs.rs/bench_utils/latest/bench_utils/"
+readme = "README.md"
+keywords = [
+    "latency",
+    "measurement",
+    "performance",
+    "benchmarking",
+    "calibration",
+]
+categories = ["development-tools::profiling"]
+exclude = ["CHANGELOG.md", "*.sh", ".gitignore", "examples"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+basic_stats = { version = "1.0.0", default-features = false, features = [
+    "normal",
+    "aok",
+], optional = true }
+hdrhistogram = { version = "7.5", optional = true }
+sha2 = "0.10.9"
+
+
+[features]
+default = ["_collect"]
+_collect = ["dep:basic_stats", "dep:hdrhistogram"]
