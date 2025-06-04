@@ -37,6 +37,21 @@ impl BenchOut {
         }
     }
 
+    /// Updates `self` with an elapsed time observation for the function.
+    #[inline(always)]
+    pub fn capture_data(&mut self, elapsed: u64) {
+        self.hist
+            .record(elapsed)
+            .expect("can't happen: histogram is auto-resizable");
+
+        assert!(elapsed > 0, "latency must be > 0");
+        self.sum += elapsed as i64;
+        self.sum2 += elapsed.pow(2) as i64;
+        let ln = (elapsed as f64).ln();
+        self.sum_ln += ln;
+        self.sum2_ln += ln.powi(2);
+    }
+
     /// Number of observations (sample size) for a function, as an integer.
     #[inline(always)]
     pub fn n(&self) -> u64 {

@@ -69,21 +69,6 @@ impl LatencyUnit {
 type BenchState = BenchOut;
 
 impl BenchState {
-    /// Updates the state with an elapsed time for each function.
-    #[inline(always)]
-    pub fn capture_data(&mut self, elapsed: u64) {
-        self.hist
-            .record(elapsed)
-            .expect("can't happen: histogram is auto-resizable");
-
-        assert!(elapsed > 0, "latency must be > 0");
-        self.sum += elapsed as i64;
-        self.sum2 += elapsed.pow(2) as i64;
-        let ln = (elapsed as f64).ln();
-        self.sum_ln += ln;
-        self.sum2_ln += ln.powi(2);
-    }
-
     /// Executes `f` repeatedly and captures latencies.
     /// `pre_exec` is invoked once just before the invocation of `f`, and `exec_status` is invoked at the
     /// end of each invocation.

@@ -23,11 +23,11 @@ exclude = ["CHANGELOG.md", "*.sh", ".gitignore", "examples"]
 basic_stats = { version = "1.0.0", default-features = false, features = [
     "normal",
     "aok",
-], optional = true }
-hdrhistogram = { version = "7.5", optional = true }
+], optional = false }
+hdrhistogram = { version = "7.5", optional = false }
 sha2 = "0.10.9"
 
 
 [features]
-default = ["_collect"]
-_collect = ["dep:basic_stats", "dep:hdrhistogram"]
+default = ["_bench_one"]
+_bench_one = []
