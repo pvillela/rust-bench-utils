@@ -6,16 +6,20 @@ use basic_stats::{
 
 use crate::BenchOut;
 
-/// Struct that holds the benchmark outputs of two closures (`f1` and `f2`) for comparison purposes.
-pub struct Comp(BenchOut, BenchOut);
+/// Struct that holds references to the benchmark outputs of two closures (`f1` and `f2`) for comparison purposes.
+pub struct Comp<'a>(&'a BenchOut, &'a BenchOut);
 
-impl Comp {
+impl<'a> Comp<'a> {
+    pub fn new(f1_out: &'a BenchOut, f2_out: &'a BenchOut) -> Self {
+        Self(f1_out, f2_out)
+    }
+
     pub fn f1_out(&self) -> &BenchOut {
-        &self.0
+        self.0
     }
 
     pub fn f2_out(&self) -> &BenchOut {
-        &self.1
+        self.1
     }
 
     /// Difference between the median of `f1`'s latencies and the median of `f2`'s latencies.
