@@ -1,5 +1,7 @@
 use hdrhistogram::Histogram;
 
+use crate::BenchOut;
+
 /// Alias of [`Histogram<u64>`].
 pub(crate) type Timing = Histogram<u64>;
 
@@ -35,11 +37,12 @@ pub struct SummaryStats {
 
 impl SummaryStats {
     /// Computes summary statistics from the given histogram.
-    fn new(hist: &Timing) -> Self {
+    fn new(out: &BenchOut) -> Self {
+        let hist = &out.hist;
         Self {
             count: hist.len(),
-            mean: hist.mean(),
-            stdev: hist.stdev(),
+            mean: out.mean(),
+            stdev: out.stdev(),
             min: hist.min(),
             p1: hist.value_at_quantile(0.01),
             p5: hist.value_at_quantile(0.05),
@@ -55,7 +58,7 @@ impl SummaryStats {
     }
 }
 
-/// Computes a [`SummaryStats`] from a [`Histogram<u64>`].
-pub fn summary_stats(hist: &Histogram<u64>) -> SummaryStats {
-    SummaryStats::new(hist)
+/// Computes a [`SummaryStats`] from a [`BenchOut`].
+pub fn summary_stats(out: &BenchOut) -> SummaryStats {
+    SummaryStats::new(out)
 }

@@ -147,7 +147,7 @@ pub fn bench_one_x(
     pre_exec: impl FnOnce(),
     mut exec_status: impl FnMut(usize),
 ) -> BenchOut {
-    let mut state = BenchOut::new();
+    let mut state = BenchOut::new(unit);
 
     state.warmup(unit, &mut f, &mut warmup_status);
     state.reset();

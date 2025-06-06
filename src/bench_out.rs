@@ -1,5 +1,7 @@
 //! Module defining the key data structure produced by [`crate::bench_one`].
 
+#[cfg(feature = "_collect")]
+use crate::LatencyUnit;
 use crate::{SummaryStats, Timing, summary_stats};
 use basic_stats::{
     aok::AokFloat,
@@ -12,8 +14,10 @@ use basic_stats::{
 /// Its methods provide descriptive statistics about the latency sample of the
 /// benchmarked closure.
 pub struct BenchOut {
+    pub(super) unit: LatencyUnit,
     pub(super) hist: Timing,
     pub(super) sum: i64,
+    pub(super) sum2: i64,
     pub(super) sum_ln: f64,
     pub(super) sum2_ln: f64,
 }
@@ -21,17 +25,20 @@ pub struct BenchOut {
 impl BenchOut {
     #[cfg(feature = "_collect")]
     /// Creates a new empty instance.
-    pub fn new() -> Self {
+    pub fn new(unit: LatencyUnit) -> Self {
         use crate::new_timing;
 
         let hist = new_timing(20 * 1000 * 1000, 5);
         let sum = 0;
+        let sum2 = 0;
         let sum_ln = 0.;
         let sum2_ln = 0.;
 
         Self {
+            unit,
             hist,
             sum,
+            sum2,
             sum_ln,
             sum2_ln,
         }
@@ -52,6 +59,11 @@ impl BenchOut {
         self.sum2_ln += ln.powi(2);
     }
 
+    /// Latency unit used in data collection.
+    pub fn unit(&self) -> LatencyUnit {
+        self.unit
+    }
+
     /// Number of observations (sample size) for a function, as an integer.
     #[inline(always)]
     pub fn n(&self) -> u64 {
@@ -68,12 +80,17 @@ impl BenchOut {
     ///
     /// Includes sample size, mean, standard deviation, median, several percentiles, min, and max.
     pub fn summary(&self) -> SummaryStats {
-        summary_stats(&self.hist)
+        summary_stats(&self)
     }
 
-    /// Mean of `f1`'s latencies.
+    /// Mean of latencies.
     pub fn mean(&self) -> f64 {
-        self.summary().mean
+        sample_mean(self.n(), self.sum as f64).aok()
+    }
+
+    /// Standard deviation of latencies.
+    pub fn stdev(&self) -> f64 {
+        sample_stdev(self.n(), self.sum as f64, self.sum2 as f64).aok()
     }
 
     /// Median of latencies.
