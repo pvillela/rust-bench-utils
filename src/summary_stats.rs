@@ -2,8 +2,9 @@ use hdrhistogram::Histogram;
 
 use crate::BenchOut;
 
+#[cfg(feature = "_collect")]
 /// Alias of [`Histogram<u64>`].
-pub(crate) type Timing = Histogram<u64>;
+pub type Timing = Histogram<u64>;
 
 #[cfg(feature = "_collect")]
 /// Constructs a [`Timing`]. The arguments correspond to [Histogram::high] and [Histogram::sigfig].

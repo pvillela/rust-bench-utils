@@ -1,12 +1,13 @@
 //! Module defining the key data structure produced by [`crate::bench_one`].
 
-#[cfg(feature = "_collect")]
 use crate::LatencyUnit;
 use crate::{SummaryStats, Timing, summary_stats};
 use basic_stats::{
     aok::AokFloat,
     core::{sample_mean, sample_stdev},
 };
+#[cfg(feature = "_collect")]
+use hdrhistogram::Histogram;
 
 /// Contains the data resulting from benchmarking a closure.
 ///
@@ -42,6 +43,16 @@ impl BenchOut {
             sum_ln,
             sum2_ln,
         }
+    }
+
+    #[cfg(feature = "_collect")]
+    /// Creates a new empty instance.
+    pub fn reset(&mut self) {
+        self.hist.reset();
+        self.sum = 0;
+        self.sum2 = 0;
+        self.sum_ln = 0.;
+        self.sum2_ln = 0.
     }
 
     #[cfg(feature = "_collect")]
@@ -106,5 +117,35 @@ impl BenchOut {
     /// Standard deviation of the natural logarithms latecies.
     pub fn stdev_ln(&self) -> f64 {
         sample_stdev(self.n(), self.sum_ln, self.sum2_ln).aok()
+    }
+
+    #[cfg(feature = "_collect")]
+    #[inline(always)]
+    pub fn hist(&self) -> &Histogram<u64> {
+        &self.hist
+    }
+
+    #[cfg(feature = "_collect")]
+    #[inline(always)]
+    pub fn sum(&self) -> i64 {
+        self.sum
+    }
+
+    #[cfg(feature = "_collect")]
+    #[inline(always)]
+    pub fn sum2(&self) -> i64 {
+        self.sum2
+    }
+
+    #[cfg(feature = "_collect")]
+    #[inline(always)]
+    pub fn sum_ln(&self) -> f64 {
+        self.sum_ln
+    }
+
+    #[cfg(feature = "_collect")]
+    #[inline(always)]
+    pub fn sum2_ln(&self) -> f64 {
+        self.sum2_ln
     }
 }
