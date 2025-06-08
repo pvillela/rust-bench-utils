@@ -23,12 +23,21 @@ exclude = ["CHANGELOG.md", "*.sh", ".gitignore", "examples"]
 basic_stats = { version = "1.0.0", default-features = false, features = [
     "normal",
     "aok",
-], optional = false }
-hdrhistogram = { version = "7.5", optional = false }
-sha2 = "0.10.9"
+] }
+hdrhistogram = "7.5"
+sha2 = { version = "0.10.9", optional = true }
 
 
 [features]
-default = ["_bench_one", "_collect"]
-_collect = []                        # for use by `bench_diff`
-_bench_one = ["_collect"]
+default = [
+    "_bench_one",
+    "_friends_only",
+] # should always be enabled for public use
+busy_work = ["dep:sha2"]
+_bench_diff = ["_friends_only"] # for use by `bench_diff` crate
+_bench_one = [] # not used by `bench_diff` create
+_friends_only = [] # only for self and `bench_diff` crate
+_friends_only_test = [] # for tests, only for self and `bench_diff` crate
+
+[package.metadata.docs.rs]
+features = ["busy_work"]

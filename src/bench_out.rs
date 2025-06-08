@@ -1,13 +1,10 @@
 //! Module defining the key data structure produced by [`crate::bench_one`].
 
-use crate::LatencyUnit;
-use crate::{SummaryStats, Timing, summary_stats};
+use crate::{LatencyUnit, SummaryStats, Timing, new_timing, summary_stats};
 use basic_stats::{
     aok::AokFloat,
     core::{sample_mean, sample_stdev},
 };
-#[cfg(feature = "_collect")]
-use hdrhistogram::Histogram;
 
 /// Contains the data resulting from benchmarking a closure.
 ///
@@ -24,11 +21,9 @@ pub struct BenchOut {
 }
 
 impl BenchOut {
-    #[cfg(feature = "_collect")]
+    #[cfg(feature = "_friends_only")]
     /// Creates a new empty instance.
     pub fn new(unit: LatencyUnit) -> Self {
-        use crate::new_timing;
-
         let hist = new_timing(20 * 1000 * 1000, 5);
         let sum = 0;
         let sum2 = 0;
@@ -45,7 +40,7 @@ impl BenchOut {
         }
     }
 
-    #[cfg(feature = "_collect")]
+    #[cfg(feature = "_friends_only")]
     /// Creates a new empty instance.
     pub fn reset(&mut self) {
         self.hist.reset();
@@ -55,9 +50,8 @@ impl BenchOut {
         self.sum2_ln = 0.
     }
 
-    #[cfg(feature = "_collect")]
+    #[cfg(feature = "_friends_only")]
     /// Updates `self` with an elapsed time observation for the function.
-    #[inline(always)]
     pub fn capture_data(&mut self, elapsed: u64) {
         self.hist
             .record(elapsed)
@@ -119,31 +113,31 @@ impl BenchOut {
         sample_stdev(self.n(), self.sum_ln, self.sum2_ln).aok()
     }
 
-    #[cfg(feature = "_collect")]
+    #[cfg(feature = "_bench_diff")]
     #[inline(always)]
-    pub fn hist(&self) -> &Histogram<u64> {
+    pub fn hist(&self) -> &Timing {
         &self.hist
     }
 
-    #[cfg(feature = "_collect")]
+    #[cfg(feature = "_bench_diff")]
     #[inline(always)]
     pub fn sum(&self) -> i64 {
         self.sum
     }
 
-    #[cfg(feature = "_collect")]
+    #[cfg(feature = "_bench_diff")]
     #[inline(always)]
     pub fn sum2(&self) -> i64 {
         self.sum2
     }
 
-    #[cfg(feature = "_collect")]
+    #[cfg(feature = "_bench_diff")]
     #[inline(always)]
     pub fn sum_ln(&self) -> f64 {
         self.sum_ln
     }
 
-    #[cfg(feature = "_collect")]
+    #[cfg(feature = "_bench_diff")]
     #[inline(always)]
     pub fn sum2_ln(&self) -> f64 {
         self.sum2_ln

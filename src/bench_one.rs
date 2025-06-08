@@ -67,13 +67,6 @@ impl BenchState {
             }
         }
     }
-
-    fn reset(&mut self) {
-        self.hist.reset();
-        self.sum = 0;
-        self.sum_ln = 0.;
-        self.sum2_ln = 0.;
-    }
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and

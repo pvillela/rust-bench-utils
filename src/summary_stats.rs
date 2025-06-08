@@ -2,11 +2,11 @@ use hdrhistogram::Histogram;
 
 use crate::BenchOut;
 
-#[cfg(feature = "_collect")]
+#[cfg(feature = "_friends_only")]
 /// Alias of [`Histogram<u64>`].
 pub type Timing = Histogram<u64>;
 
-#[cfg(feature = "_collect")]
+#[cfg(feature = "_friends_only")]
 /// Constructs a [`Timing`]. The arguments correspond to [Histogram::high] and [Histogram::sigfig].
 pub fn new_timing(hist_high: u64, hist_sigfig: u8) -> Timing {
     let mut hist = Histogram::<u64>::new_with_max(hist_high, hist_sigfig)
@@ -36,30 +36,24 @@ pub struct SummaryStats {
     pub max: u64,
 }
 
-impl SummaryStats {
-    /// Computes summary statistics from the given histogram.
-    fn new(out: &BenchOut) -> Self {
-        let hist = &out.hist;
-        Self {
-            count: hist.len(),
-            mean: out.mean(),
-            stdev: out.stdev(),
-            min: hist.min(),
-            p1: hist.value_at_quantile(0.01),
-            p5: hist.value_at_quantile(0.05),
-            p10: hist.value_at_quantile(0.10),
-            p25: hist.value_at_quantile(0.25),
-            median: hist.value_at_quantile(0.50),
-            p75: hist.value_at_quantile(0.75),
-            p90: hist.value_at_quantile(0.90),
-            p95: hist.value_at_quantile(0.95),
-            p99: hist.value_at_quantile(0.99),
-            max: hist.max(),
-        }
-    }
-}
-
+#[cfg(feature = "_friends_only")]
 /// Computes a [`SummaryStats`] from a [`BenchOut`].
 pub fn summary_stats(out: &BenchOut) -> SummaryStats {
-    SummaryStats::new(out)
+    let hist = &out.hist;
+    SummaryStats {
+        count: hist.len(),
+        mean: out.mean(),
+        stdev: out.stdev(),
+        min: hist.min(),
+        p1: hist.value_at_quantile(0.01),
+        p5: hist.value_at_quantile(0.05),
+        p10: hist.value_at_quantile(0.10),
+        p25: hist.value_at_quantile(0.25),
+        median: hist.value_at_quantile(0.50),
+        p75: hist.value_at_quantile(0.75),
+        p90: hist.value_at_quantile(0.90),
+        p95: hist.value_at_quantile(0.95),
+        p99: hist.value_at_quantile(0.99),
+        max: hist.max(),
+    }
 }

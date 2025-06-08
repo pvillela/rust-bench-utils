@@ -7,6 +7,9 @@ use basic_stats::{
 use crate::BenchOut;
 
 /// Struct that holds references to the benchmark outputs of two closures (`f1` and `f2`) for comparison purposes.
+///
+/// All statistics involving differences refer to a value for `f1` minus the corresponding
+/// value for `f2`. Similarly for ratios and other comparisons.
 pub struct Comp<'a>(&'a BenchOut, &'a BenchOut);
 
 impl<'a> Comp<'a> {
