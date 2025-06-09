@@ -27,6 +27,10 @@ basic_stats = { version = "1.0.0", default-features = false, features = [
 hdrhistogram = "7.5"
 sha2 = { version = "0.10.9", optional = true }
 
+[dev-dependencies]
+statrs = "0.13"   # old version required by `statest`
+statest = "0.2.2"
+
 
 [features]
 default = [

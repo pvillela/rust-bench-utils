@@ -2,10 +2,10 @@
 /// probability distribution given by the inverse CDF function `inv_cdf`.
 ///
 /// The sample covers the output range evenly throughout the generation process.
-pub fn deterministic_sample(
-    inv_cdf: impl Fn(f64) -> f64 + 'static,
+pub fn deterministic_sample<'a>(
+    inv_cdf: impl Fn(f64) -> f64 + 'a,
     n: u64,
-) -> impl Iterator<Item = f64> {
+) -> impl Iterator<Item = f64> + 'a {
     let unif_iter = deterministic_uniform_sample(n);
     unif_iter.map(move |unif_item| inv_cdf(unif_item))
 }
@@ -56,14 +56,29 @@ fn uniform_observation(n: u64, i: u64) -> f64 {
 
 #[cfg(test)]
 mod test {
-    use crate::deterministic_sample::deterministic_uniform_sample;
+    use super::{deterministic_sample, deterministic_uniform_sample};
+    use statest::ks::KSTest;
+    use statrs::distribution::{InverseCDF, Normal, Uniform};
+
+    const EPSILON: f64 = 0.005;
 
     #[test]
-    fn test_unif() {
+    fn test_uniform() {
         let iter = deterministic_uniform_sample(10);
-        for item in iter {
-            println!("{item}");
-        }
-        panic!("boom");
+        let v: Vec<f64> = iter.collect();
+        let dist = Uniform::new(0.0, 1.0).unwrap();
+        let ks = KSTest::new(&v);
+        let (p, _) = ks.ks1(&dist);
+        assert!(1. - p < EPSILON)
+    }
+
+    #[test]
+    fn test_normal() {
+        let normal = Normal::new(0., 1.).unwrap();
+        let iter = deterministic_sample(|x| normal.inverse_cdf(x), 10);
+        let v: Vec<f64> = iter.collect();
+        let ks = KSTest::new(&v);
+        let (p, _) = ks.ks1(&normal);
+        assert!(1. - p < EPSILON)
     }
 }
