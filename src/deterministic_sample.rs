@@ -57,8 +57,8 @@ fn uniform_observation(n: u64, i: u64) -> f64 {
 #[cfg(test)]
 mod test {
     use super::{deterministic_sample, deterministic_uniform_sample};
+    use old_statrs::distribution::{InverseCDF, Normal, Uniform};
     use statest::ks::KSTest;
-    use statrs::distribution::{InverseCDF, Normal, Uniform};
 
     const EPSILON: f64 = 0.005;
 
