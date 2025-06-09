@@ -20,9 +20,6 @@ mod busy_work;
 #[cfg(feature = "busy_work")]
 pub use busy_work::*;
 
-#[cfg(feature = "_friends_only_test")]
-pub mod deterministic_sample;
-
 /// Structs and enums for confidence intervals and hypothesis tests.
 pub mod stats_types {
     pub use basic_stats::core::{AltHyp, Ci, Hyp, HypTestResult, PositionWrtCi};
