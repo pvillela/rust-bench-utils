@@ -144,3 +144,32 @@ impl BenchOut {
         self.sum2_ln
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use basic_stats::normal::deterministic_normal_sample;
+
+    impl BenchOut {
+        fn collect_data(&mut self, mut src: impl Iterator<Item = u64>) {
+            while let Some(item) = src.next() {
+                self.capture_data(item);
+            }
+        }
+    }
+
+    #[test]
+    fn test() {
+        let normal_samp = deterministic_normal_sample(0., 1., 10).unwrap();
+        let lognormal_samp = normal_samp.map(|x| x.exp().ceil() as u64);
+        let mut bout = BenchOut::new(LatencyUnit::Micro);
+        bout.collect_data(lognormal_samp);
+
+        assert_eq!(bout.unit(), LatencyUnit::Micro);
+        assert_eq!(bout.n(), 199);
+        assert_eq!(bout.nf(), 199.);
+
+        let summary = bout.summary();
+        // assert_eq!(summary.p1.)
+    }
+}

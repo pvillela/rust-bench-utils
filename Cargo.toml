@@ -20,23 +20,27 @@ exclude = ["CHANGELOG.md", "*.sh", ".gitignore", "examples"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-basic_stats = { path = "../basic-stats", default-features = false, features = [
-    "normal",
-    "aok",
-] }
+basic_stats = { path = "../basic-stats", default-features = false, optional = true }
 hdrhistogram = "7.5"
 sha2 = { version = "0.10.9", optional = true }
 
 [features]
-default = [
-    "_bench_one",
-    "_friends_only",
-] # should always be enabled for public use
+
+# Public
+default = ["_bench_one", "__core"] # should always be enabled for public use
 busy_work = ["dep:sha2"]
-_bench_diff = ["_friends_only"] # for use by `bench_diff` crate
-_bench_one = [] # not used by `bench_diff` create
+
+# Shared with friends
+_bench_diff = ["__core"] # for use by `bench_diff` crate
+
+# Helper
+__null = ["dep:basic_stats"]
+__core = ["_friends_only", "basic_stats/normal", "basic_stats/aok"]
+
+# Internal
+_bench_one = []    # not used by `bench_diff` create
 _friends_only = [] # only for self and `bench_diff` crate
-_friends_only_test = [] # for tests, only for self and `bench_diff` crate
+
 
 [package.metadata.docs.rs]
 features = ["busy_work"]
