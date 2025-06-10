@@ -59,6 +59,7 @@ impl BenchOut {
 
         assert!(elapsed > 0, "latency must be > 0");
         self.sum += elapsed as i64;
+        self.sum2 += elapsed.pow(2) as i64;
         let ln = (elapsed as f64).ln();
         self.sum_ln += ln;
         self.sum2_ln += ln.powi(2);
