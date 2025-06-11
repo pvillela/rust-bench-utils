@@ -16,6 +16,7 @@ pub struct BenchOut {
     pub(super) hist: Timing,
     pub(super) sum: i64,
     pub(super) sum2: i64,
+    pub(super) n_ln: u64,
     pub(super) sum_ln: f64,
     pub(super) sum2_ln: f64,
 }
@@ -27,6 +28,7 @@ impl BenchOut {
         let hist = new_timing(20 * 1000 * 1000, 5);
         let sum = 0;
         let sum2 = 0;
+        let n_ln = 0;
         let sum_ln = 0.;
         let sum2_ln = 0.;
 
@@ -35,6 +37,7 @@ impl BenchOut {
             hist,
             sum,
             sum2,
+            n_ln,
             sum_ln,
             sum2_ln,
         }
@@ -46,6 +49,7 @@ impl BenchOut {
         self.hist.reset();
         self.sum = 0;
         self.sum2 = 0;
+        self.n_ln = 0;
         self.sum_ln = 0.;
         self.sum2_ln = 0.
     }
@@ -57,12 +61,15 @@ impl BenchOut {
             .record(elapsed)
             .expect("can't happen: histogram is auto-resizable");
 
-        assert!(elapsed > 0, "latency must be > 0");
         self.sum += elapsed as i64;
         self.sum2 += elapsed.pow(2) as i64;
-        let ln = (elapsed as f64).ln();
-        self.sum_ln += ln;
-        self.sum2_ln += ln.powi(2);
+
+        if elapsed > 0 {
+            let ln = (elapsed as f64).ln();
+            self.n_ln += 1;
+            self.sum_ln += ln;
+            self.sum2_ln += ln.powi(2);
+        }
     }
 
     /// Latency unit used in data collection.
@@ -106,12 +113,12 @@ impl BenchOut {
 
     /// Mean of the natural logarithms of latencies.
     pub fn mean_ln(&self) -> f64 {
-        sample_mean(self.n(), self.sum_ln).aok()
+        sample_mean(self.n_ln, self.sum_ln).aok()
     }
 
     /// Standard deviation of the natural logarithms latecies.
     pub fn stdev_ln(&self) -> f64 {
-        sample_stdev(self.n(), self.sum_ln, self.sum2_ln).aok()
+        sample_stdev(self.n_ln, self.sum_ln, self.sum2_ln).aok()
     }
 
     #[cfg(feature = "_bench_diff")]
@@ -130,6 +137,12 @@ impl BenchOut {
     #[inline(always)]
     pub fn sum2(&self) -> i64 {
         self.sum2
+    }
+
+    #[cfg(feature = "_bench_diff")]
+    #[inline(always)]
+    pub fn n_ln(&self) -> u64 {
+        self.n_ln
     }
 
     #[cfg(feature = "_bench_diff")]
@@ -163,13 +176,13 @@ mod test {
     const EPSILON: f64 = 0.001;
 
     #[test]
-    fn test() {
+    fn test_bench_out() {
         let mu = 8.;
         let sigma = 1.;
         let k = 1000;
 
         let normal_samp = deterministic_normal_sample(mu, sigma, k).unwrap();
-        let lognormal_samp = normal_samp.map(|x| x.exp().max(1.) as u64);
+        let lognormal_samp = normal_samp.map(|x| x.exp() as u64);
         let mut out = BenchOut::new(LatencyUnit::Micro);
         out.collect_data(lognormal_samp);
 
