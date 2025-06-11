@@ -24,6 +24,9 @@ basic_stats = { path = "../basic-stats", default-features = false, optional = tr
 hdrhistogram = "7.5"
 sha2 = { version = "0.10.9", optional = true }
 
+[dev-dependencies]
+statrs = "0.18"
+
 [features]
 
 # Public
@@ -38,8 +41,9 @@ __null = ["dep:basic_stats"]
 __core = ["_friends_only", "basic_stats/normal", "basic_stats/aok"]
 
 # Internal
-_bench_one = []    # not used by `bench_diff` create
-_friends_only = [] # only for self and `bench_diff` crate
+_bench_one = []                         # not used by `bench_diff` create
+_friends_only = []                      # only for self and `bench_diff` crate
+_dev_utils = ["basic_stats/_dev_utils"]
 
 
 [package.metadata.docs.rs]

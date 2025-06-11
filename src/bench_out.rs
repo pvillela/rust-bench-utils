@@ -146,9 +146,11 @@ impl BenchOut {
 }
 
 #[cfg(test)]
+#[cfg(feature = "_dev_utils")]
 mod test {
     use super::*;
-    use basic_stats::normal::deterministic_normal_sample;
+    use basic_stats::{dev_utils::ApproxEq, normal::deterministic_normal_sample};
+    use statrs::distribution::{ContinuousCDF, Normal};
 
     impl BenchOut {
         fn collect_data(&mut self, mut src: impl Iterator<Item = u64>) {
@@ -158,18 +160,67 @@ mod test {
         }
     }
 
+    const EPSILON: f64 = 0.001;
+
     #[test]
     fn test() {
-        let normal_samp = deterministic_normal_sample(0., 1., 10).unwrap();
-        let lognormal_samp = normal_samp.map(|x| x.exp().ceil() as u64);
-        let mut bout = BenchOut::new(LatencyUnit::Micro);
-        bout.collect_data(lognormal_samp);
+        let mu = 8.;
+        let sigma = 1.;
+        let k = 1000;
 
-        assert_eq!(bout.unit(), LatencyUnit::Micro);
-        assert_eq!(bout.n(), 199);
-        assert_eq!(bout.nf(), 199.);
+        let normal_samp = deterministic_normal_sample(mu, sigma, k).unwrap();
+        let lognormal_samp = normal_samp.map(|x| x.exp().max(1.) as u64);
+        let mut out = BenchOut::new(LatencyUnit::Micro);
+        out.collect_data(lognormal_samp);
 
-        let summary = bout.summary();
-        // assert_eq!(summary.p1.)
+        assert_eq!(out.unit(), LatencyUnit::Micro);
+        assert_eq!(out.n(), 2 * k * k - 1);
+        assert_eq!(out.nf(), out.n() as f64);
+
+        let normal = Normal::new(mu, sigma).unwrap();
+        let exp_mean_ln = mu;
+        let exp_stdev_ln = sigma;
+        let exp_mean = (mu + 0.5 * sigma.powi(2)).exp();
+        let exp_stdev = exp_mean * ((sigma.powi(2).exp() - 1.).sqrt());
+        let exp_p1 = normal.inverse_cdf(0.01).exp();
+        let exp_p5 = normal.inverse_cdf(0.05).exp();
+        let exp_p10 = normal.inverse_cdf(0.10).exp();
+        let exp_p25 = normal.inverse_cdf(0.25).exp();
+        let exp_median = normal.inverse_cdf(0.5).exp();
+        let exp_p75 = normal.inverse_cdf(0.75).exp();
+        let exp_p90 = normal.inverse_cdf(0.90).exp();
+        let exp_p95 = normal.inverse_cdf(0.95).exp();
+        let exp_p99 = normal.inverse_cdf(0.99).exp();
+
+        assert!(
+            exp_mean.rel_approx_eq(out.mean(), EPSILON),
+            "exp_mean={exp_mean}, mean={}",
+            out.mean()
+        );
+        assert!(
+            exp_stdev.rel_approx_eq(out.stdev(), EPSILON),
+            "exp_stdev={exp_stdev}, stdev={}",
+            out.stdev()
+        );
+        assert!(
+            exp_median.rel_approx_eq(out.median(), EPSILON),
+            "exp_median={exp_median}, median={}",
+            out.median()
+        );
+        assert!(exp_mean_ln.approx_eq(out.mean_ln(), EPSILON));
+        assert!(exp_stdev_ln.approx_eq(out.stdev_ln(), EPSILON));
+
+        let summary = out.summary();
+        assert!(exp_mean.rel_approx_eq(summary.mean, EPSILON));
+        assert!(exp_stdev.rel_approx_eq(summary.stdev, EPSILON));
+        assert!(exp_p1.rel_approx_eq(summary.p1 as f64, EPSILON));
+        assert!(exp_p5.rel_approx_eq(summary.p5 as f64, EPSILON));
+        assert!(exp_p10.rel_approx_eq(summary.p10 as f64, EPSILON));
+        assert!(exp_p25.rel_approx_eq(summary.p25 as f64, EPSILON));
+        assert!(exp_median.rel_approx_eq(summary.median as f64, EPSILON));
+        assert!(exp_p75.rel_approx_eq(summary.p75 as f64, EPSILON));
+        assert!(exp_p90.rel_approx_eq(summary.p90 as f64, EPSILON));
+        assert!(exp_p95.rel_approx_eq(summary.p95 as f64, EPSILON));
+        assert!(exp_p99.rel_approx_eq(summary.p99 as f64, EPSILON));
     }
 }
