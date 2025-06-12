@@ -162,7 +162,7 @@ impl BenchOut {
 #[cfg(feature = "_dev_utils")]
 mod test {
     use super::*;
-    use basic_stats::{dev_utils::ApproxEq, normal::deterministic_normal_sample};
+    use basic_stats::{approx_eq, normal::deterministic_normal_sample, rel_approx_eq};
     use statrs::distribution::{ContinuousCDF, Normal};
 
     impl BenchOut {
@@ -205,35 +205,23 @@ mod test {
         let exp_p95 = normal.inverse_cdf(0.95).exp();
         let exp_p99 = normal.inverse_cdf(0.99).exp();
 
-        assert!(
-            exp_mean.rel_approx_eq(out.mean(), EPSILON),
-            "exp_mean={exp_mean}, mean={}",
-            out.mean()
-        );
-        assert!(
-            exp_stdev.rel_approx_eq(out.stdev(), EPSILON),
-            "exp_stdev={exp_stdev}, stdev={}",
-            out.stdev()
-        );
-        assert!(
-            exp_median.rel_approx_eq(out.median(), EPSILON),
-            "exp_median={exp_median}, median={}",
-            out.median()
-        );
-        assert!(exp_mean_ln.approx_eq(out.mean_ln(), EPSILON));
-        assert!(exp_stdev_ln.approx_eq(out.stdev_ln(), EPSILON));
+        rel_approx_eq!(exp_mean, out.mean(), EPSILON);
+        rel_approx_eq!(exp_stdev, out.stdev(), EPSILON);
+        rel_approx_eq!(exp_median, out.median(), EPSILON);
+        approx_eq!(exp_mean_ln, out.mean_ln(), EPSILON);
+        approx_eq!(exp_stdev_ln, out.stdev_ln(), EPSILON);
 
         let summary = out.summary();
-        assert!(exp_mean.rel_approx_eq(summary.mean, EPSILON));
-        assert!(exp_stdev.rel_approx_eq(summary.stdev, EPSILON));
-        assert!(exp_p1.rel_approx_eq(summary.p1 as f64, EPSILON));
-        assert!(exp_p5.rel_approx_eq(summary.p5 as f64, EPSILON));
-        assert!(exp_p10.rel_approx_eq(summary.p10 as f64, EPSILON));
-        assert!(exp_p25.rel_approx_eq(summary.p25 as f64, EPSILON));
-        assert!(exp_median.rel_approx_eq(summary.median as f64, EPSILON));
-        assert!(exp_p75.rel_approx_eq(summary.p75 as f64, EPSILON));
-        assert!(exp_p90.rel_approx_eq(summary.p90 as f64, EPSILON));
-        assert!(exp_p95.rel_approx_eq(summary.p95 as f64, EPSILON));
-        assert!(exp_p99.rel_approx_eq(summary.p99 as f64, EPSILON));
+        rel_approx_eq!(exp_mean, summary.mean, EPSILON);
+        rel_approx_eq!(exp_stdev, summary.stdev, EPSILON);
+        rel_approx_eq!(exp_p1, summary.p1 as f64, EPSILON);
+        rel_approx_eq!(exp_p5, summary.p5 as f64, EPSILON);
+        rel_approx_eq!(exp_p10, summary.p10 as f64, EPSILON);
+        rel_approx_eq!(exp_p25, summary.p25 as f64, EPSILON);
+        rel_approx_eq!(exp_median, summary.median as f64, EPSILON);
+        rel_approx_eq!(exp_p75, summary.p75 as f64, EPSILON);
+        rel_approx_eq!(exp_p90, summary.p90 as f64, EPSILON);
+        rel_approx_eq!(exp_p95, summary.p95 as f64, EPSILON);
+        rel_approx_eq!(exp_p99, summary.p99 as f64, EPSILON);
     }
 }

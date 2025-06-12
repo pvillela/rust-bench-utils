@@ -1,4 +1,4 @@
-use basic_stats::dev_utils::ApproxEq;
+use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
 use bench_utils::{LatencyUnit, bench_one_with_status};
 use std::{thread, time::Duration};
 
@@ -19,5 +19,5 @@ fn main() {
         out.median(),
         target_median.rel_diff(out.median())
     );
-    assert!(target_median.rel_approx_eq(out.median(), EPSILON));
+    rel_approx_eq!(target_median, out.median(), EPSILON);
 }

@@ -43,7 +43,7 @@ __core = ["_friends_only", "basic_stats/normal", "basic_stats/aok"]
 # Internal
 _bench_one = []                         # not used by `bench_diff` create
 _friends_only = []                      # only for self and `bench_diff` crate
-_dev_utils = ["basic_stats/_dev_utils"]
+_dev_utils = ["basic_stats/_dev_utils"] # enables approx_eq traits and macros
 
 [package.metadata.docs.rs]
 features = ["busy_work"]
