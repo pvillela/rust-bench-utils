@@ -45,6 +45,9 @@ _bench_one = []                         # not used by `bench_diff` create
 _friends_only = []                      # only for self and `bench_diff` crate
 _dev_utils = ["basic_stats/_dev_utils"]
 
-
 [package.metadata.docs.rs]
 features = ["busy_work"]
+
+[[bench]]
+name = "validate_bench_one"
+harness = false

@@ -181,5 +181,7 @@ pub fn bench_one_with_status(
         }
     };
 
-    bench_one_x(unit, f, exec_count, warmup_status, pre_exec, exec_status)
+    let out = bench_one_x(unit, f, exec_count, warmup_status, pre_exec, exec_status);
+    println!();
+    out
 }
