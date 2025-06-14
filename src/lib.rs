@@ -22,5 +22,5 @@ pub use busy_work::*;
 
 /// Structs and enums for confidence intervals and hypothesis tests.
 pub mod stats_types {
-    pub use basic_stats::core::{AltHyp, Ci, Hyp, HypTestResult, PositionWrtCi};
+    pub use basic_stats::core::{AcceptedHyp, AltHyp, Ci, HypTestResult, PositionWrtCi};
 }
