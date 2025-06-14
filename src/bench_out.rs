@@ -159,19 +159,20 @@ impl BenchOut {
 }
 
 #[cfg(test)]
+impl BenchOut {
+    pub(crate) fn collect_data(&mut self, mut src: impl Iterator<Item = u64>) {
+        while let Some(item) = src.next() {
+            self.capture_data(item);
+        }
+    }
+}
+
+#[cfg(test)]
 #[cfg(feature = "_dev_utils")]
 mod test {
     use super::*;
     use basic_stats::{approx_eq, normal::deterministic_normal_sample, rel_approx_eq};
     use statrs::distribution::{ContinuousCDF, Normal};
-
-    impl BenchOut {
-        fn collect_data(&mut self, mut src: impl Iterator<Item = u64>) {
-            while let Some(item) = src.next() {
-                self.capture_data(item);
-            }
-        }
-    }
 
     const EPSILON: f64 = 0.001;
 

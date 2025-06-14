@@ -1,10 +1,9 @@
+use crate::BenchOut;
 use basic_stats::{
     aok::{AokBasicStats, AokFloat},
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean},
     normal::{welch_ci, welch_df, welch_t, welch_test},
 };
-
-use crate::BenchOut;
 
 /// Struct that holds references to the benchmark outputs of two closures (`f1` and `f2`) for comparison purposes.
 ///
@@ -121,5 +120,48 @@ impl<'a> Comp<'a> {
     /// This assumption is widely supported by performance analysis theory and empirical data.
     pub fn welch_ln_test(&self, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
         welch_test(&self.moments_ln_f1(), &self.moments_ln_f2(), alt_hyp, alpha).aok()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::LatencyUnit;
+    use basic_stats::{approx_eq, normal::deterministic_normal_sample, rel_approx_eq};
+    use statrs::distribution::{ContinuousCDF, Normal};
+
+    const EPSILON: f64 = 0.001;
+    const JITTER_EPSILON: f64 = EPSILON;
+
+    fn jitter(i: i64, v: f64, epsilon: f64) -> f64 {
+        let delta = ((i % 5) - 3) as f64 * epsilon;
+        v + delta
+    }
+
+    fn lognormal_out(mu: f64, sigma: f64, k: u64, jitter_epsilon: f64) -> BenchOut {
+        let normal_samp = deterministic_normal_sample(mu, sigma, k).unwrap();
+        let lognormal_samp = normal_samp
+            .enumerate()
+            .map(|(i, v)| jitter(i as i64, v, jitter_epsilon))
+            .map(|x| x.exp() as u64);
+        let mut out = BenchOut::new(LatencyUnit::Micro);
+        out.collect_data(lognormal_samp);
+        out
+    }
+
+    #[test]
+    fn test_comp() {
+        let k = 1000;
+
+        let mu1 = 8.;
+        let sigma1 = 1.;
+        let out1 = lognormal_out(mu1, sigma1, k, 0.);
+        let out1j = lognormal_out(mu1, sigma1, k, JITTER_EPSILON);
+
+        let median_ratio: f64 = 1.01;
+        let mu2 = mu1 - median_ratio.ln();
+        let sigma2 = sigma1;
+        let out2 = lognormal_out(mu2, sigma2, k, 0.);
+        let out2j = lognormal_out(mu2, sigma2, k, JITTER_EPSILON);
     }
 }
