@@ -18,7 +18,7 @@ pub fn new_timing(hist_high: u64, hist_sigfig: u8) -> Timing {
 /// Common summary statistics useful in latency testing/benchmarking.
 ///
 /// Includes sample size, mean, standard deviation, median, several percentiles, min, and max.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SummaryStats {
     pub count: u64,
     pub mean: f64,

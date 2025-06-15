@@ -168,6 +168,20 @@ impl BenchOut {
 }
 
 #[cfg(test)]
+pub fn print_bench_out(out: &BenchOut) {
+    println!(
+        "unit={:?}, sum={}, sum2={}, n_ln={}, sum_ln={}, sum2_ln={}, summary={:?}",
+        out.unit,
+        out.sum,
+        out.sum2,
+        out.n_ln,
+        out.sum_ln,
+        out.sum2_ln,
+        out.summary()
+    );
+}
+
+#[cfg(test)]
 #[cfg(feature = "_dev_utils")]
 mod test {
     use super::*;

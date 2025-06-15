@@ -2,7 +2,7 @@ use crate::BenchOut;
 use basic_stats::{
     aok::{AokBasicStats, AokFloat},
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean},
-    normal::{welch_ci, welch_df, welch_t, welch_test},
+    normal::{welch_ci, welch_df, welch_p, welch_t, welch_test},
 };
 
 /// Struct that holds references to the benchmark outputs of two closures (`f1` and `f2`) for comparison purposes.
@@ -69,10 +69,16 @@ impl<'a> Comp<'a> {
         welch_t(&self.moments_ln_f1(), &self.moments_ln_f2()).aok()
     }
 
-    /// Degrees of freedom for Welch's t-test for
+    /// Degrees of freedom for Welch's t statistic for
     /// `mean(ln(latency(f1))) - mean(ln(latency(f2)))` (where `ln` is the natural logarithm).
     pub fn welch_ln_df(&self) -> f64 {
         welch_df(&self.moments_ln_f1(), &self.moments_ln_f2()).aok()
+    }
+
+    /// p-value of Welch's two-sample t-test for equality of
+    /// `mean(ln(latency(f1)))` and `mean(ln(latency(f2)))` (where `ln` is the natural logarithm).
+    pub fn welch_ln_p(&self, alt_hyp: AltHyp) -> f64 {
+        welch_p(&self.moments_ln_f1(), &self.moments_ln_f2(), alt_hyp).aok()
     }
 
     /// Welch confidence interval for
@@ -126,42 +132,183 @@ impl<'a> Comp<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::LatencyUnit;
-    use basic_stats::{approx_eq, normal::deterministic_normal_sample, rel_approx_eq};
-    use statrs::distribution::{ContinuousCDF, Normal};
+    use crate::{LatencyUnit, print_bench_out};
+    use basic_stats::{approx_eq, core::AcceptedHyp, normal::deterministic_normal_sample};
 
     const EPSILON: f64 = 0.001;
     const JITTER_EPSILON: f64 = EPSILON;
+    const ALPHA: f64 = 0.05;
 
-    fn jitter(i: i64, v: f64, epsilon: f64) -> f64 {
-        let delta = ((i % 5) - 3) as f64 * epsilon;
+    fn are_eq_bench_out(out1: &BenchOut, out2: &BenchOut) -> bool {
+        out1.unit == out2.unit
+            && out1.summary() == out2.summary()
+            && out1.sum == out2.sum
+            && out1.sum2 == out2.sum2
+            && out1.n_ln == out2.n_ln
+            && out1.sum_ln == out2.sum_ln
+            && out1.sum2_ln == out2.sum2_ln
+    }
+
+    fn jitter(v: f64, i: i64, n_jitter: i64, epsilon: f64) -> f64 {
+        let max_jitter = (n_jitter - 1) / 2;
+        let delta = (i % n_jitter - max_jitter) as f64 / max_jitter as f64 * epsilon;
         v + delta
     }
 
-    fn lognormal_out(mu: f64, sigma: f64, k: u64, jitter_epsilon: f64) -> BenchOut {
+    fn lognormal_samp(
+        mu: f64,
+        sigma: f64,
+        k: u64,
+        n_jitter: i64,
+        jitter_epsilon: f64,
+    ) -> impl Iterator<Item = u64> {
         let normal_samp = deterministic_normal_sample(mu, sigma, k).unwrap();
-        let lognormal_samp = normal_samp
+        normal_samp
             .enumerate()
-            .map(|(i, v)| jitter(i as i64, v, jitter_epsilon))
-            .map(|x| x.exp() as u64);
+            .map(move |(i, v)| jitter(v, i as i64, n_jitter, jitter_epsilon))
+            .map(|x| x.exp() as u64)
+    }
+
+    fn lognormal_out(mu: f64, sigma: f64, k: u64, n_jitter: i64, jitter_epsilon: f64) -> BenchOut {
+        let lognormal_samp = lognormal_samp(mu, sigma, k, n_jitter, jitter_epsilon);
         let mut out = BenchOut::new(LatencyUnit::Micro);
         out.collect_data(lognormal_samp);
         out
     }
 
+    fn lognormal_moments_ln(
+        mu: f64,
+        sigma: f64,
+        k: u64,
+        n_jitter: i64,
+        jitter_epsilon: f64,
+    ) -> SampleMoments {
+        let dataset =
+            lognormal_samp(mu, sigma, k, n_jitter, jitter_epsilon).map(|v| (v.max(1) as f64).ln());
+        SampleMoments::from_iterator(dataset)
+    }
+
     #[test]
     fn test_comp() {
-        let k = 1000;
+        let k = 50;
+        let n_jitter = 7; // should be coprime with 2*k
 
         let mu1 = 8.;
         let sigma1 = 1.;
-        let out1 = lognormal_out(mu1, sigma1, k, 0.);
-        let out1j = lognormal_out(mu1, sigma1, k, JITTER_EPSILON);
+        let out1 = lognormal_out(mu1, sigma1, k, n_jitter, 0.);
+        let moments_ln1 = lognormal_moments_ln(mu1, sigma1, k, n_jitter, 0.);
+        let out1j = lognormal_out(mu1, sigma1, k, n_jitter, JITTER_EPSILON);
+        let moments_ln1j = lognormal_moments_ln(mu1, sigma1, k, n_jitter, JITTER_EPSILON);
 
-        let median_ratio: f64 = 1.01;
+        let median_ratio: f64 = 1.05;
         let mu2 = mu1 - median_ratio.ln();
         let sigma2 = sigma1;
-        let out2 = lognormal_out(mu2, sigma2, k, 0.);
-        let out2j = lognormal_out(mu2, sigma2, k, JITTER_EPSILON);
+        let out2j = lognormal_out(mu2, sigma2, k, n_jitter, JITTER_EPSILON);
+        let moments_ln2j = lognormal_moments_ln(mu2, sigma2, k, n_jitter, JITTER_EPSILON);
+
+        {
+            let o1 = &out1;
+            let m_ln1 = &moments_ln1;
+            let o2 = &out1j;
+            let m_ln2 = &moments_ln1j;
+            let ratio_medians = 1.;
+            let alt_hyp = AltHyp::Ne;
+            let accepted_hyp = AcceptedHyp::Null;
+
+            let comp = Comp::new(&o1, &o2);
+            let f1_out = comp.f1_out();
+            let f2_out = comp.f2_out();
+
+            print!("o1: ");
+            print_bench_out(&o1);
+            print!("f1_out: ");
+            print_bench_out(&f1_out);
+
+            assert!(are_eq_bench_out(&o1, &f1_out));
+            assert!(are_eq_bench_out(&o2, &f2_out));
+
+            assert_eq!(f1_out.median() - f2_out.median(), comp.diff_medians_f1_f2());
+            approx_eq!(ratio_medians, comp.ratio_medians_f1_f2(), EPSILON);
+            assert_eq!(f1_out.mean() - f2_out.mean(), comp.mean_diff_f1_f2());
+            assert_eq!(
+                f1_out.mean_ln() - f2_out.mean_ln(),
+                comp.mean_diff_ln_f1_f2()
+            );
+            approx_eq!(ratio_medians, comp.ratio_medians_f1_f2_from_lns(), EPSILON);
+            assert_eq!(welch_t(m_ln1, m_ln2).unwrap(), comp.welch_ln_t());
+            assert_eq!(welch_df(m_ln1, m_ln2).unwrap(), comp.welch_ln_df());
+            assert_eq!(
+                welch_p(m_ln1, m_ln2, alt_hyp).unwrap(),
+                comp.welch_ln_p(alt_hyp)
+            );
+            assert_eq!(
+                welch_ci(m_ln1, m_ln2, ALPHA).unwrap(),
+                comp.welch_ln_ci(ALPHA)
+            );
+            let ln_ci = welch_ci(m_ln1, m_ln2, ALPHA).unwrap();
+            assert_eq!(Ci(ln_ci.0.exp(), ln_ci.1.exp()), comp.welch_ratio_ci(ALPHA));
+            assert_eq!(
+                PositionWrtCi::In,
+                comp.welch_value_position_wrt_ratio_ci(ratio_medians, ALPHA)
+            );
+            assert_eq!(
+                PositionWrtCi::In,
+                comp.welch_value_position_wrt_ratio_ci(ratio_medians, ALPHA)
+            );
+            assert_eq!(accepted_hyp, comp.welch_ln_test(alt_hyp, ALPHA).accepted());
+        }
+
+        {
+            let o1 = &out1;
+            let m_ln1 = &moments_ln1;
+            let o2 = &out2j;
+            let m_ln2 = &moments_ln2j;
+            let ratio_medians = median_ratio;
+            let alt_hyp = AltHyp::Gt;
+            let accepted_hyp = AcceptedHyp::Alt;
+
+            let comp = Comp::new(&o1, &o2);
+            let f1_out = comp.f1_out();
+            let f2_out = comp.f2_out();
+
+            print!("o1: ");
+            print_bench_out(&o1);
+            print!("f1_out: ");
+            print_bench_out(&f1_out);
+
+            assert!(are_eq_bench_out(&o1, &f1_out));
+            assert!(are_eq_bench_out(&o2, &f2_out));
+
+            assert_eq!(f1_out.median() - f2_out.median(), comp.diff_medians_f1_f2());
+            approx_eq!(ratio_medians, comp.ratio_medians_f1_f2(), EPSILON);
+            assert_eq!(f1_out.mean() - f2_out.mean(), comp.mean_diff_f1_f2());
+            assert_eq!(
+                f1_out.mean_ln() - f2_out.mean_ln(),
+                comp.mean_diff_ln_f1_f2()
+            );
+            approx_eq!(ratio_medians, comp.ratio_medians_f1_f2_from_lns(), EPSILON);
+            assert_eq!(welch_t(m_ln1, m_ln2).unwrap(), comp.welch_ln_t());
+            assert_eq!(welch_df(m_ln1, m_ln2).unwrap(), comp.welch_ln_df());
+            assert_eq!(
+                welch_p(m_ln1, m_ln2, alt_hyp).unwrap(),
+                comp.welch_ln_p(alt_hyp)
+            );
+            assert_eq!(
+                welch_ci(m_ln1, m_ln2, ALPHA).unwrap(),
+                comp.welch_ln_ci(ALPHA)
+            );
+            let ln_ci = welch_ci(m_ln1, m_ln2, ALPHA).unwrap();
+            assert_eq!(Ci(ln_ci.0.exp(), ln_ci.1.exp()), comp.welch_ratio_ci(ALPHA));
+            assert_eq!(
+                PositionWrtCi::In,
+                comp.welch_value_position_wrt_ratio_ci(ratio_medians, ALPHA)
+            );
+            assert_eq!(
+                PositionWrtCi::In,
+                comp.welch_value_position_wrt_ratio_ci(ratio_medians, ALPHA)
+            );
+            println!("welch_ln_test={:?}", comp.welch_ln_test(alt_hyp, ALPHA));
+            assert_eq!(accepted_hyp, comp.welch_ln_test(alt_hyp, ALPHA).accepted());
+        }
     }
 }
