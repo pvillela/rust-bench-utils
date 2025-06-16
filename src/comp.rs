@@ -132,7 +132,7 @@ impl<'a> Comp<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{LatencyUnit, print_bench_out};
+    use crate::{HI_STDEV_LN, LO_STDEV_LN, LatencyUnit, print_bench_out};
     use basic_stats::{approx_eq, core::AcceptedHyp, normal::deterministic_normal_sample};
 
     const EPSILON: f64 = 0.001;
@@ -190,21 +190,22 @@ mod test {
 
     #[test]
     fn test_comp() {
-        let k = 50;
+        let k = 80;
         let n_jitter = 7; // should be coprime with 2*k
 
-        let mu1 = 8.;
-        let sigma1 = 1.;
-        let out1 = lognormal_out(mu1, sigma1, k, n_jitter, 0.);
-        let moments_ln1 = lognormal_moments_ln(mu1, sigma1, k, n_jitter, 0.);
-        let out1j = lognormal_out(mu1, sigma1, k, n_jitter, JITTER_EPSILON);
-        let moments_ln1j = lognormal_moments_ln(mu1, sigma1, k, n_jitter, JITTER_EPSILON);
+        let sigma_lo = *LO_STDEV_LN;
+        let sigma_hi = *HI_STDEV_LN;
 
-        let median_ratio: f64 = 1.05;
+        let mu1 = 8.;
+        let out1 = lognormal_out(mu1, sigma_lo, k, n_jitter, 0.);
+        let moments_ln1 = lognormal_moments_ln(mu1, sigma_lo, k, n_jitter, 0.);
+        let out1j = lognormal_out(mu1, sigma_hi, k, n_jitter, JITTER_EPSILON);
+        let moments_ln1j = lognormal_moments_ln(mu1, sigma_hi, k, n_jitter, JITTER_EPSILON);
+
+        let median_ratio: f64 = 1.01;
         let mu2 = mu1 - median_ratio.ln();
-        let sigma2 = sigma1;
-        let out2j = lognormal_out(mu2, sigma2, k, n_jitter, JITTER_EPSILON);
-        let moments_ln2j = lognormal_moments_ln(mu2, sigma2, k, n_jitter, JITTER_EPSILON);
+        let out2j = lognormal_out(mu2, sigma_hi, k, n_jitter, JITTER_EPSILON);
+        let moments_ln2j = lognormal_moments_ln(mu2, sigma_hi, k, n_jitter, JITTER_EPSILON);
 
         {
             let o1 = &out1;
@@ -215,17 +216,17 @@ mod test {
             let alt_hyp = AltHyp::Ne;
             let accepted_hyp = AcceptedHyp::Null;
 
-            let comp = Comp::new(&o1, &o2);
+            let comp = Comp::new(o1, o2);
             let f1_out = comp.f1_out();
             let f2_out = comp.f2_out();
 
             print!("o1: ");
-            print_bench_out(&o1);
+            print_bench_out(o1);
             print!("f1_out: ");
-            print_bench_out(&f1_out);
+            print_bench_out(f1_out);
 
-            assert!(are_eq_bench_out(&o1, &f1_out));
-            assert!(are_eq_bench_out(&o2, &f2_out));
+            assert!(are_eq_bench_out(o1, f1_out));
+            assert!(are_eq_bench_out(o2, f2_out));
 
             assert_eq!(f1_out.median() - f2_out.median(), comp.diff_medians_f1_f2());
             approx_eq!(ratio_medians, comp.ratio_medians_f1_f2(), EPSILON);
@@ -267,17 +268,17 @@ mod test {
             let alt_hyp = AltHyp::Gt;
             let accepted_hyp = AcceptedHyp::Alt;
 
-            let comp = Comp::new(&o1, &o2);
+            let comp = Comp::new(o1, o2);
             let f1_out = comp.f1_out();
             let f2_out = comp.f2_out();
 
             print!("o1: ");
-            print_bench_out(&o1);
+            print_bench_out(o1);
             print!("f1_out: ");
-            print_bench_out(&f1_out);
+            print_bench_out(f1_out);
 
-            assert!(are_eq_bench_out(&o1, &f1_out));
-            assert!(are_eq_bench_out(&o2, &f2_out));
+            assert!(are_eq_bench_out(o1, f1_out));
+            assert!(are_eq_bench_out(o2, f2_out));
 
             assert_eq!(f1_out.median() - f2_out.median(), comp.diff_medians_f1_f2());
             approx_eq!(ratio_medians, comp.ratio_medians_f1_f2(), EPSILON);

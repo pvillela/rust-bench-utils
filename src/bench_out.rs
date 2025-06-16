@@ -1,5 +1,8 @@
 //! Module defining the key data structure produced by [`crate::bench_one`].
 
+#[cfg(test)]
+use std::sync::LazyLock;
+
 use crate::{LatencyUnit, SummaryStats, Timing, new_timing, summary_stats};
 use basic_stats::{
     aok::AokFloat,
@@ -93,7 +96,7 @@ impl BenchOut {
     ///
     /// Includes sample size, mean, standard deviation, median, several percentiles, min, and max.
     pub fn summary(&self) -> SummaryStats {
-        summary_stats(&self)
+        summary_stats(self)
     }
 
     /// Mean of latencies.
@@ -160,8 +163,8 @@ impl BenchOut {
 
 #[cfg(test)]
 impl BenchOut {
-    pub(crate) fn collect_data(&mut self, mut src: impl Iterator<Item = u64>) {
-        while let Some(item) = src.next() {
+    pub(crate) fn collect_data(&mut self, src: impl Iterator<Item = u64>) {
+        for item in src {
             self.capture_data(item);
         }
     }
@@ -182,6 +185,12 @@ pub fn print_bench_out(out: &BenchOut) {
 }
 
 #[cfg(test)]
+pub static LO_STDEV_LN: LazyLock<f64> = LazyLock::new(|| 1.2_f64.ln() / 2.);
+
+#[cfg(test)]
+pub static HI_STDEV_LN: LazyLock<f64> = LazyLock::new(|| 2.4_f64.ln() / 2.);
+
+#[cfg(test)]
 #[cfg(feature = "_dev_utils")]
 mod test {
     use super::*;
@@ -193,8 +202,8 @@ mod test {
     #[test]
     fn test_bench_out() {
         let mu = 8.;
-        let sigma = 1.;
-        let k = 1000;
+        let sigma = *LO_STDEV_LN;
+        let k = 100;
 
         let normal_samp = deterministic_normal_sample(mu, sigma, k).unwrap();
         let lognormal_samp = normal_samp.map(|x| x.exp() as u64);
@@ -220,13 +229,28 @@ mod test {
         let exp_p95 = normal.inverse_cdf(0.95).exp();
         let exp_p99 = normal.inverse_cdf(0.99).exp();
 
+        let summary = out.summary();
+        println!("exp_mean={}, summary.mean={}", exp_mean, summary.mean);
+        println!("exp_stdev={}, summary.stdev={}", exp_stdev, summary.stdev);
+        println!("exp_p1={}, summary.p1={}", exp_p1, summary.p1);
+        println!("exp_p5={}, summary.p5={}", exp_p5, summary.p5);
+        println!("exp_p10={}, summary.p10={}", exp_p10, summary.p10);
+        println!("exp_p25={}, summary.p25={}", exp_p25, summary.p25);
+        println!(
+            "exp_median={}, summary.median={}",
+            exp_median, summary.median
+        );
+        println!("exp_p75={}, summary.p75={}", exp_p75, summary.p75);
+        println!("exp_p90={}, summary.p90={}", exp_p90, summary.p90);
+        println!("exp_p95={}, summary.p95={}", exp_p95, summary.p95);
+        println!("exp_p99={}, summary.p99={}", exp_p99, summary.p99);
+
         rel_approx_eq!(exp_mean, out.mean(), EPSILON);
         rel_approx_eq!(exp_stdev, out.stdev(), EPSILON);
         rel_approx_eq!(exp_median, out.median(), EPSILON);
         approx_eq!(exp_mean_ln, out.mean_ln(), EPSILON);
         approx_eq!(exp_stdev_ln, out.stdev_ln(), EPSILON);
 
-        let summary = out.summary();
         rel_approx_eq!(exp_mean, summary.mean, EPSILON);
         rel_approx_eq!(exp_stdev, summary.stdev, EPSILON);
         rel_approx_eq!(exp_p1, summary.p1 as f64, EPSILON);
