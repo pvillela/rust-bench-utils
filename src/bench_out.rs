@@ -1,8 +1,5 @@
 //! Module defining the key data structure produced by [`crate::bench_one`].
 
-#[cfg(test)]
-use std::sync::LazyLock;
-
 use crate::{LatencyUnit, SummaryStats, Timing, new_timing, summary_stats};
 use basic_stats::{
     aok::{AokBasicStats, AokFloat},
@@ -265,39 +262,11 @@ impl BenchOut {
 }
 
 #[cfg(test)]
-impl BenchOut {
-    pub(crate) fn collect_data(&mut self, src: impl Iterator<Item = u64>) {
-        for item in src {
-            self.capture_data(item);
-        }
-    }
-}
-
-#[cfg(test)]
-pub fn print_bench_out(out: &BenchOut) {
-    println!(
-        "unit={:?}, sum={}, sum2={}, n_ln={}, sum_ln={}, sum2_ln={}, summary={:?}",
-        out.unit,
-        out.sum,
-        out.sum2,
-        out.n_ln,
-        out.sum_ln,
-        out.sum2_ln,
-        out.summary()
-    );
-}
-
-#[cfg(test)]
-pub static LO_STDEV_LN: LazyLock<f64> = LazyLock::new(|| 1.2_f64.ln() / 2.);
-
-#[cfg(test)]
-pub static HI_STDEV_LN: LazyLock<f64> = LazyLock::new(|| 2.4_f64.ln() / 2.);
-
-#[cfg(test)]
 #[cfg(feature = "_dev_utils")]
 mod test {
     use super::*;
-    use basic_stats::{approx_eq, normal::deterministic_normal_sample, rel_approx_eq};
+    use crate::test_support::{LO_STDEV_LN, lognormal_samp};
+    use basic_stats::{approx_eq, rel_approx_eq};
     use statrs::distribution::{ContinuousCDF, Normal};
 
     const EPSILON: f64 = 0.001;
@@ -308,8 +277,7 @@ mod test {
         let sigma = *LO_STDEV_LN;
         let k = 100;
 
-        let normal_samp = deterministic_normal_sample(mu, sigma, k).unwrap();
-        let lognormal_samp = normal_samp.map(|x| x.exp() as u64);
+        let lognormal_samp = lognormal_samp(mu, sigma, k);
         let mut out = BenchOut::new(LatencyUnit::Micro);
         out.collect_data(lognormal_samp);
 

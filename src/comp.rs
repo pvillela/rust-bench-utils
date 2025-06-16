@@ -133,8 +133,11 @@ impl<'a> Comp<'a> {
 #[cfg(feature = "_dev_utils")]
 mod test {
     use super::*;
-    use crate::{HI_STDEV_LN, LO_STDEV_LN, LatencyUnit, print_bench_out};
-    use basic_stats::{approx_eq, core::AcceptedHyp, normal::deterministic_normal_sample};
+    use crate::test_support::{
+        HI_STDEV_LN, LO_STDEV_LN, lognormal_moments_ln, lognormal_moments_ln_jittered,
+        lognormal_out, lognormal_out_jittered,
+    };
+    use basic_stats::{approx_eq, core::AcceptedHyp};
 
     const EPSILON: f64 = 0.001;
     const JITTER_EPSILON: f64 = EPSILON;
@@ -150,45 +153,6 @@ mod test {
             && out1.sum2_ln == out2.sum2_ln
     }
 
-    fn jitter(v: f64, i: i64, n_jitter: i64, epsilon: f64) -> f64 {
-        let max_jitter = (n_jitter - 1) / 2;
-        let delta = (i % n_jitter - max_jitter) as f64 / max_jitter as f64 * epsilon;
-        v + delta
-    }
-
-    fn lognormal_samp(
-        mu: f64,
-        sigma: f64,
-        k: u64,
-        n_jitter: i64,
-        jitter_epsilon: f64,
-    ) -> impl Iterator<Item = u64> {
-        let normal_samp = deterministic_normal_sample(mu, sigma, k).unwrap();
-        normal_samp
-            .enumerate()
-            .map(move |(i, v)| jitter(v, i as i64, n_jitter, jitter_epsilon))
-            .map(|x| x.exp() as u64)
-    }
-
-    fn lognormal_out(mu: f64, sigma: f64, k: u64, n_jitter: i64, jitter_epsilon: f64) -> BenchOut {
-        let lognormal_samp = lognormal_samp(mu, sigma, k, n_jitter, jitter_epsilon);
-        let mut out = BenchOut::new(LatencyUnit::Micro);
-        out.collect_data(lognormal_samp);
-        out
-    }
-
-    fn lognormal_moments_ln(
-        mu: f64,
-        sigma: f64,
-        k: u64,
-        n_jitter: i64,
-        jitter_epsilon: f64,
-    ) -> SampleMoments {
-        let dataset =
-            lognormal_samp(mu, sigma, k, n_jitter, jitter_epsilon).map(|v| (v.max(1) as f64).ln());
-        SampleMoments::from_iterator(dataset)
-    }
-
     #[test]
     fn test_comp() {
         let k = 80;
@@ -198,15 +162,17 @@ mod test {
         let sigma_hi = *HI_STDEV_LN;
 
         let mu1 = 8.;
-        let out1 = lognormal_out(mu1, sigma_lo, k, n_jitter, 0.);
-        let moments_ln1 = lognormal_moments_ln(mu1, sigma_lo, k, n_jitter, 0.);
-        let out1j = lognormal_out(mu1, sigma_hi, k, n_jitter, JITTER_EPSILON);
-        let moments_ln1j = lognormal_moments_ln(mu1, sigma_hi, k, n_jitter, JITTER_EPSILON);
+        let out1 = lognormal_out(mu1, sigma_lo, k);
+        let moments_ln1 = lognormal_moments_ln(mu1, sigma_lo, k);
+        let out1j = lognormal_out_jittered(mu1, sigma_hi, k, n_jitter, JITTER_EPSILON);
+        let moments_ln1j =
+            lognormal_moments_ln_jittered(mu1, sigma_hi, k, n_jitter, JITTER_EPSILON);
 
         let median_ratio: f64 = 1.01;
         let mu2 = mu1 - median_ratio.ln();
-        let out2j = lognormal_out(mu2, sigma_hi, k, n_jitter, JITTER_EPSILON);
-        let moments_ln2j = lognormal_moments_ln(mu2, sigma_hi, k, n_jitter, JITTER_EPSILON);
+        let out2j = lognormal_out_jittered(mu2, sigma_hi, k, n_jitter, JITTER_EPSILON);
+        let moments_ln2j =
+            lognormal_moments_ln_jittered(mu2, sigma_hi, k, n_jitter, JITTER_EPSILON);
 
         {
             let o1 = &out1;
@@ -222,9 +188,9 @@ mod test {
             let f2_out = comp.f2_out();
 
             print!("o1: ");
-            print_bench_out(o1);
+            o1.print();
             print!("f1_out: ");
-            print_bench_out(f1_out);
+            f1_out.print();
 
             assert!(are_eq_bench_out(o1, f1_out));
             assert!(are_eq_bench_out(o2, f2_out));
@@ -277,9 +243,9 @@ mod test {
             let f2_out = comp.f2_out();
 
             print!("o1: ");
-            print_bench_out(o1);
+            o1.print();
             print!("f1_out: ");
-            print_bench_out(f1_out);
+            f1_out.print();
 
             assert!(are_eq_bench_out(o1, f1_out));
             assert!(are_eq_bench_out(o2, f2_out));

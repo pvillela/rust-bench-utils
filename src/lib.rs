@@ -24,3 +24,6 @@ pub use busy_work::*;
 pub mod stats_types {
     pub use basic_stats::core::{AcceptedHyp, AltHyp, Ci, HypTestResult, PositionWrtCi};
 }
+
+#[cfg(test)]
+pub mod test_support;
