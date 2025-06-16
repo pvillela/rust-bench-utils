@@ -5,8 +5,9 @@ use std::sync::LazyLock;
 
 use crate::{LatencyUnit, SummaryStats, Timing, new_timing, summary_stats};
 use basic_stats::{
-    aok::AokFloat,
-    core::{sample_mean, sample_stdev},
+    aok::{AokBasicStats, AokFloat},
+    core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean, sample_stdev},
+    normal::{student_1samp_ci, student_1samp_t, student_1samp_test},
 };
 
 /// Contains the data resulting from benchmarking a closure.
@@ -119,9 +120,111 @@ impl BenchOut {
         sample_mean(self.n_ln, self.sum_ln).aok()
     }
 
-    /// Standard deviation of the natural logarithms latecies.
+    /// Standard deviation of the natural logarithms latencies.
     pub fn stdev_ln(&self) -> f64 {
         sample_stdev(self.n_ln, self.sum_ln, self.sum2_ln).aok()
+    }
+
+    /// Student's one-sample t statistic for `mean(latency(f))`.
+    pub fn student_t(&self) -> f64 {
+        let moments = SampleMoments::new(self.n(), self.sum as f64, self.sum2 as f64);
+        student_1samp_t(&moments, 0.).aok()
+    }
+
+    /// Degrees of freedom for Student's t statistic for `mean(latency(f))`.
+    pub fn student_df(&self) -> f64 {
+        self.nf() - 1.
+    }
+
+    /// Student's confidence interval for `mean(latency(f))`,
+    /// with confidence level `(1 - alpha)`.
+    ///
+    /// Assumes that `latency(f)` is normally distributed. This assumption is *not* supported by
+    /// performance analysis theory or empirical data.
+    pub fn student_mean_ci(&self, alpha: f64) -> Ci {
+        let moments = SampleMoments::new(self.n(), self.sum as f64, self.sum2 as f64);
+        student_1samp_ci(&moments, alpha).aok()
+    }
+
+    /// Position of `value` with respect to
+    /// Student's confidence interval for `mean(latency(f))`,
+    /// with confidence level `(1 - alpha)`.
+    ///
+    /// Assumes that `latency(f)` is normally distributed. This assumption is *not* supported by
+    /// performance analysis theory or empirical data.
+    pub fn student_value_position_wrt_diff_ci(&self, value: f64, alpha: f64) -> PositionWrtCi {
+        let ci = self.student_mean_ci(alpha);
+        ci.position_of(value)
+    }
+
+    /// Student's one-sample test of the hypothesis that
+    /// `mean(latency(f)) == mu0`,
+    /// with alternative hypothesis `alt_hyp` and confidence level `(1 - alpha)`.
+    ///
+    /// Assumes that `latency(f)` is normally distributed. This assumption is *not* supported by
+    /// performance analysis theory or empirical data.
+    pub fn student_test(&self, mu0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
+        let moments = SampleMoments::new(self.n(), self.sum as f64, self.sum2 as f64);
+        student_1samp_test(&moments, mu0, alt_hyp, alpha).aok()
+    }
+
+    /// Student's one-sample t statistic for `mean(ln(latency(f)))` (where `ln` is the natural logarithm).
+    pub fn student_ln_t(&self) -> f64 {
+        let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
+        student_1samp_t(&moments, 0.).aok()
+    }
+
+    /// Degrees of freedom for Student's t statistic for `mean(ln(latency(f)))`.
+    pub fn student_ln_df(&self) -> f64 {
+        self.n_ln as f64 - 1.
+    }
+
+    /// Student's one-sample confidence interval for
+    /// `mean(ln(latency(f)))` (where `ln` is the natural logarithm).
+    /// with confidence level `(1 - alpha)`.
+    ///
+    /// Assumes that `latency(f)` is approximately log-normal.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
+    pub fn student_ln_ci(&self, alpha: f64) -> Ci {
+        let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
+        student_1samp_ci(&moments, alpha).aok()
+    }
+
+    /// Student's one-sample confidence interval for
+    /// `median(latency(f))`,
+    /// with confidence level `(1 - alpha)`.
+    ///
+    /// Assumes that `latency(f)` is approximately log-normal.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
+    pub fn student_median_ci(&self, alpha: f64) -> Ci {
+        let Ci(log_low, log_high) = self.student_ln_ci(alpha);
+        let low = log_low.exp();
+        let high = log_high.exp();
+        Ci(low, high)
+    }
+
+    /// Position of `value` with respect to
+    /// Student's one-sample confidence interval for
+    /// `median(latency(f))`,
+    /// with confidence level `(1 - alpha)`.
+    ///
+    /// Assumes that `latency(f)` is approximately log-normal.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
+    pub fn student_value_position_wrt_median_ci(&self, value: f64, alpha: f64) -> PositionWrtCi {
+        let ci = self.student_median_ci(alpha);
+        ci.position_of(value)
+    }
+
+    /// Student's one-sample test of the hypothesis that
+    /// `median(latency(f)) == med0`,
+    /// with alternative hypothesis `alt_hyp` and confidence level `(1 - alpha)`.
+    ///
+    /// Assumes that `latency(f)` is approximately log-normal.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
+    pub fn student_median_test(&self, med0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
+        let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
+        let mu0 = med0.ln();
+        student_1samp_test(&moments, mu0, alt_hyp, alpha).aok()
     }
 
     #[cfg(feature = "_bench_diff")]

@@ -124,12 +124,13 @@ impl<'a> Comp<'a> {
     ///
     /// Assumes that both `latency(f1)` and `latency(f2)` are approximately log-normal.
     /// This assumption is widely supported by performance analysis theory and empirical data.
-    pub fn welch_ln_test(&self, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
+    pub fn welch_median_test(&self, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
         welch_test(&self.moments_ln_f1(), &self.moments_ln_f2(), alt_hyp, alpha).aok()
     }
 }
 
 #[cfg(test)]
+#[cfg(feature = "_dev_utils")]
 mod test {
     use super::*;
     use crate::{HI_STDEV_LN, LO_STDEV_LN, LatencyUnit, print_bench_out};
@@ -256,7 +257,10 @@ mod test {
                 PositionWrtCi::In,
                 comp.welch_value_position_wrt_ratio_ci(ratio_medians, ALPHA)
             );
-            assert_eq!(accepted_hyp, comp.welch_ln_test(alt_hyp, ALPHA).accepted());
+            assert_eq!(
+                accepted_hyp,
+                comp.welch_median_test(alt_hyp, ALPHA).accepted()
+            );
         }
 
         {
@@ -308,8 +312,11 @@ mod test {
                 PositionWrtCi::In,
                 comp.welch_value_position_wrt_ratio_ci(ratio_medians, ALPHA)
             );
-            println!("welch_ln_test={:?}", comp.welch_ln_test(alt_hyp, ALPHA));
-            assert_eq!(accepted_hyp, comp.welch_ln_test(alt_hyp, ALPHA).accepted());
+            println!("welch_ln_test={:?}", comp.welch_median_test(alt_hyp, ALPHA));
+            assert_eq!(
+                accepted_hyp,
+                comp.welch_median_test(alt_hyp, ALPHA).accepted()
+            );
         }
     }
 }
