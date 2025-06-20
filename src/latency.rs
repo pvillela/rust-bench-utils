@@ -17,6 +17,19 @@ pub enum LatencyUnit {
 }
 
 impl LatencyUnit {
+    const fn nano_equivalence(&self) -> f64 {
+        match self {
+            Self::Milli => 1_000_000.,
+            Self::Micro => 1_000.,
+            Self::Nano => 1.,
+        }
+    }
+
+    /// Factor for conversion from `self` to `reporting_unit`.
+    pub const fn conversion_factor(&self, reporting_unit: Self) -> f64 {
+        self.nano_equivalence() / reporting_unit.nano_equivalence()
+    }
+
     /// Converts a `latency` [`Duration`] to a `u64` value according to the unit `self`.
     #[inline(always)]
     pub fn latency_as_u64(&self, latency: Duration) -> u64 {

@@ -1,5 +1,5 @@
 use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
-use bench_utils::{LatencyUnit, bench_run_with_status};
+use bench_utils::{BenchCfg, bench_run_with_status};
 use std::{thread, time::Duration};
 
 const EPSILON: f64 = 0.005;
@@ -10,10 +10,10 @@ fn f() {
 }
 
 fn main() {
-    let unit = LatencyUnit::Micro;
-    let target_median = unit.latency_as_f64(TARGET_LATENCY);
+    let reporting_unit = BenchCfg::get().reporting_unit();
+    let target_median = reporting_unit.latency_as_f64(TARGET_LATENCY);
     let exec_count = 50;
-    let out = bench_run_with_status(unit, f, exec_count, |_, _| println!("validate_bench_run"));
+    let out = bench_run_with_status(f, exec_count, |_| println!("validate_bench_run"));
     println!(
         "target_median={target_median}, out.median()={}, rel_diff={}",
         out.median(),

@@ -13,10 +13,11 @@ use basic_stats::{
 /// Its methods provide descriptive statistics about the latency sample of the
 /// benchmarked closure.
 pub struct BenchOut {
-    pub(super) unit: LatencyUnit,
+    pub(super) recording_unit: LatencyUnit,
+    pub(super) reporting_unit: LatencyUnit,
     pub(super) hist: Timing,
-    pub(super) sum: i64,
-    pub(super) sum2: i64,
+    pub(super) sum: f64,
+    pub(super) sum2: f64,
     pub(super) n_ln: u64,
     pub(super) sum_ln: f64,
     pub(super) sum2_ln: f64,
@@ -24,17 +25,18 @@ pub struct BenchOut {
 
 impl BenchOut {
     #[cfg(feature = "_friends_only")]
-    /// Creates a new empty instance.
-    pub fn new(unit: LatencyUnit) -> Self {
-        let hist = new_timing(20 * 1000 * 1000, 5);
-        let sum = 0;
-        let sum2 = 0;
+    /// Creates a new empty instance with given `recording_unit`, `reporting_unit`, and `sigfig`.
+    pub fn new(recording_unit: LatencyUnit, reporting_unit: LatencyUnit, sigfig: u8) -> Self {
+        let hist = new_timing(20 * 1000 * 1000, sigfig);
+        let sum = 0.;
+        let sum2 = 0.;
         let n_ln = 0;
         let sum_ln = 0.;
         let sum2_ln = 0.;
 
         Self {
-            unit,
+            recording_unit,
+            reporting_unit,
             hist,
             sum,
             sum2,
@@ -44,12 +46,28 @@ impl BenchOut {
         }
     }
 
+    #[cfg(feature = "_bench_run")]
+    /// Creates a new empty instance with `recording_unit`, `reporting_unit`, and `sigfig` from [`crate::BenchCfg`].
+    pub(super) fn default() -> Self {
+        use crate::BenchCfg;
+
+        let cfg = BenchCfg::get();
+        let recording_unit = cfg.recording_unit();
+        let reporting_unit = cfg.reporting_unit();
+        let sigfig = cfg.sigfig();
+        Self::new(recording_unit, reporting_unit, sigfig)
+    }
+
+    pub(super) fn converson_factor(&self) -> f64 {
+        self.recording_unit.conversion_factor(self.reporting_unit)
+    }
+
     #[cfg(feature = "_friends_only")]
     /// Creates a new empty instance.
     pub fn reset(&mut self) {
         self.hist.reset();
-        self.sum = 0;
-        self.sum2 = 0;
+        self.sum = 0.;
+        self.sum2 = 0.;
         self.n_ln = 0;
         self.sum_ln = 0.;
         self.sum2_ln = 0.
@@ -62,8 +80,8 @@ impl BenchOut {
             .record(elapsed)
             .expect("can't happen: histogram is auto-resizable");
 
-        self.sum += elapsed as i64;
-        self.sum2 += elapsed.pow(2) as i64;
+        self.sum += elapsed as f64;
+        self.sum2 += elapsed.pow(2) as f64;
 
         if elapsed > 0 {
             let ln = (elapsed as f64).ln();
@@ -74,8 +92,13 @@ impl BenchOut {
     }
 
     /// Latency unit used in data collection.
-    pub fn unit(&self) -> LatencyUnit {
-        self.unit
+    pub fn recording_unit(&self) -> LatencyUnit {
+        self.recording_unit
+    }
+
+    /// Latency unit used for reporting benchmark results.
+    pub fn reporting_unit(&self) -> LatencyUnit {
+        self.reporting_unit
     }
 
     /// Number of observations (sample size) for a function, as an integer.
@@ -99,12 +122,12 @@ impl BenchOut {
 
     /// Mean of latencies.
     pub fn mean(&self) -> f64 {
-        sample_mean(self.n(), self.sum as f64).aok()
+        sample_mean(self.n(), self.sum as f64).aok() * self.converson_factor()
     }
 
     /// Standard deviation of latencies.
     pub fn stdev(&self) -> f64 {
-        sample_stdev(self.n(), self.sum as f64, self.sum2 as f64).aok()
+        sample_stdev(self.n(), self.sum as f64, self.sum2 as f64).aok() * self.converson_factor()
     }
 
     /// Median of latencies.
@@ -114,7 +137,7 @@ impl BenchOut {
 
     /// Mean of the natural logarithms of latencies.
     pub fn mean_ln(&self) -> f64 {
-        sample_mean(self.n_ln, self.sum_ln).aok()
+        sample_mean(self.n_ln, self.sum_ln).aok() + self.converson_factor().ln()
     }
 
     /// Standard deviation of the natural logarithms latencies.
@@ -125,7 +148,8 @@ impl BenchOut {
     /// Student's one-sample t statistic for `mean(ln(latency(f)))` (where `ln` is the natural logarithm).
     pub fn student_ln_t(&self, ln_mu0: f64) -> f64 {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        student_1samp_t(&moments, ln_mu0).aok()
+        let ln_mu0_conv = ln_mu0 - (self.converson_factor()).ln();
+        student_1samp_t(&moments, ln_mu0_conv).aok()
     }
 
     /// Degrees of freedom for Student's t statistic for `mean(ln(latency(f)))`.
@@ -140,8 +164,8 @@ impl BenchOut {
     /// This assumption is widely supported by performance analysis theory and empirical data.
     pub fn student_median_p(&self, med0: f64, alt_hyp: AltHyp) -> f64 {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        let mu0 = med0.ln();
-        student_1samp_p(&moments, mu0, alt_hyp).aok()
+        let ln_mu0_conv = (med0 / self.converson_factor()).ln();
+        student_1samp_p(&moments, ln_mu0_conv, alt_hyp).aok()
     }
 
     /// Student's one-sample confidence interval for
@@ -152,7 +176,11 @@ impl BenchOut {
     /// This assumption is widely supported by performance analysis theory and empirical data.
     pub fn student_ln_ci(&self, alpha: f64) -> Ci {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        student_1samp_ci(&moments, alpha).aok()
+        let unconverted_ci = student_1samp_ci(&moments, alpha).aok();
+        Ci(
+            unconverted_ci.0 + (self.converson_factor()).ln(),
+            unconverted_ci.1 + (self.converson_factor()).ln(),
+        )
     }
 
     /// Student's one-sample confidence interval for
@@ -188,8 +216,8 @@ impl BenchOut {
     /// This assumption is widely supported by performance analysis theory and empirical data.
     pub fn student_median_test(&self, med0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        let mu0 = med0.ln();
-        student_1samp_test(&moments, mu0, alt_hyp, alpha).aok()
+        let ln_mu0_conv = (med0 / self.converson_factor()).ln();
+        student_1samp_test(&moments, ln_mu0_conv, alt_hyp, alpha).aok()
     }
 
     #[cfg(feature = "_bench_diff")]
@@ -200,13 +228,13 @@ impl BenchOut {
 
     #[cfg(feature = "_bench_diff")]
     #[inline(always)]
-    pub fn sum(&self) -> i64 {
+    pub fn sum(&self) -> f64 {
         self.sum
     }
 
     #[cfg(feature = "_bench_diff")]
     #[inline(always)]
-    pub fn sum2(&self) -> i64 {
+    pub fn sum2(&self) -> f64 {
         self.sum2
     }
 
@@ -233,7 +261,10 @@ impl BenchOut {
 #[cfg(feature = "_dev_utils")]
 mod test {
     use super::*;
-    use crate::test_support::{LO_STDEV_LN, lognormal_samp};
+    use crate::{
+        BenchCfg,
+        test_support::{LO_STDEV_LN, lognormal_samp},
+    };
     use basic_stats::{
         approx_eq,
         core::AcceptedHyp,
@@ -248,15 +279,20 @@ mod test {
     fn test_bench_out_descriptive_stats() {
         const EPSILON: f64 = 0.001;
 
-        let mu = 8.;
+        let mu = 8.; // in ln of microseconds
         let sigma = *LO_STDEV_LN;
         let k = 100;
 
-        let lognormal_samp = lognormal_samp(mu, sigma, k);
-        let mut out = BenchOut::new(LatencyUnit::Micro);
+        let conv_factor = BenchCfg::get().conversion_factor();
+        println!("conv_factor={conv_factor}");
+        let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
+
+        let lognormal_samp = lognormal_samp(rec_mu, sigma, k);
+        let mut out = BenchOut::default();
         out.collect_data(lognormal_samp);
 
-        assert_eq!(out.unit(), LatencyUnit::Micro);
+        assert_eq!(out.recording_unit(), LatencyUnit::Nano);
+        assert_eq!(out.reporting_unit(), LatencyUnit::Micro);
         assert_eq!(out.n(), 2 * k * k - 1);
         assert_eq!(out.nf(), out.n() as f64);
 
@@ -314,18 +350,23 @@ mod test {
     fn test_bench_out_student() {
         const EPSILON: f64 = 0.001;
 
-        let mu = 14.; // = ln(442413.392), high enough to mitigate impact of f64 to u64 coercion
+        let mu = 8.; // in ln of microseconds
         let sigma = *LO_STDEV_LN;
         let k = 100;
+
+        let conv_factor = BenchCfg::get().conversion_factor();
+        println!("conv_factor={conv_factor}");
+        let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
+
+        let lognormal_samp = lognormal_samp(rec_mu, sigma, k);
+        let mut out = BenchOut::default();
+        out.collect_data(lognormal_samp);
 
         let normal_samp = deterministic_normal_sample(mu, sigma, k).unwrap();
         let moments_ln = SampleMoments::from_iterator(normal_samp);
 
-        let lognormal_samp = lognormal_samp(mu, sigma, k);
-        let mut out = BenchOut::new(LatencyUnit::Micro);
-        out.collect_data(lognormal_samp);
-
-        assert_eq!(out.unit(), LatencyUnit::Micro);
+        assert_eq!(out.recording_unit(), LatencyUnit::Nano);
+        assert_eq!(out.reporting_unit(), LatencyUnit::Micro);
         assert_eq!(out.n(), 2 * k * k - 1);
         assert_eq!(out.nf(), out.n() as f64);
 

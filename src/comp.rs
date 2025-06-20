@@ -149,7 +149,7 @@ mod test {
     const ALPHA: f64 = 0.05;
 
     fn are_eq_bench_out(out1: &BenchOut, out2: &BenchOut) -> bool {
-        out1.unit == out2.unit
+        out1.recording_unit == out2.recording_unit
             && out1.summary() == out2.summary()
             && out1.sum == out2.sum
             && out1.sum2 == out2.sum2

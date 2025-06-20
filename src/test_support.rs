@@ -1,4 +1,4 @@
-use crate::{BenchOut, LatencyUnit};
+use crate::BenchOut;
 use basic_stats::{core::SampleMoments, normal::deterministic_normal_sample};
 use std::sync::LazyLock;
 
@@ -15,7 +15,7 @@ impl BenchOut {
     pub fn print(&self) {
         println!(
             "BenchOut {{ unit={:?}, n={}, sum={}, sum2={}, n_ln={}, sum_ln={}, sum2_ln={}, summary={:?} }}",
-            self.unit,
+            self.recording_unit,
             self.n(),
             self.sum,
             self.sum2,
@@ -60,7 +60,7 @@ pub fn lognormal_out_jittered(
     jitter_epsilon: f64,
 ) -> BenchOut {
     let lognormal_samp = lognormal_samp_jittered(mu, sigma, k, n_jitter, jitter_epsilon);
-    let mut out = BenchOut::new(LatencyUnit::Micro);
+    let mut out = BenchOut::default();
     out.collect_data(lognormal_samp);
     out
 }

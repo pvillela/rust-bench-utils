@@ -3,22 +3,78 @@
 use crate::{BenchOut, LatencyUnit, latency};
 use std::{
     io::{Write, stderr},
-    sync::atomic::{AtomicU64, Ordering},
+    ops::Deref,
+    sync::Mutex,
     time::{Duration, Instant},
 };
 
-static WARMUP_MILLIS: AtomicU64 = AtomicU64::new(3_000);
-
-/// The currently defined number of milliseconds used to "warm-up" the benchmark. The default is 3,000 ms.
-///
-/// Use [`set_warmup_millis`] to change the value.
-pub fn get_warmup_millis() -> u64 {
-    WARMUP_MILLIS.load(Ordering::Relaxed)
+#[derive(Debug, Clone)]
+pub struct BenchCfg {
+    warmup_millis: u64,
+    recording_unit: LatencyUnit,
+    reporting_unit: LatencyUnit,
+    sigfig: u8,
 }
 
-/// Changes the number of milliseconds used to "warm-up" the benchmark. The default is 3,000 ms.
-pub fn set_warmup_millis(millis: u64) {
-    WARMUP_MILLIS.store(millis, Ordering::Relaxed);
+static BENCH_CFG: Mutex<BenchCfg> = Mutex::new(BenchCfg {
+    warmup_millis: 3000,
+    recording_unit: LatencyUnit::Nano,
+    reporting_unit: LatencyUnit::Micro,
+    sigfig: 3,
+});
+
+impl BenchCfg {
+    pub fn get() -> BenchCfg {
+        let guard = BENCH_CFG.lock().unwrap();
+        guard.deref().clone()
+    }
+
+    /// The currently defined number of milliseconds used to "warm-up" the benchmark. The default is 3,000 ms.
+    pub fn warmup_millis(&self) -> u64 {
+        self.warmup_millis
+    }
+
+    pub fn recording_unit(&self) -> LatencyUnit {
+        self.recording_unit
+    }
+
+    pub fn reporting_unit(&self) -> LatencyUnit {
+        self.reporting_unit
+    }
+
+    pub fn conversion_factor(&self) -> f64 {
+        self.recording_unit.conversion_factor(self.reporting_unit)
+    }
+
+    pub fn sigfig(&self) -> u8 {
+        self.sigfig
+    }
+
+    /// Changes the number of milliseconds used to "warm-up" the benchmark. The default is 3,000 ms.
+    pub fn with_warmup_millis(mut self, warmup_millis: u64) -> Self {
+        self.warmup_millis = warmup_millis;
+        self
+    }
+
+    pub fn with_recording_unit(mut self, recording_unit: LatencyUnit) -> Self {
+        self.recording_unit = recording_unit;
+        self
+    }
+
+    pub fn with_reporting_unit(mut self, reporting_unit: LatencyUnit) -> Self {
+        self.reporting_unit = reporting_unit;
+        self
+    }
+
+    pub fn with_sigfig(mut self, sigfig: u8) -> Self {
+        self.sigfig = sigfig;
+        self
+    }
+
+    pub fn set(self) {
+        let mut guard = BENCH_CFG.lock().unwrap();
+        *guard = self;
+    }
 }
 
 const WARMUP_INCREMENT_COUNT: usize = 20;
@@ -31,7 +87,6 @@ impl BenchState {
     /// end of each invocation.
     fn execute(
         &mut self,
-        unit: LatencyUnit,
         mut f: impl FnMut(),
         exec_count: usize,
         pre_exec: impl FnOnce(),
@@ -40,6 +95,7 @@ impl BenchState {
     ) {
         pre_exec();
 
+        let unit = BenchCfg::get().recording_unit();
         for i in 1..=exec_count {
             let elapsed = unit.latency_as_u64(latency(&mut f));
             self.capture_data(elapsed);
@@ -50,16 +106,11 @@ impl BenchState {
     /// Warms-up the benchmark by invoking [`Self::execute`] repeatedly, each time with an `exec_count` value of
     /// [`WARMUP_INCREMENT_COUNT`], until the globally set number of warm-up millisecods [`WARMUP_MILLIS`] is
     /// reached or exceeded. `warmup_status` is invoked at the end of each invocation of [`Self::execute`].
-    fn warmup(
-        &mut self,
-        unit: LatencyUnit,
-        mut f: impl FnMut(),
-        mut warmup_status: impl FnMut(usize, u64, u64),
-    ) {
-        let warmup_millis = get_warmup_millis();
+    fn warmup(&mut self, mut f: impl FnMut(), mut warmup_status: impl FnMut(usize, u64, u64)) {
+        let warmup_millis = BenchCfg::get().warmup_millis();
         let start = Instant::now();
         for i in 1.. {
-            self.execute(unit, &mut f, WARMUP_INCREMENT_COUNT, || {}, |_| {}, 0);
+            self.execute(&mut f, WARMUP_INCREMENT_COUNT, || {}, |_| {}, 0);
             let elapsed = Instant::now().duration_since(start);
             warmup_status(i, elapsed.as_millis() as u64, warmup_millis);
             if elapsed.ge(&Duration::from_millis(warmup_millis)) {
@@ -76,7 +127,6 @@ impl BenchState {
 /// [`get_warmup_millis`] milliseconds.
 ///
 /// Arguments:
-/// - `unit` - the unit used for data collection.
 /// - `f` - benchmark target.
 /// - `exec_count` - number of executions (sample size) for the function.
 /// - `warmup_status` - is invoked every so often during warm-up and can be used to output the warm-up status,
@@ -90,18 +140,17 @@ impl BenchState {
 ///   Its argument is the current number of executions performed.
 ///   (See the source code of [`bench_run_with_status`] for an example.)
 pub fn bench_run_x(
-    unit: LatencyUnit,
     mut f: impl FnMut(),
     exec_count: usize,
     mut warmup_status: impl FnMut(usize, u64, u64),
     pre_exec: impl FnOnce(),
     mut exec_status: impl FnMut(usize),
 ) -> BenchOut {
-    let mut state = BenchOut::new(unit);
+    let mut state = BenchOut::default();
 
-    state.warmup(unit, &mut f, &mut warmup_status);
+    state.warmup(&mut f, &mut warmup_status);
     state.reset();
-    state.execute(unit, &mut f, exec_count, pre_exec, &mut exec_status, 0);
+    state.execute(&mut f, exec_count, pre_exec, &mut exec_status, 0);
 
     state
 }
@@ -114,11 +163,10 @@ pub fn bench_run_x(
 /// benchmark status.
 ///
 /// Arguments:
-/// - `unit` - the unit used for data collection.
 /// - `f` - benchmark target.
 /// - `exec_count` - number of executions (sample size) for the function.
-pub fn bench_run(unit: LatencyUnit, f: impl FnMut(), exec_count: usize) -> BenchOut {
-    bench_run_x(unit, f, exec_count, |_, _, _| {}, || (), |_| ())
+pub fn bench_run(f: impl FnMut(), exec_count: usize) -> BenchOut {
+    bench_run_x(f, exec_count, |_, _, _| {}, || (), |_| ())
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -130,19 +178,17 @@ pub fn bench_run(unit: LatencyUnit, f: impl FnMut(), exec_count: usize) -> Bench
 /// benchmark status to `stderr`.
 ///
 /// Arguments:
-/// - `unit` - the unit used for data collection.
 /// - `f` - benchmark target.
 /// - `exec_count` - number of executions (sample size) for the function.
 /// - `header` - is invoked once at the start of this function's execution; it can be used, for example,
 ///   to output information about the function being benchmarked to `stdout` and/or `stderr`. The first
 ///   argument is the the `LatencyUnit` and the second argument is the `exec_count`.
 pub fn bench_run_with_status(
-    unit: LatencyUnit,
     f: impl FnMut(),
     exec_count: usize,
-    header: impl FnOnce(LatencyUnit, usize),
+    header: impl FnOnce(usize),
 ) -> BenchOut {
-    header(unit, exec_count);
+    header(exec_count);
 
     let warmup_status = {
         let mut status_len: usize = 0;
@@ -181,7 +227,7 @@ pub fn bench_run_with_status(
         }
     };
 
-    let out = bench_run_x(unit, f, exec_count, warmup_status, pre_exec, exec_status);
+    let out = bench_run_x(f, exec_count, warmup_status, pre_exec, exec_status);
     println!();
     out
 }
