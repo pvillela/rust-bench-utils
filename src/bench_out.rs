@@ -4,7 +4,7 @@ use crate::{LatencyUnit, SummaryStats, Timing, new_timing, summary_stats};
 use basic_stats::{
     aok::{AokBasicStats, AokFloat},
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean, sample_stdev},
-    normal::{student_1samp_ci, student_1samp_t, student_1samp_test},
+    normal::{student_1samp_ci, student_1samp_p, student_1samp_t, student_1samp_test},
 };
 
 /// Contains the data resulting from benchmarking a closure.
@@ -122,58 +122,26 @@ impl BenchOut {
         sample_stdev(self.n_ln, self.sum_ln, self.sum2_ln).aok()
     }
 
-    /// Student's one-sample t statistic for `mean(latency(f))`.
-    pub fn student_t(&self) -> f64 {
-        let moments = SampleMoments::new(self.n(), self.sum as f64, self.sum2 as f64);
-        student_1samp_t(&moments, 0.).aok()
-    }
-
-    /// Degrees of freedom for Student's t statistic for `mean(latency(f))`.
-    pub fn student_df(&self) -> f64 {
-        self.nf() - 1.
-    }
-
-    /// Student's confidence interval for `mean(latency(f))`,
-    /// with confidence level `(1 - alpha)`.
-    ///
-    /// Assumes that `latency(f)` is normally distributed. This assumption is *not* supported by
-    /// performance analysis theory or empirical data.
-    pub fn student_mean_ci(&self, alpha: f64) -> Ci {
-        let moments = SampleMoments::new(self.n(), self.sum as f64, self.sum2 as f64);
-        student_1samp_ci(&moments, alpha).aok()
-    }
-
-    /// Position of `value` with respect to
-    /// Student's confidence interval for `mean(latency(f))`,
-    /// with confidence level `(1 - alpha)`.
-    ///
-    /// Assumes that `latency(f)` is normally distributed. This assumption is *not* supported by
-    /// performance analysis theory or empirical data.
-    pub fn student_value_position_wrt_diff_ci(&self, value: f64, alpha: f64) -> PositionWrtCi {
-        let ci = self.student_mean_ci(alpha);
-        ci.position_of(value)
-    }
-
-    /// Student's one-sample test of the hypothesis that
-    /// `mean(latency(f)) == mu0`,
-    /// with alternative hypothesis `alt_hyp` and confidence level `(1 - alpha)`.
-    ///
-    /// Assumes that `latency(f)` is normally distributed. This assumption is *not* supported by
-    /// performance analysis theory or empirical data.
-    pub fn student_test(&self, mu0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
-        let moments = SampleMoments::new(self.n(), self.sum as f64, self.sum2 as f64);
-        student_1samp_test(&moments, mu0, alt_hyp, alpha).aok()
-    }
-
     /// Student's one-sample t statistic for `mean(ln(latency(f)))` (where `ln` is the natural logarithm).
-    pub fn student_ln_t(&self) -> f64 {
+    pub fn student_ln_t(&self, ln_mu0: f64) -> f64 {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        student_1samp_t(&moments, 0.).aok()
+        student_1samp_t(&moments, ln_mu0).aok()
     }
 
     /// Degrees of freedom for Student's t statistic for `mean(ln(latency(f)))`.
     pub fn student_ln_df(&self) -> f64 {
         self.n_ln as f64 - 1.
+    }
+
+    /// p-value of Student's one-sample t-test for equality of
+    /// `median(latency(f))` and `med0`.
+    ///
+    /// Assumes that `latency(f)` is approximately log-normal.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
+    pub fn student_median_p(&self, med0: f64, alt_hyp: AltHyp) -> f64 {
+        let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
+        let mu0 = med0.ln();
+        student_1samp_p(&moments, mu0, alt_hyp).aok()
     }
 
     /// Student's one-sample confidence interval for
@@ -266,13 +234,20 @@ impl BenchOut {
 mod test {
     use super::*;
     use crate::test_support::{LO_STDEV_LN, lognormal_samp};
-    use basic_stats::{approx_eq, rel_approx_eq};
+    use basic_stats::{
+        approx_eq,
+        core::AcceptedHyp,
+        normal::{deterministic_normal_sample, student_1samp_df, student_1samp_p},
+        rel_approx_eq,
+    };
     use statrs::distribution::{ContinuousCDF, Normal};
 
-    const EPSILON: f64 = 0.001;
+    const ALPHA: f64 = 0.05;
 
     #[test]
-    fn test_bench_out() {
+    fn test_bench_out_descriptive_stats() {
+        const EPSILON: f64 = 0.001;
+
         let mu = 8.;
         let sigma = *LO_STDEV_LN;
         let k = 100;
@@ -333,5 +308,71 @@ mod test {
         rel_approx_eq!(exp_p90, summary.p90 as f64, EPSILON);
         rel_approx_eq!(exp_p95, summary.p95 as f64, EPSILON);
         rel_approx_eq!(exp_p99, summary.p99 as f64, EPSILON);
+    }
+
+    #[test]
+    fn test_bench_out_student() {
+        const EPSILON: f64 = 0.001;
+
+        let mu = 14.; // = ln(442413.392), high enough to mitigate impact of f64 to u64 coercion
+        let sigma = *LO_STDEV_LN;
+        let k = 100;
+
+        let normal_samp = deterministic_normal_sample(mu, sigma, k).unwrap();
+        let moments_ln = SampleMoments::from_iterator(normal_samp);
+
+        let lognormal_samp = lognormal_samp(mu, sigma, k);
+        let mut out = BenchOut::new(LatencyUnit::Micro);
+        out.collect_data(lognormal_samp);
+
+        assert_eq!(out.unit(), LatencyUnit::Micro);
+        assert_eq!(out.n(), 2 * k * k - 1);
+        assert_eq!(out.nf(), out.n() as f64);
+
+        {
+            let ratio_medians: f64 = 1.0;
+            let mu0 = mu - ratio_medians.ln();
+            let median0 = mu0.exp();
+            let alt_hyp = AltHyp::Ne;
+            let exp_accepted_hyp = AcceptedHyp::Null;
+
+            let exp_t = student_1samp_t(&moments_ln, mu0).unwrap();
+            let exp_df = student_1samp_df(&moments_ln).unwrap();
+            let exp_p = student_1samp_p(&moments_ln, mu0, alt_hyp).unwrap();
+            let exp_ln_ci = student_1samp_ci(&moments_ln, ALPHA).unwrap();
+            let exp_ci = Ci(exp_ln_ci.0.exp(), exp_ln_ci.1.exp());
+
+            rel_approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON); // doesn't pass
+            approx_eq!(exp_df, out.student_ln_df(), EPSILON);
+            rel_approx_eq!(exp_p, out.student_median_p(median0, alt_hyp), EPSILON);
+            rel_approx_eq!(exp_ci.0, out.student_median_ci(ALPHA).0, EPSILON);
+            rel_approx_eq!(exp_ci.1, out.student_median_ci(ALPHA).1, EPSILON);
+            let student_test = out.student_median_test(median0, alt_hyp, ALPHA);
+            println!("out.student_test={student_test:?}");
+            assert_eq!(exp_accepted_hyp, student_test.accepted());
+        }
+
+        {
+            let ratio_medians: f64 = 1.01;
+            let mu0 = mu - ratio_medians.ln();
+            let median0 = mu0.exp();
+            let alt_hyp = AltHyp::Gt;
+            let exp_accepted_hyp = AcceptedHyp::Alt;
+
+            let exp_t = student_1samp_t(&moments_ln, mu0).unwrap();
+            let exp_df = student_1samp_df(&moments_ln).unwrap();
+            let exp_p = student_1samp_p(&moments_ln, mu0, alt_hyp).unwrap();
+            let exp_ln_ci = student_1samp_ci(&moments_ln, ALPHA).unwrap();
+            let exp_ci = Ci(exp_ln_ci.0.exp(), exp_ln_ci.1.exp());
+
+            rel_approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON); // doesn't pass
+            approx_eq!(exp_df, out.student_ln_df(), EPSILON);
+            rel_approx_eq!(exp_p, out.student_median_p(median0, alt_hyp), EPSILON);
+            rel_approx_eq!(exp_ci.0, out.student_median_ci(ALPHA).0, EPSILON);
+            rel_approx_eq!(exp_ci.1, out.student_median_ci(ALPHA).1, EPSILON);
+            let student_test = out.student_median_test(median0, alt_hyp, ALPHA);
+            println!("out.student_test={student_test:?}");
+            assert_eq!(exp_accepted_hyp, student_test.accepted());
+        }
     }
 }

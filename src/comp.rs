@@ -75,9 +75,13 @@ impl<'a> Comp<'a> {
         welch_df(&self.moments_ln_f1(), &self.moments_ln_f2()).aok()
     }
 
-    /// p-value of Welch's two-sample t-test for equality of
-    /// `mean(ln(latency(f1)))` and `mean(ln(latency(f2)))` (where `ln` is the natural logarithm).
-    pub fn welch_ln_p(&self, alt_hyp: AltHyp) -> f64 {
+    /// p-value of Welch's two-sample t-test of the hypothesis that
+    /// `median(latency(f1)) == median(latency(f2))`
+    /// (equivalently, `mean(ln(latency(f1))) == mean(ln(latency(f2)))`, where `ln` is the natural logarithm).
+    ///
+    /// Assumes that both `latency(f1)` and `latency(f2)` are approximately log-normal.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
+    pub fn welch_median_p(&self, alt_hyp: AltHyp) -> f64 {
         welch_p(&self.moments_ln_f1(), &self.moments_ln_f2(), alt_hyp).aok()
     }
 
@@ -118,8 +122,9 @@ impl<'a> Comp<'a> {
         ci.position_of(value)
     }
 
-    /// Welch's test of the hypothesis that
-    /// `median(latency(f1)) == median(latency(f2))`,
+    /// Welch's two-sample t-test of the hypothesis that
+    /// `median(latency(f1)) == median(latency(f2))`
+    /// (equivalently, `mean(ln(latency(f1))) == mean(ln(latency(f2)))`, where `ln` is the natural logarithm),
     /// with alternative hypothesis `alt_hyp` and confidence level `(1 - alpha)`.
     ///
     /// Assumes that both `latency(f1)` and `latency(f2)` are approximately log-normal.
@@ -207,7 +212,7 @@ mod test {
             assert_eq!(welch_df(m_ln1, m_ln2).unwrap(), comp.welch_ln_df());
             assert_eq!(
                 welch_p(m_ln1, m_ln2, alt_hyp).unwrap(),
-                comp.welch_ln_p(alt_hyp)
+                comp.welch_median_p(alt_hyp)
             );
             assert_eq!(
                 welch_ci(m_ln1, m_ln2, ALPHA).unwrap(),
@@ -262,7 +267,7 @@ mod test {
             assert_eq!(welch_df(m_ln1, m_ln2).unwrap(), comp.welch_ln_df());
             assert_eq!(
                 welch_p(m_ln1, m_ln2, alt_hyp).unwrap(),
-                comp.welch_ln_p(alt_hyp)
+                comp.welch_median_p(alt_hyp)
             );
             assert_eq!(
                 welch_ci(m_ln1, m_ln2, ALPHA).unwrap(),

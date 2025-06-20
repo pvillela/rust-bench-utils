@@ -14,8 +14,9 @@ impl BenchOut {
 
     pub fn print(&self) {
         println!(
-            "unit={:?}, sum={}, sum2={}, n_ln={}, sum_ln={}, sum2_ln={}, summary={:?}",
+            "BenchOut {{ unit={:?}, n={}, sum={}, sum2={}, n_ln={}, sum_ln={}, sum2_ln={}, summary={:?} }}",
             self.unit,
+            self.n(),
             self.sum,
             self.sum2,
             self.n_ln,
