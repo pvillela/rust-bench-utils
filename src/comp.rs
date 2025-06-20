@@ -1,7 +1,7 @@
 use crate::BenchOut;
 use basic_stats::{
     aok::{AokBasicStats, AokFloat},
-    core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean},
+    core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments},
     normal::{welch_ci, welch_df, welch_p, welch_t, welch_test},
 };
 
@@ -12,7 +12,19 @@ use basic_stats::{
 pub struct Comp<'a>(&'a BenchOut, &'a BenchOut);
 
 impl<'a> Comp<'a> {
+    /// # Panics
+    /// Panics in any of the following conditions:
+    /// - `f1_out` and `f2_out` don't have the same `recording_unit`.
+    /// - `f1_out` and `f2_out` don't have the same `reporting_unit`.
     pub fn new(f1_out: &'a BenchOut, f2_out: &'a BenchOut) -> Self {
+        assert_eq!(
+            f1_out.recording_unit, f2_out.recording_unit,
+            "`f1_out.recording_unit` and `f2_out.recording_unit` must be the same",
+        );
+        assert_eq!(
+            f1_out.reporting_unit, f2_out.reporting_unit,
+            "`f1_out.reporting_unit` and `f2_out.reporting_unit` must be the same",
+        );
         Self(f1_out, f2_out)
     }
 
@@ -36,17 +48,13 @@ impl<'a> Comp<'a> {
 
     /// The difference between the mean of `f1`'s latencies and the mean of `f2`'s latencies.
     pub fn mean_diff_f1_f2(&self) -> f64 {
-        let m1 = sample_mean(self.0.n(), self.0.sum as f64).aok();
-        let m2 = sample_mean(self.1.n(), self.1.sum as f64).aok();
-        m1 - m2
+        self.0.mean() - self.1.mean()
     }
 
     /// The difference between the mean of the natural logarithms of `f1`'s latencies and
     /// the mean of the natural logarithms of`f2`'s latencies.
     pub fn mean_diff_ln_f1_f2(&self) -> f64 {
-        let m1 = sample_mean(self.0.n(), self.0.sum_ln).aok();
-        let m2 = sample_mean(self.1.n(), self.1.sum_ln).aok();
-        m1 - m2
+        self.0.mean_ln() - self.1.mean_ln()
     }
 
     /// Estimated ratio of the median `f1` latency to the median `f2` latency,
@@ -56,12 +64,19 @@ impl<'a> Comp<'a> {
     }
 
     fn moments_ln_f1(&self) -> SampleMoments {
-        SampleMoments::new(self.0.hist.len(), self.0.sum_ln, self.0.sum2_ln)
+        SampleMoments::new(self.0.n_ln, self.0.sum_ln, self.0.sum2_ln)
     }
 
     fn moments_ln_f2(&self) -> SampleMoments {
-        SampleMoments::new(self.1.hist.len(), self.1.sum_ln, self.1.sum2_ln)
+        SampleMoments::new(self.1.n_ln, self.1.sum_ln, self.1.sum2_ln)
     }
+
+    // ==============
+    // IMPORTANT NOTE
+    // ==============
+    // No need to adjust moments for recording and reporting units for the statistics below because
+    // they only depend on the difference of means and the stdevs, all of which are invariant when
+    // the conversion factor is the same for both samples.
 
     /// Welch's t statistic for
     /// `mean(ln(latency(f1))) - mean(ln(latency(f2)))` (where `ln` is the natural logarithm).
@@ -196,6 +211,10 @@ mod test {
             o1.print();
             print!("f1_out: ");
             f1_out.print();
+            print!("o2: ");
+            o2.print();
+            print!("f2_out: ");
+            f2_out.print();
 
             assert!(are_eq_bench_out(o1, f1_out));
             assert!(are_eq_bench_out(o2, f2_out));
@@ -228,6 +247,7 @@ mod test {
                 PositionWrtCi::In,
                 comp.welch_value_position_wrt_ratio_ci(ratio_medians, ALPHA)
             );
+            println!("welch_ln_test={:?}", comp.welch_median_test(alt_hyp, ALPHA));
             assert_eq!(
                 accepted_hyp,
                 comp.welch_median_test(alt_hyp, ALPHA).accepted()
@@ -251,6 +271,10 @@ mod test {
             o1.print();
             print!("f1_out: ");
             f1_out.print();
+            print!("o2: ");
+            o2.print();
+            print!("f2_out: ");
+            f2_out.print();
 
             assert!(are_eq_bench_out(o1, f1_out));
             assert!(are_eq_bench_out(o2, f2_out));
