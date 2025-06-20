@@ -30,7 +30,7 @@ statrs = "0.18"
 [features]
 
 # Public
-default = ["_bench_one", "__core"] # should always be enabled for public use
+default = ["_bench_run", "__core"] # should always be enabled for public use
 busy_work = ["dep:sha2"]
 
 # Shared with friends
@@ -41,7 +41,7 @@ __null = ["dep:basic_stats"]
 __core = ["_friends_only", "basic_stats/normal", "basic_stats/aok"]
 
 # Internal
-_bench_one = []                         # not used by `bench_diff` create
+_bench_run = []                         # not used by `bench_diff` create
 _friends_only = []                      # only for self and `bench_diff` crate
 _dev_utils = ["basic_stats/_dev_utils"] # enables approx_eq traits and macros
 
@@ -49,5 +49,5 @@ _dev_utils = ["basic_stats/_dev_utils"] # enables approx_eq traits and macros
 features = ["busy_work"]
 
 [[bench]]
-name = "validate_bench_one"
+name = "validate_bench_run"
 harness = false

@@ -10,10 +10,10 @@ pub use fake_work::*;
 pub use latency::*;
 pub use summary_stats::*;
 
-#[cfg(feature = "_bench_one")]
-mod bench_one;
-#[cfg(feature = "_bench_one")]
-pub use bench_one::*;
+#[cfg(feature = "_bench_run")]
+mod bench_run;
+#[cfg(feature = "_bench_run")]
+pub use bench_run::*;
 
 #[cfg(feature = "busy_work")]
 mod busy_work;

@@ -1,4 +1,4 @@
-//! Module defining the key data structure produced by [`crate::bench_one`].
+//! Module defining the key data structure produced by [`crate::bench_run`].
 
 use crate::{LatencyUnit, SummaryStats, Timing, new_timing, summary_stats};
 use basic_stats::{
