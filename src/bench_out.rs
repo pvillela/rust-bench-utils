@@ -26,7 +26,7 @@ pub struct BenchOut {
 impl BenchOut {
     #[doc(hidden)]
     /// Creates a new empty instance with given `recording_unit`, `reporting_unit`, and `sigfig`.
-    pub fn new(cfg: BenchCfg) -> Self {
+    pub fn new(cfg: &BenchCfg) -> Self {
         let hist = new_timing(20 * 1000 * 1000, cfg.sigfig());
         let sum = 0.;
         let sum2 = 0.;
@@ -51,7 +51,7 @@ impl BenchOut {
     pub(super) fn default() -> Self {
         use crate::get_bench_cfg;
 
-        Self::new(get_bench_cfg())
+        Self::new(&get_bench_cfg())
     }
 
     pub(super) fn converson_factor(&self) -> f64 {
