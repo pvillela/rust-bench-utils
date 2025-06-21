@@ -1,6 +1,6 @@
 //! Implements functions to collect latency statistics for a closure.
 
-use crate::{BenchOut, LatencyUnit, latency};
+use crate::{BenchCfg, BenchOut, LatencyUnit, latency};
 use std::{
     io::{Write, stderr},
     ops::Deref,
@@ -8,73 +8,17 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[derive(Debug, Clone)]
-pub struct BenchCfg {
-    warmup_millis: u64,
-    recording_unit: LatencyUnit,
-    reporting_unit: LatencyUnit,
-    sigfig: u8,
-}
+static BENCH_CFG: Mutex<BenchCfg> = Mutex::new(BenchCfg::new(
+    3000,
+    LatencyUnit::Nano,
+    LatencyUnit::Micro,
+    3,
+    &BENCH_CFG,
+));
 
-static BENCH_CFG: Mutex<BenchCfg> = Mutex::new(BenchCfg {
-    warmup_millis: 3000,
-    recording_unit: LatencyUnit::Nano,
-    reporting_unit: LatencyUnit::Micro,
-    sigfig: 3,
-});
-
-impl BenchCfg {
-    pub fn get() -> BenchCfg {
-        let guard = BENCH_CFG.lock().unwrap();
-        guard.deref().clone()
-    }
-
-    /// The currently defined number of milliseconds used to "warm-up" the benchmark. The default is 3,000 ms.
-    pub fn warmup_millis(&self) -> u64 {
-        self.warmup_millis
-    }
-
-    pub fn recording_unit(&self) -> LatencyUnit {
-        self.recording_unit
-    }
-
-    pub fn reporting_unit(&self) -> LatencyUnit {
-        self.reporting_unit
-    }
-
-    pub fn conversion_factor(&self) -> f64 {
-        self.recording_unit.conversion_factor(self.reporting_unit)
-    }
-
-    pub fn sigfig(&self) -> u8 {
-        self.sigfig
-    }
-
-    /// Changes the number of milliseconds used to "warm-up" the benchmark. The default is 3,000 ms.
-    pub fn with_warmup_millis(mut self, warmup_millis: u64) -> Self {
-        self.warmup_millis = warmup_millis;
-        self
-    }
-
-    pub fn with_recording_unit(mut self, recording_unit: LatencyUnit) -> Self {
-        self.recording_unit = recording_unit;
-        self
-    }
-
-    pub fn with_reporting_unit(mut self, reporting_unit: LatencyUnit) -> Self {
-        self.reporting_unit = reporting_unit;
-        self
-    }
-
-    pub fn with_sigfig(mut self, sigfig: u8) -> Self {
-        self.sigfig = sigfig;
-        self
-    }
-
-    pub fn set(self) {
-        let mut guard = BENCH_CFG.lock().unwrap();
-        *guard = self;
-    }
+pub fn get_bench_cfg() -> BenchCfg {
+    let guard = BENCH_CFG.lock().unwrap();
+    guard.deref().clone()
 }
 
 const WARMUP_INCREMENT_COUNT: usize = 20;
@@ -95,7 +39,7 @@ impl BenchState {
     ) {
         pre_exec();
 
-        let unit = BenchCfg::get().recording_unit();
+        let unit = get_bench_cfg().recording_unit();
         for i in 1..=exec_count {
             let elapsed = unit.latency_as_u64(latency(&mut f));
             self.capture_data(elapsed);
@@ -107,7 +51,7 @@ impl BenchState {
     /// [`WARMUP_INCREMENT_COUNT`], until the globally set number of warm-up millisecods [`WARMUP_MILLIS`] is
     /// reached or exceeded. `warmup_status` is invoked at the end of each invocation of [`Self::execute`].
     fn warmup(&mut self, mut f: impl FnMut(), mut warmup_status: impl FnMut(usize, u64, u64)) {
-        let warmup_millis = BenchCfg::get().warmup_millis();
+        let warmup_millis = get_bench_cfg().warmup_millis();
         let start = Instant::now();
         for i in 1.. {
             self.execute(&mut f, WARMUP_INCREMENT_COUNT, || {}, |_| {}, 0);

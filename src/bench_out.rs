@@ -49,9 +49,9 @@ impl BenchOut {
     #[cfg(feature = "_bench_run")]
     /// Creates a new empty instance with `recording_unit`, `reporting_unit`, and `sigfig` from [`crate::BenchCfg`].
     pub(super) fn default() -> Self {
-        use crate::BenchCfg;
+        use crate::get_bench_cfg;
 
-        let cfg = BenchCfg::get();
+        let cfg = get_bench_cfg();
         let recording_unit = cfg.recording_unit();
         let reporting_unit = cfg.reporting_unit();
         let sigfig = cfg.sigfig();
@@ -262,7 +262,7 @@ impl BenchOut {
 mod test {
     use super::*;
     use crate::{
-        BenchCfg,
+        get_bench_cfg,
         test_support::{LO_STDEV_LN, lognormal_samp},
     };
     use basic_stats::{
@@ -283,7 +283,7 @@ mod test {
         let sigma = *LO_STDEV_LN;
         let k = 100;
 
-        let conv_factor = BenchCfg::get().conversion_factor();
+        let conv_factor = get_bench_cfg().conversion_factor();
         println!("conv_factor={conv_factor}");
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
@@ -354,7 +354,7 @@ mod test {
         let sigma = *LO_STDEV_LN;
         let k = 100;
 
-        let conv_factor = BenchCfg::get().conversion_factor();
+        let conv_factor = get_bench_cfg().conversion_factor();
         println!("conv_factor={conv_factor}");
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
@@ -415,5 +415,27 @@ mod test {
             println!("out.student_test={student_test:?}");
             assert_eq!(exp_accepted_hyp, student_test.accepted());
         }
+    }
+
+    #[test]
+    fn test_bench_cfg() {
+        let cfg = get_bench_cfg();
+        println!("cfg={cfg:?}");
+        assert_eq!(cfg.warmup_millis(), 3000);
+        assert_eq!(cfg.recording_unit(), LatencyUnit::Nano);
+        assert_eq!(cfg.reporting_unit(), LatencyUnit::Micro);
+        assert_eq!(cfg.sigfig(), 3);
+
+        cfg.with_recording_unit(LatencyUnit::Micro)
+            .with_warmup_millis(100)
+            .with_reporting_unit(LatencyUnit::Milli)
+            .with_sigfig(5)
+            .set();
+        let cfg = get_bench_cfg();
+        println!("cfg={cfg:?}");
+        assert_eq!(cfg.warmup_millis(), 100);
+        assert_eq!(cfg.recording_unit(), LatencyUnit::Micro);
+        assert_eq!(cfg.reporting_unit(), LatencyUnit::Milli);
+        assert_eq!(cfg.sigfig(), 5);
     }
 }

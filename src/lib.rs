@@ -1,9 +1,11 @@
+mod bench_cfg;
 mod bench_out;
 mod comp;
 mod fake_work;
 mod latency;
 mod summary_stats;
 
+pub use bench_cfg::*;
 pub use bench_out::*;
 pub use comp::*;
 pub use fake_work::*;
