@@ -38,11 +38,10 @@ _bench_diff = ["__core"] # for use by `bench_diff` crate
 
 # Helper
 __null = ["dep:basic_stats"]
-__core = ["_friends_only", "basic_stats/normal", "basic_stats/aok"]
+__core = ["basic_stats/normal", "basic_stats/aok"]
 
 # Internal
 _bench_run = []                         # not used by `bench_diff` create
-_friends_only = []                      # only for self and `bench_diff` crate
 _dev_utils = ["basic_stats/_dev_utils"] # enables approx_eq traits and macros
 
 [package.metadata.docs.rs]

@@ -24,7 +24,7 @@ pub struct BenchOut {
 }
 
 impl BenchOut {
-    #[cfg(feature = "_friends_only")]
+    #[doc(hidden)]
     /// Creates a new empty instance with given `recording_unit`, `reporting_unit`, and `sigfig`.
     pub fn new(recording_unit: LatencyUnit, reporting_unit: LatencyUnit, sigfig: u8) -> Self {
         let hist = new_timing(20 * 1000 * 1000, sigfig);
@@ -62,7 +62,7 @@ impl BenchOut {
         self.recording_unit.conversion_factor(self.reporting_unit)
     }
 
-    #[cfg(feature = "_friends_only")]
+    #[doc(hidden)]
     /// Creates a new empty instance.
     pub fn reset(&mut self) {
         self.hist.reset();
@@ -73,7 +73,7 @@ impl BenchOut {
         self.sum2_ln = 0.
     }
 
-    #[cfg(feature = "_friends_only")]
+    #[doc(hidden)]
     /// Updates `self` with an elapsed time observation for the function.
     pub fn capture_data(&mut self, elapsed: u64) {
         self.hist

@@ -2,11 +2,11 @@ use hdrhistogram::Histogram;
 
 use crate::BenchOut;
 
-#[cfg(feature = "_friends_only")]
+#[doc(hidden)]
 /// Alias of [`Histogram<u64>`].
 pub type Timing = Histogram<u64>;
 
-#[cfg(feature = "_friends_only")]
+#[doc(hidden)]
 /// Constructs a [`Timing`]. The arguments correspond to [Histogram::high] and [Histogram::sigfig].
 pub fn new_timing(hist_high: u64, hist_sigfig: u8) -> Timing {
     let mut hist = Histogram::<u64>::new_with_max(hist_high, hist_sigfig)
@@ -36,7 +36,7 @@ pub struct SummaryStats {
     pub max: f64,
 }
 
-#[cfg(feature = "_friends_only")]
+#[doc(hidden)]
 /// Computes a [`SummaryStats`] from a [`BenchOut`].
 pub fn summary_stats(out: &BenchOut) -> SummaryStats {
     let hist = &out.hist;
