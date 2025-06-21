@@ -76,3 +76,31 @@ impl BenchCfg {
         *guard = self;
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "_bench_run")]
+mod test {
+    use crate::{LatencyUnit, get_bench_cfg};
+
+    #[test]
+    fn test_bench_cfg() {
+        let cfg = get_bench_cfg();
+        println!("cfg={cfg:?}");
+        assert_eq!(cfg.warmup_millis(), 3000);
+        assert_eq!(cfg.recording_unit(), LatencyUnit::Nano);
+        assert_eq!(cfg.reporting_unit(), LatencyUnit::Micro);
+        assert_eq!(cfg.sigfig(), 3);
+
+        cfg.with_recording_unit(LatencyUnit::Micro)
+            .with_warmup_millis(100)
+            .with_reporting_unit(LatencyUnit::Milli)
+            .with_sigfig(5)
+            .set();
+        let cfg = get_bench_cfg();
+        println!("cfg={cfg:?}");
+        assert_eq!(cfg.warmup_millis(), 100);
+        assert_eq!(cfg.recording_unit(), LatencyUnit::Micro);
+        assert_eq!(cfg.reporting_unit(), LatencyUnit::Milli);
+        assert_eq!(cfg.sigfig(), 5);
+    }
+}

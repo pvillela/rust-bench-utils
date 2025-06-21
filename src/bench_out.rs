@@ -1,6 +1,6 @@
 //! Module defining the key data structure produced by [`crate::bench_run`].
 
-use crate::{LatencyUnit, SummaryStats, Timing, new_timing, summary_stats};
+use crate::{BenchCfg, LatencyUnit, SummaryStats, Timing, new_timing, summary_stats};
 use basic_stats::{
     aok::{AokBasicStats, AokFloat},
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean, sample_stdev},
@@ -26,8 +26,8 @@ pub struct BenchOut {
 impl BenchOut {
     #[doc(hidden)]
     /// Creates a new empty instance with given `recording_unit`, `reporting_unit`, and `sigfig`.
-    pub fn new(recording_unit: LatencyUnit, reporting_unit: LatencyUnit, sigfig: u8) -> Self {
-        let hist = new_timing(20 * 1000 * 1000, sigfig);
+    pub fn new(cfg: BenchCfg) -> Self {
+        let hist = new_timing(20 * 1000 * 1000, cfg.sigfig());
         let sum = 0.;
         let sum2 = 0.;
         let n_ln = 0;
@@ -35,8 +35,8 @@ impl BenchOut {
         let sum2_ln = 0.;
 
         Self {
-            recording_unit,
-            reporting_unit,
+            recording_unit: cfg.recording_unit(),
+            reporting_unit: cfg.reporting_unit(),
             hist,
             sum,
             sum2,
@@ -51,11 +51,7 @@ impl BenchOut {
     pub(super) fn default() -> Self {
         use crate::get_bench_cfg;
 
-        let cfg = get_bench_cfg();
-        let recording_unit = cfg.recording_unit();
-        let reporting_unit = cfg.reporting_unit();
-        let sigfig = cfg.sigfig();
-        Self::new(recording_unit, reporting_unit, sigfig)
+        Self::new(get_bench_cfg())
     }
 
     pub(super) fn converson_factor(&self) -> f64 {
@@ -259,6 +255,7 @@ impl BenchOut {
 
 #[cfg(test)]
 #[cfg(feature = "_dev_utils")]
+#[cfg(feature = "_bench_run")]
 mod test {
     use super::*;
     use crate::{
@@ -415,27 +412,5 @@ mod test {
             println!("out.student_test={student_test:?}");
             assert_eq!(exp_accepted_hyp, student_test.accepted());
         }
-    }
-
-    #[test]
-    fn test_bench_cfg() {
-        let cfg = get_bench_cfg();
-        println!("cfg={cfg:?}");
-        assert_eq!(cfg.warmup_millis(), 3000);
-        assert_eq!(cfg.recording_unit(), LatencyUnit::Nano);
-        assert_eq!(cfg.reporting_unit(), LatencyUnit::Micro);
-        assert_eq!(cfg.sigfig(), 3);
-
-        cfg.with_recording_unit(LatencyUnit::Micro)
-            .with_warmup_millis(100)
-            .with_reporting_unit(LatencyUnit::Milli)
-            .with_sigfig(5)
-            .set();
-        let cfg = get_bench_cfg();
-        println!("cfg={cfg:?}");
-        assert_eq!(cfg.warmup_millis(), 100);
-        assert_eq!(cfg.recording_unit(), LatencyUnit::Micro);
-        assert_eq!(cfg.reporting_unit(), LatencyUnit::Milli);
-        assert_eq!(cfg.sigfig(), 5);
     }
 }
