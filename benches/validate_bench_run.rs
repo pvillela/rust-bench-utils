@@ -17,7 +17,7 @@ fn main() {
     println!(
         "target_median={target_median}, out.median()={}, rel_diff={}",
         out.median(),
-        target_median.rel_diff(out.median(), 0.)
+        target_median.abs_rel_diff(out.median(), 0.)
     );
     rel_approx_eq!(target_median, out.median(), EPSILON);
 }

@@ -1,5 +1,7 @@
 //! Module defining the key data structure produced by [`crate::bench_run`].
 
+use std::fmt::Debug;
+
 use crate::{BenchCfg, LatencyUnit, SummaryStats, Timing, new_timing, summary_stats};
 use basic_stats::{
     aok::{AokBasicStats, AokFloat},
@@ -10,8 +12,13 @@ use basic_stats::{
 /// Contains the data resulting from benchmarking a closure.
 ///
 /// It is returned by the core benchmarking functions in this library.
-/// Its methods provide descriptive statistics about the latency sample of the
+/// Its methods provide descriptive and inferential statistics about the latency sample of the
 /// benchmarked closure.
+///
+/// The `*_ln_*` methods provide statistics for `mean(ln(latency(f)))`, where `ln` is the natural logarithm.
+/// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
+/// This assumption is widely supported by performance analysis theory and empirical data.
+/// Thus, the `*_ln_*` methods are useful for the analysis of median latencies.
 pub struct BenchOut {
     pub(super) recording_unit: LatencyUnit,
     pub(super) reporting_unit: LatencyUnit,
@@ -54,6 +61,7 @@ impl BenchOut {
         Self::new(&get_bench_cfg())
     }
 
+    /// Factor to convert from `recording_unit` to `reporting_unit`.
     pub(super) fn converson_factor(&self) -> f64 {
         self.recording_unit.conversion_factor(self.reporting_unit)
     }
@@ -116,52 +124,68 @@ impl BenchOut {
         summary_stats(self)
     }
 
-    /// Mean of latencies.
+    /// Sample mean of latencies.
     pub fn mean(&self) -> f64 {
         sample_mean(self.n(), self.sum as f64).aok() * self.converson_factor()
     }
 
-    /// Standard deviation of latencies.
+    /// Sample standard deviation of latencies.
     pub fn stdev(&self) -> f64 {
         sample_stdev(self.n(), self.sum as f64, self.sum2 as f64).aok() * self.converson_factor()
     }
 
-    /// Median of latencies.
+    /// Sample median of latencies.
     pub fn median(&self) -> f64 {
         self.summary().median as f64
     }
 
-    /// Mean of the natural logarithms of latencies.
+    /// Sample mean of the natural logarithms of latencies.
     pub fn mean_ln(&self) -> f64 {
         sample_mean(self.n_ln, self.sum_ln).aok() + self.converson_factor().ln()
     }
 
-    /// Standard deviation of the natural logarithms latencies.
+    /// Sample standard deviation of the natural logarithms latencies.
     pub fn stdev_ln(&self) -> f64 {
         sample_stdev(self.n_ln, self.sum_ln, self.sum2_ln).aok()
     }
 
-    /// Student's one-sample t statistic for `mean(ln(latency(f)))` (where `ln` is the natural logarithm).
+    /// Student's one-sample t statistic for
+    /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm), or equivalently,
+    /// the equality of `median(latency(f))` and `exp(ln_mu0)`.
+    ///
+    /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
+    ///
+    /// Arguments:
+    /// - `ln_mu0`: hypothesized `mean(ln(latency(f)))`, or equivalently, `ln(median(latency(f)))`.
     pub fn student_ln_t(&self, ln_mu0: f64) -> f64 {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        let ln_mu0_conv = ln_mu0 - (self.converson_factor()).ln();
-        student_1samp_t(&moments, ln_mu0_conv).aok()
+        let ln_mu0_rec = ln_mu0 - self.converson_factor().ln();
+        student_1samp_t(&moments, ln_mu0_rec).aok()
     }
 
-    /// Degrees of freedom for Student's t statistic for `mean(ln(latency(f)))`.
+    /// Degrees of freedom for Student's t statistic for `mean(ln(latency(f)))` (where `ln` is the natural logarithm).
+    ///
+    /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
+    /// Thus, this statistics equivalently pertains to `ln(median(latency(f)))`.
     pub fn student_ln_df(&self) -> f64 {
         self.n_ln as f64 - 1.
     }
 
-    /// p-value of Student's one-sample t-test for equality of
-    /// `median(latency(f))` and `med0`.
+    /// p-value of Student's one-sample t-test for
+    /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm), or equivalently,
+    /// the equality of `median(latency(f))` and `exp(ln_mu0)`.
     ///
-    /// Assumes that `latency(f)` is approximately log-normal.
+    /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
-    pub fn student_median_p(&self, med0: f64, alt_hyp: AltHyp) -> f64 {
+    ///
+    /// Arguments:
+    /// - `ln_mu0`: hypothesized `mean(ln(latency(f)))`, or equivalently, `ln(median(latency(f)))`.
+    pub fn student_ln_p(&self, ln_mu0: f64, alt_hyp: AltHyp) -> f64 {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        let ln_mu0_conv = (med0 / self.converson_factor()).ln();
-        student_1samp_p(&moments, ln_mu0_conv, alt_hyp).aok()
+        let ln_mu0_rec = ln_mu0 - self.converson_factor().ln();
+        student_1samp_p(&moments, ln_mu0_rec, alt_hyp).aok()
     }
 
     /// Student's one-sample confidence interval for
@@ -172,10 +196,10 @@ impl BenchOut {
     /// This assumption is widely supported by performance analysis theory and empirical data.
     pub fn student_ln_ci(&self, alpha: f64) -> Ci {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        let unconverted_ci = student_1samp_ci(&moments, alpha).aok();
+        let ci_rec = student_1samp_ci(&moments, alpha).aok();
         Ci(
-            unconverted_ci.0 + (self.converson_factor()).ln(),
-            unconverted_ci.1 + (self.converson_factor()).ln(),
+            ci_rec.0 + self.converson_factor().ln(),
+            ci_rec.1 + self.converson_factor().ln(),
         )
     }
 
@@ -205,15 +229,20 @@ impl BenchOut {
     }
 
     /// Student's one-sample test of the hypothesis that
-    /// `median(latency(f)) == med0`,
-    /// with alternative hypothesis `alt_hyp` and confidence level `(1 - alpha)`.
+    /// `mean(ln(latency(f))) == ln_mu0` (where `ln` is the natural logarithm), or equivalently,
+    /// `median(latency(f)) == exp(ln_mu0)`.
     ///
-    /// Assumes that `latency(f)` is approximately log-normal.
+    /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
-    pub fn student_median_test(&self, med0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
+    ///
+    /// Arguments:
+    /// - `ln_mu0`: hypothesized `mean(ln(latency(f)))`, or equivalently, `ln(median(latency(f)))`.
+    /// - `alt_hyp`: alternative hypothesis.
+    /// - `alpha`: confidence level is `1 - alpha`.
+    pub fn student_ln_test(&self, ln_mu0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        let ln_mu0_conv = (med0 / self.converson_factor()).ln();
-        student_1samp_test(&moments, ln_mu0_conv, alt_hyp, alpha).aok()
+        let ln_mu0_rec = ln_mu0 - self.converson_factor().ln();
+        student_1samp_test(&moments, ln_mu0_rec, alt_hyp, alpha).aok()
     }
 
     #[cfg(feature = "_bench_diff")]
@@ -250,6 +279,21 @@ impl BenchOut {
     #[inline(always)]
     pub fn sum2_ln(&self) -> f64 {
         self.sum2_ln
+    }
+}
+
+impl Debug for BenchOut {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("BenchOut {{ recording_unit={:?}, reporting_unit={:?}, n={}, sum={}, sum2={}, n_ln={}, sum_ln={}, sum2_ln={}, summary={:?} }}",
+            self.recording_unit,
+            self.reporting_unit,
+            self.n(),
+            self.sum,
+            self.sum2,
+            self.n_ln,
+            self.sum_ln,
+            self.sum2_ln,
+            self.summary()))
     }
 }
 
@@ -370,7 +414,6 @@ mod test {
         {
             let ratio_medians: f64 = 1.0;
             let mu0 = mu - ratio_medians.ln();
-            let median0 = mu0.exp();
             let alt_hyp = AltHyp::Ne;
             let exp_accepted_hyp = AcceptedHyp::Null;
 
@@ -382,10 +425,10 @@ mod test {
 
             rel_approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON); // doesn't pass
             approx_eq!(exp_df, out.student_ln_df(), EPSILON);
-            rel_approx_eq!(exp_p, out.student_median_p(median0, alt_hyp), EPSILON);
+            rel_approx_eq!(exp_p, out.student_ln_p(mu0, alt_hyp), EPSILON);
             rel_approx_eq!(exp_ci.0, out.student_median_ci(ALPHA).0, EPSILON);
             rel_approx_eq!(exp_ci.1, out.student_median_ci(ALPHA).1, EPSILON);
-            let student_test = out.student_median_test(median0, alt_hyp, ALPHA);
+            let student_test = out.student_ln_test(mu0, alt_hyp, ALPHA);
             println!("out.student_test={student_test:?}");
             assert_eq!(exp_accepted_hyp, student_test.accepted());
         }
@@ -393,7 +436,6 @@ mod test {
         {
             let ratio_medians: f64 = 1.01;
             let mu0 = mu - ratio_medians.ln();
-            let median0 = mu0.exp();
             let alt_hyp = AltHyp::Gt;
             let exp_accepted_hyp = AcceptedHyp::Alt;
 
@@ -405,10 +447,10 @@ mod test {
 
             rel_approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON); // doesn't pass
             approx_eq!(exp_df, out.student_ln_df(), EPSILON);
-            rel_approx_eq!(exp_p, out.student_median_p(median0, alt_hyp), EPSILON);
+            rel_approx_eq!(exp_p, out.student_ln_p(mu0, alt_hyp), EPSILON);
             rel_approx_eq!(exp_ci.0, out.student_median_ci(ALPHA).0, EPSILON);
             rel_approx_eq!(exp_ci.1, out.student_median_ci(ALPHA).1, EPSILON);
-            let student_test = out.student_median_test(median0, alt_hyp, ALPHA);
+            let student_test = out.student_ln_test(mu0, alt_hyp, ALPHA);
             println!("out.student_test={student_test:?}");
             assert_eq!(exp_accepted_hyp, student_test.accepted());
         }
