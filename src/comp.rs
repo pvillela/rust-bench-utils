@@ -173,7 +173,7 @@ impl<'a> Comp<'a> {
     ///   `ln(median(latency(f1)) / median(latency(f2)))`.
     /// - `alt_hyp`: alternative hypothesis.
     /// - `alpha`: confidence level is `1 - alpha`.
-    pub fn welch_median_test(&self, ln_d0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
+    pub fn welch_ln_test(&self, ln_d0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
         welch_test(
             &self.moments_ln_f1(),
             &self.moments_ln_f2(),
@@ -312,11 +312,11 @@ mod test {
             );
             println!(
                 "welch_ln_test={:?}",
-                comp.welch_median_test(ln_d0, alt_hyp, ALPHA)
+                comp.welch_ln_test(ln_d0, alt_hyp, ALPHA)
             );
             assert_eq!(
                 accepted_hyp,
-                comp.welch_median_test(ln_d0, alt_hyp, ALPHA).accepted()
+                comp.welch_ln_test(ln_d0, alt_hyp, ALPHA).accepted()
             );
         };
 
