@@ -22,7 +22,6 @@ exclude = ["CHANGELOG.md", "*.sh", ".gitignore", "examples"]
 [dependencies]
 basic_stats = { path = "../basic-stats", default-features = false, optional = true }
 hdrhistogram = "7.5"
-sha2 = { version = "0.10.9", optional = true }
 
 [dev-dependencies]
 statrs = "0.18"
@@ -31,7 +30,6 @@ statrs = "0.18"
 
 # Public
 default = ["_bench_run", "__core"] # should always be enabled for public use
-busy_work = ["dep:sha2"]
 
 # Shared with friends
 _bench_diff = ["__core"] # for use by `bench_diff` crate
@@ -45,7 +43,6 @@ _bench_run = []                         # not used by `bench_diff` create
 _dev_utils = ["basic_stats/_dev_utils"] # enables approx_eq traits and macros
 
 [package.metadata.docs.rs]
-features = ["busy_work"]
 
 [[bench]]
 name = "validate_bench_run"

@@ -3,7 +3,7 @@
 //!
 //! To run the example:
 //! ```
-//! cargo run -r --example calibration --features busy_work
+//! cargo run -r --example calibration
 //! ```
 
 use bench_utils::{busy_work, calibrate_busy_work, latency};
