@@ -6,6 +6,8 @@ mod fake_work;
 mod latency;
 mod summary_stats;
 
+pub(crate) mod crate_utils;
+
 pub use bench_cfg::*;
 pub use bench_out::*;
 pub use busy_work::*;
