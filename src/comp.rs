@@ -36,11 +36,11 @@ impl<'a> Comp<'a> {
         Self(f1_out, f2_out)
     }
 
-    pub fn f1_out(&self) -> &BenchOut {
+    pub fn out_f1(&self) -> &BenchOut {
         self.0
     }
 
-    pub fn f2_out(&self) -> &BenchOut {
+    pub fn out_f2(&self) -> &BenchOut {
         self.1
     }
 
@@ -84,7 +84,9 @@ impl<'a> Comp<'a> {
     // ==============
     // No need to adjust moments for recording and reporting units for the statistics below because
     // they only depend on the difference of means and the stdevs, all of which are invariant when
-    // the conversion factor is the same for both samples.
+    // the conversion factor is the same for both samples. The observations and means of lns are both
+    // shifted by the same value, i.e., ln(confersion_factor), and the stdevs are not impacted by the
+    // shift of values and means.
 
     /// Welch's t statistic for the hypothesis that
     /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm), or equivalently,
@@ -260,8 +262,8 @@ mod test {
             );
 
             let comp = Comp::new(o1, o2);
-            let f1_out = comp.f1_out();
-            let f2_out = comp.f2_out();
+            let f1_out = comp.out_f1();
+            let f2_out = comp.out_f2();
 
             // print!("o1: ");
             // o1.print();
