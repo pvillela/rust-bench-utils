@@ -9,7 +9,6 @@ pub fn bubble_sort<T: PartialOrd>(arr: &mut [T]) {
 
     let mut swapped: Option<usize> = Some(len);
 
-    let mut passes = 0;
     while let Some(k) = swapped {
         swapped = None;
         for i in 0..k - 1 {
@@ -18,9 +17,7 @@ pub fn bubble_sort<T: PartialOrd>(arr: &mut [T]) {
                 swapped = Some(i + 1);
             }
         }
-        passes += 1;
     }
-    println!("bubble sort passes: {passes}");
 }
 
 /// Implementation of comb sort algorithm.
@@ -35,7 +32,6 @@ pub fn comb_sort<T: PartialOrd>(arr: &mut [T]) {
     let mut gap = len;
     let shrink = 1.3;
 
-    let mut passes = 0;
     // pre-buble sort
     while gap != 1 {
         // Calculate next gap
@@ -53,9 +49,7 @@ pub fn comb_sort<T: PartialOrd>(arr: &mut [T]) {
             }
             i += 1;
         }
-        passes += 1;
     }
-    println!("comb sort passes pre-bubble: {passes}");
 
     // Now gap == 1, do bubble sort
     bubble_sort(arr);
