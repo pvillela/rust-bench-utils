@@ -10,6 +10,10 @@ use basic_stats::{
 /// All statistics involving differences refer to a value for `f1` minus the corresponding
 /// value for `f2`. Similarly for ratios and other comparisons.
 ///
+/// It should be noted that comparisons of latencies measured at different times are subject to distortion due to
+/// time-dependent noise. See crate [`bench_diff`](https://docs.rs/bench_diff/latest/bench_diff/) for a discussion
+/// of time-dependent noise and why the use `bench_diff` should be preferred for latency comparisons.
+///
 /// The `*_ln_*` methods provide statistics for `mean(ln(latency(f1))) - mean(ln(latency(f1)))`,
 /// where `ln` is the natural logarithm.
 /// Under the assumption that latency distributions are approximately log-normal,
