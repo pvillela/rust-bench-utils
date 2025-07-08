@@ -21,9 +21,9 @@ use basic_stats::{
 /// This assumption is widely supported by performance analysis theory and empirical data.
 /// Thus, the `*_ln_*` methods are useful for the analysis of differences of natural logarithms of median latencies,
 /// or equivalently, the ratio of median latencies.
-pub struct Comp<'a>(&'a BenchOut, &'a BenchOut);
+pub struct CompOut<'a>(&'a BenchOut, &'a BenchOut);
 
-impl<'a> Comp<'a> {
+impl<'a> CompOut<'a> {
     /// # Panics
     /// Panics in any of the following conditions:
     /// - `f1_out` and `f2_out` don't have the same `recording_unit`.
@@ -265,7 +265,7 @@ mod test {
                 "ratio_medians={ratio_medians}, ln_d0={ln_d0}, alt_hyp={alt_hyp:?}, accepted_hyp={accepted_hyp:?}"
             );
 
-            let comp = Comp::new(o1, o2);
+            let comp = CompOut::new(o1, o2);
             let f1_out = comp.out_f1();
             let f2_out = comp.out_f2();
 
