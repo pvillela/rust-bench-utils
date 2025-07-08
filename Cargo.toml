@@ -39,7 +39,7 @@ __null = ["dep:basic_stats"]
 __core = ["basic_stats/normal", "basic_stats/aok"]
 
 # Internal
-_bench_run = []                         # not used by `bench_diff` create
+_bench_run = []                         # not used by `bench_diff` create default
 _dev_utils = ["basic_stats/_dev_utils"] # enables approx_eq traits and macros
 
 [package.metadata.docs.rs]
