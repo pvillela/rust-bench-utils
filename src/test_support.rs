@@ -1,5 +1,5 @@
 use crate::BenchOut;
-use basic_stats::{core::SampleMoments, normal::deterministic_normal_sample};
+use basic_stats::{core::SampleMoments, normal::normal_detm_samp};
 use std::sync::LazyLock;
 
 pub static LO_STDEV_LN: LazyLock<f64> = LazyLock::new(|| 1.2_f64.ln() / 2.);
@@ -42,7 +42,7 @@ pub fn lognormal_samp_jittered(
     n_jitter: i64,
     jitter_epsilon: f64,
 ) -> impl Iterator<Item = u64> {
-    let normal_samp = deterministic_normal_sample(mu, sigma, k).unwrap();
+    let normal_samp = normal_detm_samp(mu, sigma, k).unwrap();
     normal_samp
         .enumerate()
         .map(move |(i, v)| jitter(v, i as i64, n_jitter, jitter_epsilon))

@@ -309,7 +309,7 @@ mod test {
     use basic_stats::{
         approx_eq,
         core::AcceptedHyp,
-        normal::{deterministic_normal_sample, student_1samp_df, student_1samp_p},
+        normal::{normal_detm_samp, student_1samp_df, student_1samp_p},
         rel_approx_eq,
     };
     use statrs::distribution::{ContinuousCDF, Normal};
@@ -403,7 +403,7 @@ mod test {
         let mut out = BenchOut::default();
         out.collect_data(lognormal_samp);
 
-        let normal_samp = deterministic_normal_sample(mu, sigma, k).unwrap();
+        let normal_samp = normal_detm_samp(mu, sigma, k).unwrap();
         let moments_ln = SampleMoments::from_iterator(normal_samp);
 
         assert_eq!(out.recording_unit(), LatencyUnit::Nano);
