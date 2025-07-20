@@ -92,7 +92,7 @@ impl BenchCfg {
         *guard = self;
     }
 
-    pub fn status_freq(&self, mut f: impl FnMut()) -> usize {
+    pub fn executions_per_milli(&self, mut f: impl FnMut()) -> f64 {
         let latency_millis = latency(|| {
             for _ in 0..self.status_calibr {
                 f()
@@ -100,9 +100,19 @@ impl BenchCfg {
         })
         .as_secs_f64()
             * 1000.;
-        let inverse_millis_per_iteration = self.status_calibr as f64 / latency_millis;
-        let iterations_per_status_millis = self.status_millis as f64 * inverse_millis_per_iteration;
-        iterations_per_status_millis as usize
+
+        self.status_calibr as f64 / latency_millis
+    }
+
+    pub fn warmup_execs(&self, f: impl FnMut()) -> usize {
+        let warmup_millis = self.warmup_millis;
+        (warmup_millis as f64 * self.executions_per_milli(f)) as usize
+    }
+
+    pub fn status_freq(&self, f: impl FnMut()) -> usize {
+        let executions_per_milli = self.executions_per_milli(f);
+        let executions_per_status_millis = self.status_millis as f64 * executions_per_milli;
+        executions_per_status_millis as usize
     }
 }
 
