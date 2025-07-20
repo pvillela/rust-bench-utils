@@ -93,13 +93,16 @@ impl BenchCfg {
     }
 
     pub fn status_freq(&self, mut f: impl FnMut()) -> usize {
-        let elapsed = latency(|| {
+        let latency_millis = latency(|| {
             for _ in 0..self.status_calibr {
                 f()
             }
         })
-        .as_millis();
-        (self.status_millis * self.status_calibr / elapsed as u64) as usize
+        .as_secs_f64()
+            * 1000.;
+        let inverse_millis_per_iteration = self.status_calibr as f64 / latency_millis;
+        let iterations_per_status_millis = self.status_millis as f64 * inverse_millis_per_iteration;
+        iterations_per_status_millis as usize
     }
 }
 
