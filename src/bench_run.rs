@@ -4,7 +4,8 @@ use crate::{BenchCfg, BenchOut, LatencyUnit, latency};
 use std::{
     io::{Write, stderr},
     ops::Deref,
-    sync::Mutex,
+    sync::{Arc, Condvar, Mutex},
+    thread,
     time::{Duration, Instant},
 };
 
@@ -22,6 +23,7 @@ pub fn get_bench_cfg() -> BenchCfg {
 }
 
 const WARMUP_INCREMENT_COUNT: usize = 20;
+const STATUS_REPT_FREQ: usize = 50;
 
 type BenchState = BenchOut;
 
@@ -34,16 +36,56 @@ impl BenchState {
         mut f: impl FnMut(),
         exec_count: usize,
         pre_exec: impl FnOnce(),
-        mut exec_status: impl FnMut(usize),
+        mut exec_status: impl FnMut(usize) + Send + 'static,
         init_status_count: usize,
     ) {
         pre_exec();
+
+        struct CountStatus {
+            i: usize,
+            finished: bool,
+        }
+
+        let pair = Arc::new((
+            Mutex::new(CountStatus {
+                i: 0,
+                finished: false,
+            }),
+            Condvar::new(),
+        ));
+        let pair2 = Arc::clone(&pair);
+
+        thread::spawn(move || {
+            let (lock, cvar) = &*pair;
+            let mut last_i = 0;
+            let mut count_status = lock.lock().unwrap();
+            loop {
+                count_status = cvar.wait(count_status).unwrap();
+                let CountStatus { i, finished } = *count_status;
+                if i > last_i {
+                    exec_status(init_status_count + i);
+                    last_i = i;
+                }
+                if finished {
+                    break;
+                }
+            }
+        });
 
         let unit = get_bench_cfg().recording_unit();
         for i in 1..=exec_count {
             let elapsed = unit.latency_as_u64(latency(&mut f));
             self.capture_data(elapsed);
-            exec_status(init_status_count + i);
+            if i % STATUS_REPT_FREQ == 0 || i == exec_count {
+                let (lock, cvar) = &*pair2;
+                let mut count_status = lock.lock().unwrap();
+                *count_status = CountStatus {
+                    i,
+                    finished: i == exec_count,
+                };
+                // Notify the condvar that the value has changed.
+                cvar.notify_one();
+            }
         }
     }
 
@@ -88,13 +130,13 @@ pub fn bench_run_x(
     exec_count: usize,
     mut warmup_status: impl FnMut(usize, u64, u64),
     pre_exec: impl FnOnce(),
-    mut exec_status: impl FnMut(usize),
+    exec_status: impl FnMut(usize) + Send + 'static,
 ) -> BenchOut {
     let mut state = BenchOut::default();
 
     state.warmup(&mut f, &mut warmup_status);
     state.reset();
-    state.execute(&mut f, exec_count, pre_exec, &mut exec_status, 0);
+    state.execute(&mut f, exec_count, pre_exec, exec_status, 0);
 
     state
 }
