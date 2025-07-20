@@ -38,7 +38,7 @@ impl BenchState {
 
         let unit = get_bench_cfg().recording_unit();
 
-        for i in 1.. {
+        for i in 1..=exec_count {
             let latency = unit.latency_as_u64(latency(&mut f));
             self.capture_data(latency);
 
@@ -46,18 +46,14 @@ impl BenchState {
                 if let Some(ref mut exec_status) = exec_status {
                     exec_status(i);
                 }
-
-                if i == exec_count {
-                    break;
-                }
             }
         }
     }
 }
 
 pub struct BenchStatus<F1, F2> {
-    warmup_status: F1,
-    exec_status: F2,
+    pub warmup_status: F1,
+    pub exec_status: F2,
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -93,8 +89,10 @@ pub fn bench_run_x(
         None => (None, None),
     };
 
+    // Warm-up.
     state.execute(&mut f, warmup_execs, status_freq, warmup_status);
     state.reset();
+
     state.execute(f, exec_count, status_freq, exec_status);
 
     state
