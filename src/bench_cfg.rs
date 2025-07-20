@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use crate::LatencyUnit;
+use crate::{LatencyUnit, latency};
 
 #[derive(Debug, Clone)]
 pub struct BenchCfg {
@@ -8,7 +8,9 @@ pub struct BenchCfg {
     recording_unit: LatencyUnit,
     reporting_unit: LatencyUnit,
     sigfig: u8,
-    stat_ref: &'static Mutex<BenchCfg>,
+    status_calibr: u64,
+    status_millis: u64,
+    static_ref: &'static Mutex<BenchCfg>,
 }
 
 impl BenchCfg {
@@ -18,14 +20,18 @@ impl BenchCfg {
         recording_unit: LatencyUnit,
         reporting_unit: LatencyUnit,
         sigfig: u8,
-        stat_ref: &'static Mutex<BenchCfg>,
+        status_calibr: u64,
+        status_millis: u64,
+        static_ref: &'static Mutex<BenchCfg>,
     ) -> BenchCfg {
         BenchCfg {
             warmup_millis,
             recording_unit,
             reporting_unit,
             sigfig,
-            stat_ref,
+            status_calibr,
+            status_millis,
+            static_ref,
         }
     }
 
@@ -71,9 +77,29 @@ impl BenchCfg {
         self
     }
 
+    pub fn with_status_calibr(mut self, status_calibr: u64) -> Self {
+        self.status_calibr = status_calibr;
+        self
+    }
+
+    pub fn with_status_millis(mut self, status_millis: u64) -> Self {
+        self.status_millis = status_millis;
+        self
+    }
+
     pub fn set(self) {
-        let mut guard = self.stat_ref.lock().unwrap();
+        let mut guard = self.static_ref.lock().unwrap();
         *guard = self;
+    }
+
+    pub fn status_freq(&self, mut f: impl FnMut()) -> usize {
+        let elapsed = latency(|| {
+            for _ in 0..self.status_calibr {
+                f()
+            }
+        })
+        .as_millis();
+        (self.status_millis * self.status_calibr / elapsed as u64) as usize
     }
 }
 

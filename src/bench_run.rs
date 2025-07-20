@@ -5,7 +5,7 @@ use std::{
     io::{Write, stderr},
     ops::Deref,
     sync::Mutex,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 static BENCH_CFG: Mutex<BenchCfg> = Mutex::new(BenchCfg::new(
@@ -13,6 +13,8 @@ static BENCH_CFG: Mutex<BenchCfg> = Mutex::new(BenchCfg::new(
     LatencyUnit::Nano,
     LatencyUnit::Micro,
     3,
+    3,
+    1000,
     &BENCH_CFG,
 ));
 
@@ -21,47 +23,97 @@ pub fn get_bench_cfg() -> BenchCfg {
     guard.deref().clone()
 }
 
-const WARMUP_INCREMENT_COUNT: usize = 20;
-
 type BenchState = BenchOut;
+
+/// Execution finishing criterion.
+#[derive(PartialEq)]
+enum FinishCrit {
+    Count(usize),
+    Millis(u64),
+}
+
+/// Reporting status for `BenchState::execute` method.
+struct ExecStatus<F1, F2> {
+    pre_exec: F1,
+    exec_status: F2,
+}
 
 impl BenchState {
     /// Executes `f` repeatedly and captures latencies.
-    /// `pre_exec` is invoked once just before the invocation of `f`, and `exec_status` is invoked at the
-    /// end of each invocation.
+    /// if `rept_status.is_some()`, `pre_exec` is invoked once just before the executions,
+    /// and `exec_status` is invoked once every `status_freq` invocations of `f`.
     fn execute(
         &mut self,
         mut f: impl FnMut(),
-        exec_count: usize,
-        pre_exec: impl FnOnce(),
-        mut exec_status: impl FnMut(usize),
-        init_status_count: usize,
+        status_freq: usize,
+        finish_crit: FinishCrit,
+        mut exec_status: Option<ExecStatus<impl Fn(), impl FnMut(usize)>>,
     ) {
-        pre_exec();
+        assert!(status_freq > 0, "status_freq must be > 0");
+
+        let start = Instant::now();
+
+        if let Some(ExecStatus {
+            ref pre_exec,
+            exec_status: _,
+        }) = exec_status
+        {
+            pre_exec();
+        }
 
         let unit = get_bench_cfg().recording_unit();
-        for i in 1..=exec_count {
-            let elapsed = unit.latency_as_u64(latency(&mut f));
-            self.capture_data(elapsed);
-            exec_status(init_status_count + i);
-        }
-    }
 
-    /// Warms-up the benchmark by invoking [`Self::execute`] repeatedly, each time with an `exec_count` value of
-    /// [`WARMUP_INCREMENT_COUNT`], until the globally set number of warm-up millisecods [`WARMUP_MILLIS`] is
-    /// reached or exceeded. `warmup_status` is invoked at the end of each invocation of [`Self::execute`].
-    fn warmup(&mut self, mut f: impl FnMut(), mut warmup_status: impl FnMut(usize, u64, u64)) {
-        let warmup_millis = get_bench_cfg().warmup_millis();
-        let start = Instant::now();
         for i in 1.. {
-            self.execute(&mut f, WARMUP_INCREMENT_COUNT, || {}, |_| {}, 0);
-            let elapsed = Instant::now().duration_since(start);
-            warmup_status(i, elapsed.as_millis() as u64, warmup_millis);
-            if elapsed.ge(&Duration::from_millis(warmup_millis)) {
-                break;
+            let latency = unit.latency_as_u64(latency(&mut f));
+            self.capture_data(latency);
+
+            if i % status_freq == 0 || finish_crit == FinishCrit::Count(i) {
+                if let Some(ExecStatus {
+                    pre_exec: _,
+                    ref mut exec_status,
+                }) = exec_status
+                {
+                    exec_status(i);
+                }
+
+                match finish_crit {
+                    FinishCrit::Count(count) if count == i => break,
+                    FinishCrit::Millis(millis) => {
+                        let elapsed = Instant::now().duration_since(start).as_millis() as usize;
+                        // Round up elapsed: elapsed + (elapsed/i * status_freq)/2 without loss of precision.
+                        if (elapsed + elapsed * status_freq / (i * 2)) >= millis as usize {
+                            break;
+                        }
+                    }
+                    _ => continue,
+                }
             }
         }
     }
+
+    /// Warms-up the benchmark by invoking [`Self::execute`] with `finish_crit = FinishCrit::Millis(&BENCH_CFG.warmup_millis)`.
+    /// The arguments are passed to [`Self::execute`].
+    fn warmup(
+        &mut self,
+        f: impl FnMut(),
+        status_freq: usize,
+        exec_status: Option<ExecStatus<impl Fn(), impl FnMut(usize)>>,
+    ) {
+        let warmup_millis = get_bench_cfg().warmup_millis();
+        self.execute(
+            f,
+            status_freq,
+            FinishCrit::Millis(warmup_millis),
+            exec_status,
+        );
+    }
+}
+
+pub struct BenchStatus<F1, F2, F3, F4> {
+    pre_warmup: F1,
+    warmup_status: F2,
+    pre_exec: F3,
+    exec_status: F4,
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -86,15 +138,33 @@ impl BenchState {
 pub fn bench_run_x(
     mut f: impl FnMut(),
     exec_count: usize,
-    mut warmup_status: impl FnMut(usize, u64, u64),
-    pre_exec: impl FnOnce(),
-    mut exec_status: impl FnMut(usize),
+    bench_status: Option<BenchStatus<impl Fn(), impl FnMut(usize), impl Fn(), impl FnMut(usize)>>,
 ) -> BenchOut {
     let mut state = BenchOut::default();
+    let cfg = get_bench_cfg();
+    let status_freq = cfg.status_freq(&mut f);
+    let (warmup_status, exec_status) = match bench_status {
+        Some(s) => (
+            Some(ExecStatus {
+                pre_exec: s.pre_warmup,
+                exec_status: s.warmup_status,
+            }),
+            Some(ExecStatus {
+                pre_exec: s.pre_exec,
+                exec_status: s.exec_status,
+            }),
+        ),
+        None => (None, None),
+    };
 
-    state.warmup(&mut f, &mut warmup_status);
+    state.warmup(&mut f, status_freq, warmup_status);
     state.reset();
-    state.execute(&mut f, exec_count, pre_exec, &mut exec_status, 0);
+    state.execute(
+        &mut f,
+        status_freq,
+        FinishCrit::Count(exec_count),
+        exec_status,
+    );
 
     state
 }
@@ -110,7 +180,11 @@ pub fn bench_run_x(
 /// - `f` - benchmark target.
 /// - `exec_count` - number of executions (sample size) for the function.
 pub fn bench_run(f: impl FnMut(), exec_count: usize) -> BenchOut {
-    bench_run_x(f, exec_count, |_, _, _| {}, || (), |_| ())
+    bench_run_x(
+        f,
+        exec_count,
+        None::<BenchStatus<fn(), fn(usize), fn(), fn(usize)>>,
+    )
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -136,19 +210,16 @@ pub fn bench_run_with_status(
 
     let warmup_status = {
         let mut status_len: usize = 0;
+        let warmup_millis = get_bench_cfg().warmup_millis();
 
-        move |_: usize, elapsed_millis: u64, warmup_millis: u64| {
+        move |i: usize| {
             if status_len == 0 {
-                eprint!("Warming up ... ");
+                eprint!("Warming up for {warmup_millis} millis ... ");
                 stderr().flush().expect("unexpected I/O error");
             }
             eprint!("{}", "\u{8}".repeat(status_len));
-            let status = format!("{elapsed_millis} millis of {warmup_millis}.");
-            if elapsed_millis.lt(&warmup_millis) {
-                status_len = status.len();
-            } else {
-                status_len = 0; // reset status in case of multiple warm-up phases
-            };
+            let status = format!("{i}.");
+            status_len = status.len();
             eprint!("{status}");
             stderr().flush().expect("unexpected I/O error");
         }
@@ -162,7 +233,7 @@ pub fn bench_run_with_status(
     let exec_status = {
         let mut status_len: usize = 0;
 
-        move |i| {
+        move |i: usize| {
             eprint!("{}", "\u{8}".repeat(status_len));
             let status = format!("{i} of {exec_count}.");
             status_len = status.len();
@@ -171,6 +242,13 @@ pub fn bench_run_with_status(
         }
     };
 
-    let out = bench_run_x(f, exec_count, warmup_status, pre_exec, exec_status);
+    let bench_status = BenchStatus {
+        pre_warmup: || (),
+        warmup_status,
+        pre_exec,
+        exec_status,
+    };
+
+    let out = bench_run_x(f, exec_count, Some(bench_status));
     out
 }
