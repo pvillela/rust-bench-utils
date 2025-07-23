@@ -182,5 +182,6 @@ pub fn bench_run_with_status(
     };
 
     let out = bench_run_x(f, warmup_execs, exec_count, Some(bench_status));
+    eprintln!();
     out
 }

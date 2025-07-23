@@ -12,6 +12,9 @@ pub use fake_work::*;
 pub use latency::*;
 pub use summary_stats::*;
 
+#[cfg(feature = "criterion")]
+pub mod criterion;
+
 #[cfg(feature = "_bench_run")]
 mod bench_run;
 #[cfg(feature = "_bench_run")]

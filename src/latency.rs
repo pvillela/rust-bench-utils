@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 pub fn latency(f: impl FnOnce()) -> Duration {
     let start = Instant::now();
     f();
-    Instant::now().duration_since(start)
+    start.elapsed()
 }
 
 /// Unit of time used to record latencies. Used as an argument in benchmarking functions.

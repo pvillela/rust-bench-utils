@@ -12,12 +12,13 @@ fn f() {
 fn main() {
     let reporting_unit = get_bench_cfg().reporting_unit();
     let target_median = reporting_unit.latency_as_f64(TARGET_LATENCY);
-    let exec_count = 50;
+    let exec_count = 100;
     let out = bench_run_with_status(f, exec_count, |_| println!("validate_bench_run"));
     println!(
         "target_median={target_median}, out.median()={}, rel_diff={}",
         out.median(),
         target_median.abs_rel_diff(out.median(), 0.)
     );
+    println!("{:?}", out.summary());
     rel_approx_eq!(target_median, out.median(), EPSILON);
 }
