@@ -1,9 +1,9 @@
 //! Example demonstrating [`busy_work`] and [`calibrate_busy_work`].
-//! This example requires the undocumented feature "_bench".
+//! This example requires the feature "busy_work".
 //!
 //! To run the example:
 //! ```
-//! cargo run -r --example calibration
+//! cargo run -r --example calibration --features busy_work
 //! ```
 
 use bench_utils::{busy_work, calibrate_busy_work, latency};
