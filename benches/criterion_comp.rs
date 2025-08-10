@@ -9,7 +9,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     eprintln!("args={args:?}");
 
     let Args {
-        target_ratio: _target_ratio,
+        target_ratio,
         latency_unit,
         base_median,
         nrepeats,
@@ -21,13 +21,18 @@ fn criterion_benchmark(c: &mut Criterion) {
     eprintln!("base_latency={base_latency:?}");
     eprintln!("base_effort={}", base_effort);
 
-    let effort = base_effort;
-    let f = || busy_work(effort);
+    let effort1 = (base_effort as f64 * target_ratio) as u32;
+    let f1 = || busy_work(effort1);
+
+    let effort2 = base_effort;
+    let f2 = || busy_work(effort2);
 
     for i in 1..=nrepeats {
-        let name = format!("latency={base_latency:?}[{i}/{nrepeats}]");
+        let name1 = format!("f1={target_ratio}@novar[{i}/{nrepeats}]");
+        let name2 = format!("f2={target_ratio}@novar[{i}/{nrepeats}]");
 
-        c.bench_function(&name, |b| b.iter(f));
+        c.bench_function(&name1, |b| b.iter(f1));
+        c.bench_function(&name2, |b| b.iter(f2));
     }
 }
 

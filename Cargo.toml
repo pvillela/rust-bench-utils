@@ -15,7 +15,7 @@ keywords = [
     "calibration",
 ]
 categories = ["development-tools::profiling"]
-exclude = ["CHANGELOG.md", "*.sh", ".gitignore", "examples"]
+exclude = ["CHANGELOG.md", "*.sh", ".gitignore", "examples", "bin"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -23,6 +23,7 @@ exclude = ["CHANGELOG.md", "*.sh", ".gitignore", "examples"]
 basic_stats = { path = "../basic-stats", default-features = false, optional = true }
 criterion = { version = "0.7.0", optional = true }
 hdrhistogram = "7.5"
+regex = { version = "1.11.1", optional = true }
 sha2 = { version = "0.10.9", optional = true }
 
 [dev-dependencies]
@@ -43,16 +44,23 @@ __null = ["dep:basic_stats"]
 __core = ["basic_stats/normal", "basic_stats/aok"]
 
 # Internal
-_bench_run = []                         # not used by `bench_diff` create default
-_dev_utils = ["basic_stats/_dev_utils"] # enables approx_eq traits and macros
+_bench_run = [] # not used by `bench_diff` crate default
+_dev_utils = [
+    "basic_stats/_dev_utils",
+    "dep:regex",
+] # enables approx_eq traits and macros, regex
 
 [package.metadata.docs.rs]
 features = ["busy_work"]
 
 [[bench]]
-name = "validate_bench_run"
+name = "criterion_comp"
 harness = false
 
 [[bench]]
 name = "criterion_plain"
+harness = false
+
+[[bench]]
+name = "validate_bench_run"
 harness = false
