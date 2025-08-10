@@ -29,7 +29,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     for i in 1..=nrepeats {
         let name1 = format!("f1={target_ratio}@novar[{i}/{nrepeats}]");
-        let name2 = format!("f2={target_ratio}@novar[{i}/{nrepeats}]");
+        let name2 = format!("f2=1@novar[{i}/{nrepeats}]");
 
         c.bench_function(&name1, |b| b.iter(f1));
         c.bench_function(&name2, |b| b.iter(f2));
