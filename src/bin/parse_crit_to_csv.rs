@@ -15,7 +15,7 @@ fn cmd_line_args() -> Option<String> {
 fn main() {
     let infile = cmd_line_args().expect("input file must be specified as command line argument");
     let sections = parse_file(&infile);
-    println!("{sections:?}");
+    // println!("{sections:?}");
     for s in sections {
         print_section_to_csv(&s);
     }
@@ -81,8 +81,8 @@ fn find_and_extract<T>(
 }
 
 fn parse_section(lines: &mut Lines<BufReader<File>>) -> Option<Section> {
-    let started_re = Regex::new(r"^Started \w+ at: \d\d:\d\d:\d\d").unwrap();
-    let finished_re = Regex::new(r"^Finished \w+ at: \d\d:\d\d:\d\d").unwrap();
+    let started_re = Regex::new(r"^Started [^ ]+ at: \d\d:\d\d:\d\d").unwrap();
+    let finished_re = Regex::new(r"^Finished [^ ]+ at: \d\d:\d\d:\d\d").unwrap();
     let args_re = Regex::new(
         r"^args=Args \{ target_ratio: (\d+(\.\d+)?), latency_unit: (\w+), base_median: (\d+(\.\d+)?), nrepeats: (\d+) \}",
     ).unwrap();
@@ -223,5 +223,5 @@ fn print_section_to_csv(s: &Section) {
         }
     }
 
-    println!("\n<<< Finished - {}", s.finished);
+    println!("\n<<< {}", s.finished);
 }
