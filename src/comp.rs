@@ -2,7 +2,10 @@ use crate::BenchOut;
 use basic_stats::{
     aok::{AokBasicStats, AokFloat},
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments},
-    normal::{welch_ci, welch_df, welch_p, welch_t, welch_test},
+    normal::{
+        welch_ci, welch_df, welch_p, welch_t, welch_t_ra, welch_t_rb, welch_test, welch_test_ra,
+        welch_test_rb,
+    },
 };
 
 /// Struct that holds references to the benchmark outputs of two closures (`f1` and `f2`) for comparison purposes.
@@ -106,6 +109,32 @@ impl<'a> Comp<'a> {
         welch_t(&self.moments_ln_f1(), &self.moments_ln_f2(), ln_d0).aok()
     }
 
+    pub fn welch_ln_t_ra(&self, ln_d0: f64) -> f64 {
+        let median_ln_f1 = self.0.median().ln();
+        let median_ln_f2 = self.1.median().ln();
+        welch_t_ra(
+            &self.moments_ln_f1(),
+            median_ln_f1,
+            &self.moments_ln_f2(),
+            median_ln_f2,
+            ln_d0,
+        )
+        .aok()
+    }
+
+    pub fn welch_ln_t_rb(&self, ln_d0: f64) -> f64 {
+        let median_ln_f1 = self.0.median().ln();
+        let median_ln_f2 = self.1.median().ln();
+        welch_t_rb(
+            &self.moments_ln_f1(),
+            median_ln_f1,
+            &self.moments_ln_f2(),
+            median_ln_f2,
+            ln_d0,
+        )
+        .aok()
+    }
+
     /// Degrees of freedom for Welch's t statistic for
     /// `mean(ln(latency(f1))) - mean(ln(latency(f2)))` (where `ln` is the natural logarithm).
     ///
@@ -183,6 +212,64 @@ impl<'a> Comp<'a> {
         welch_test(
             &self.moments_ln_f1(),
             &self.moments_ln_f2(),
+            ln_d0,
+            alt_hyp,
+            alpha,
+        )
+        .aok()
+    }
+
+    /// Modified Welch's two-sample t-test of the hypothesis that
+    /// `median(ln(latency(f1))) - median(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm), or equivalently,
+    /// `median(latency(f1)) / median(latency(f1)) == exp(ln_d0)`.
+    ///
+    /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
+    ///
+    /// This is a modification of the standard Welch test where the sample means are replaced by sample medians.
+    /// This test is more **robust** when there is deviation from the assumption of log-normality.
+    ///
+    /// Arguments:
+    /// - `ln_d0`: hypothesized value of `ln(median(latency(f1)) / median(latency(f2)))`.
+    /// - `alt_hyp`: alternative hypothesis.
+    /// - `alpha`: confidence level is `1 - alpha`.
+    pub fn welch_ln_test_ra(&self, ln_d0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
+        let median_ln_f1 = self.0.median().ln();
+        let median_ln_f2 = self.1.median().ln();
+        welch_test_ra(
+            &self.moments_ln_f1(),
+            median_ln_f1,
+            &self.moments_ln_f2(),
+            median_ln_f2,
+            ln_d0,
+            alt_hyp,
+            alpha,
+        )
+        .aok()
+    }
+
+    /// Modified Welch's two-sample t-test of the hypothesis that
+    /// `median(ln(latency(f1))) - median(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm), or equivalently,
+    /// `median(latency(f1)) / median(latency(f1)) == exp(ln_d0)`.
+    ///
+    /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
+    ///
+    /// This is a modification of the standard Welch test where the sample means are replaced by sample medians.
+    /// This test is more **robust** when there is deviation from the assumption of log-normality.
+    ///
+    /// Arguments:
+    /// - `ln_d0`: hypothesized value of `ln(median(latency(f1)) / median(latency(f2)))`.
+    /// - `alt_hyp`: alternative hypothesis.
+    /// - `alpha`: confidence level is `1 - alpha`.
+    pub fn welch_ln_test_rb(&self, ln_d0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
+        let median_ln_f1 = self.0.median().ln();
+        let median_ln_f2 = self.1.median().ln();
+        welch_test_rb(
+            &self.moments_ln_f1(),
+            median_ln_f1,
+            &self.moments_ln_f2(),
+            median_ln_f2,
             ln_d0,
             alt_hyp,
             alpha,
