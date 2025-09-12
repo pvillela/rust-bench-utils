@@ -1,4 +1,5 @@
-//! Parses a file containing the outputs of Criterion runs and prints it in CSV format to `stdout` with '|' as separator
+//! Parses a file containing the outputs of Criterion runs and prints it in CSV format to `stdout` with '|' as separator.
+//! Requires feature "_dev_utils".
 
 use regex::Regex;
 use std::{

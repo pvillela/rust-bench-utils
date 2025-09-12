@@ -245,7 +245,7 @@ impl BenchOut {
         student_1samp_test(&moments, ln_mu0_rec, alt_hyp, alpha).aok()
     }
 
-    #[cfg(feature = "_bench_diff")]
+    #[cfg(feature = "_dev_support")]
     #[inline(always)]
     pub fn hist(&self) -> &Timing {
         &self.hist
