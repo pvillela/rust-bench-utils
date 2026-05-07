@@ -51,11 +51,6 @@ impl BenchState {
     }
 }
 
-pub struct BenchStatus<F1, F2> {
-    pub warmup_status: F1,
-    pub exec_status: F2,
-}
-
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
 /// *optionally* outputs information about the benchmark and its execution status.
 ///
@@ -64,30 +59,22 @@ pub struct BenchStatus<F1, F2> {
 ///
 /// Arguments:
 /// - `f` - benchmark target.
+/// - `warmup_execs` - number of warm-up executions to perform.
 /// - `exec_count` - number of executions (sample size) for the function.
-/// - `warmup_status` - is invoked every so often during warm-up and can be used to output the warm-up status,
-///   e.g., how much warm-up time has elapsed and the target warm-up time. The first argument is the warm-up
-///   execution iteration, the second is the elapsed warm-up time, and the third is the target warm-up time.
-///   (See the source code of [`bench_run_with_status`] for an example.)
-/// - `pre_exec` - is invoked once at the beginning of data collection, after warm-up. It can be used,
-///   for example, to output a preamble to the execution status (see `exec_status` below).
-/// - `exec_status` - is invoked after each execution of `f` and can be used to output the execution
-///   status, e.g., how many observations have been collected versus `exec_count`.
-///   Its argument is the current number of executions performed.
-///   (See the source code of [`bench_run_with_status`] for an example.)
+/// - `warmup_status` - optionally invoked periodically during warm-up. Its argument is the current
+///   warm-up execution iteration.
+/// - `exec_status` - optionally invoked periodically during data collection. Its argument is the
+///   current number of executions performed.
 pub fn bench_run_x(
     mut f: impl FnMut(),
     warmup_execs: usize,
     exec_count: usize,
-    bench_status: Option<BenchStatus<impl FnMut(usize), impl FnMut(usize)>>,
+    warmup_status: Option<impl FnMut(usize)>,
+    exec_status: Option<impl FnMut(usize)>,
 ) -> BenchOut {
     let mut state = BenchOut::default();
     let cfg = get_bench_cfg();
     let status_freq = cfg.status_freq(&mut f);
-    let (warmup_status, exec_status) = match bench_status {
-        Some(s) => (Some(s.warmup_status), Some(s.exec_status)),
-        None => (None, None),
-    };
 
     // Warm-up.
     state.execute(&mut f, warmup_execs, status_freq, warmup_status);
@@ -115,7 +102,8 @@ pub fn bench_run(mut f: impl FnMut(), exec_count: usize) -> BenchOut {
         f,
         warmup_execs,
         exec_count,
-        None::<BenchStatus<fn(usize), fn(usize)>>,
+        None::<fn(usize)>,
+        None::<fn(usize)>,
     )
 }
 
@@ -131,8 +119,8 @@ pub fn bench_run(mut f: impl FnMut(), exec_count: usize) -> BenchOut {
 /// - `f` - benchmark target.
 /// - `exec_count` - number of executions (sample size) for the function.
 /// - `header` - is invoked once at the start of this function's execution; it can be used, for example,
-///   to output information about the function being benchmarked to `stdout` and/or `stderr`. The first
-///   argument is the the `LatencyUnit` and the second argument is the `exec_count`.
+///   to output information about the function being benchmarked to `stdout` and/or `stderr`. Its argument
+///   is `exec_count`.
 pub fn bench_run_with_status(
     mut f: impl FnMut(),
     exec_count: usize,
@@ -176,12 +164,13 @@ pub fn bench_run_with_status(
         }
     };
 
-    let bench_status = BenchStatus {
-        warmup_status,
-        exec_status,
-    };
-
-    let out = bench_run_x(f, warmup_execs, exec_count, Some(bench_status));
+    let out = bench_run_x(
+        f,
+        warmup_execs,
+        exec_count,
+        Some(warmup_status),
+        Some(exec_status),
+    );
     eprintln!();
     out
 }
