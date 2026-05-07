@@ -1,10 +1,13 @@
-use std::time::{Duration, Instant};
+use std::{
+    hint::black_box,
+    time::{Duration, Instant},
+};
 
 /// Invokes `f` once and returns its latency.
 #[inline(always)]
-pub fn latency(f: impl FnOnce()) -> Duration {
+pub fn latency<T>(f: impl FnOnce() -> T) -> Duration {
     let start = Instant::now();
-    f();
+    black_box(f());
     start.elapsed()
 }
 
