@@ -1,14 +1,15 @@
 //! Implements functions to collect latency statistics for a closure.
 
-use crate::{BenchCfg, BenchOut, LatencyUnit, latency};
+use crate::{BenchCfg, BenchOut, LatencyUnit, RunLength, latency};
 use std::{
     io::{Write, stderr},
     ops::Deref,
     sync::Mutex,
+    time::{Duration, Instant},
 };
 
 static BENCH_CFG: Mutex<BenchCfg> = Mutex::new(BenchCfg::new(
-    3000,
+    RunLength::from_duration(Duration::from_millis(3000)),
     LatencyUnit::Nano,
     LatencyUnit::Micro,
     3,
@@ -30,13 +31,16 @@ impl BenchState {
     fn execute(
         &mut self,
         mut f: impl FnMut(),
-        exec_count: usize,
+        run_length: RunLength,
         status_freq: usize,
         mut exec_status: Option<impl FnMut(usize)>,
     ) {
         assert!(status_freq > 0, "status_freq must be > 0");
 
+        let (exec_count, run_time) = run_length.get_exec_count_and_duration();
+
         let unit = get_bench_cfg().recording_unit();
+        let start = Instant::now();
 
         for i in 1..=exec_count {
             let latency = unit.latency_as_u64(latency(&mut f));
@@ -45,6 +49,10 @@ impl BenchState {
             if i % status_freq == 0 || i == exec_count {
                 if let Some(ref mut exec_status) = exec_status {
                     exec_status(i);
+                }
+
+                if start.elapsed().ge(&run_time) {
+                    break;
                 }
             }
         }
@@ -67,8 +75,8 @@ impl BenchState {
 ///   current number of executions performed.
 pub fn bench_run_x(
     mut f: impl FnMut(),
-    warmup_execs: usize,
-    exec_count: usize,
+    warmup_run_length: RunLength,
+    exec_run_length: RunLength,
     warmup_status: Option<impl FnMut(usize)>,
     exec_status: Option<impl FnMut(usize)>,
 ) -> BenchOut {
@@ -77,10 +85,10 @@ pub fn bench_run_x(
     let status_freq = cfg.status_freq(&mut f);
 
     // Warm-up.
-    state.execute(&mut f, warmup_execs, status_freq, warmup_status);
+    state.execute(&mut f, warmup_run_length, status_freq, warmup_status);
     state.reset();
 
-    state.execute(f, exec_count, status_freq, exec_status);
+    state.execute(f, exec_run_length, status_freq, exec_status);
 
     state
 }
@@ -95,13 +103,13 @@ pub fn bench_run_x(
 /// Arguments:
 /// - `f` - benchmark target.
 /// - `exec_count` - number of executions (sample size) for the function.
-pub fn bench_run(mut f: impl FnMut(), exec_count: usize) -> BenchOut {
-    let warmup_execs = get_bench_cfg().warmup_execs(&mut f);
+pub fn bench_run(mut f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
+    let warmup_run_length = get_bench_cfg().warmup_run_length();
 
     bench_run_x(
         f,
-        warmup_execs,
-        exec_count,
+        warmup_run_length,
+        exec_run_length,
         None::<fn(usize)>,
         None::<fn(usize)>,
     )
@@ -123,51 +131,78 @@ pub fn bench_run(mut f: impl FnMut(), exec_count: usize) -> BenchOut {
 ///   is `exec_count`.
 pub fn bench_run_with_status(
     mut f: impl FnMut(),
-    exec_count: usize,
+    exec_run_length: RunLength,
     header: impl FnOnce(usize),
 ) -> BenchOut {
-    header(exec_count);
-
     let cfg = get_bench_cfg();
-    let warmup_execs = cfg.warmup_execs(&mut f);
 
-    let warmup_status = {
+    let status = |preamble: &'static str, millis: u128, count: usize| {
         let mut status_len: usize = 0;
-        let warmup_millis = cfg.warmup_millis();
 
         move |i: usize| {
             if status_len == 0 {
-                eprint!("Warming up for approximately {warmup_millis} millis: ");
+                eprint!("{preamble} for approximately {millis} millis: ");
                 stderr().flush().expect("unexpected I/O error");
             }
             eprint!("{}", "\u{8}".repeat(status_len));
-            let status = format!("{i} of {warmup_execs}.");
+            let status = format!("{i} of {count}.");
             status_len = status.len();
             eprint!("{status}");
             stderr().flush().expect("unexpected I/O error");
         }
     };
 
-    let exec_status = {
-        let mut status_len: usize = 0;
+    let warmup_run_length = cfg.warmup_run_length();
+    let warmup_count = warmup_run_length.estimated_count(&cfg, &mut f);
+    let warmup_millis = warmup_run_length
+        .estimated_duration(&cfg, &mut f)
+        .as_millis();
 
-        move |i: usize| {
-            if status_len == 0 {
-                eprint!(" Executing bench_run: ");
-                stderr().flush().expect("unexpected I/O error");
-            }
-            eprint!("{}", "\u{8}".repeat(status_len));
-            let status = format!("{i} of {exec_count}. ");
-            status_len = status.len();
-            eprint!("{status}");
-            stderr().flush().expect("unexpected I/O error");
-        }
-    };
+    let warmup_status = status("Warming up", warmup_millis, warmup_count);
+
+    // let warmup_status = |preamble: &str, millis: u128, count: usize| {
+    //     let mut status_len: usize = 0;
+
+    //     move |i: usize| {
+    //         if status_len == 0 {
+    //             eprint!("Warming up for approximately {millis} millis: ");
+    //             stderr().flush().expect("unexpected I/O error");
+    //         }
+    //         eprint!("{}", "\u{8}".repeat(status_len));
+    //         let status = format!("{i} of {count}.");
+    //         status_len = status.len();
+    //         eprint!("{status}");
+    //         stderr().flush().expect("unexpected I/O error");
+    //     }
+    // };
+
+    let exec_count = exec_run_length.estimated_count(&cfg, &mut f);
+    let exec_millis = exec_run_length.estimated_duration(&cfg, &mut f).as_millis();
+
+    let exec_status = status(" Executing bench_run", exec_millis, exec_count);
+
+    // let exec_status = {
+    //     let mut status_len: usize = 0;
+
+    //     move |i: usize| {
+    //         if status_len == 0 {
+    //             eprint!(" Executing bench_run for approximately {exec_millis} millis: ");
+    //             stderr().flush().expect("unexpected I/O error");
+    //         }
+    //         eprint!("{}", "\u{8}".repeat(status_len));
+    //         let status = format!("{i} of {exec_count}. ");
+    //         status_len = status.len();
+    //         eprint!("{status}");
+    //         stderr().flush().expect("unexpected I/O error");
+    //     }
+    // };
+
+    header(exec_count);
 
     let out = bench_run_x(
         f,
-        warmup_execs,
-        exec_count,
+        warmup_run_length,
+        exec_run_length,
         Some(warmup_status),
         Some(exec_status),
     );

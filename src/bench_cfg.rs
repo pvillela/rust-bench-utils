@@ -1,10 +1,78 @@
-use std::sync::Mutex;
-
 use crate::{LatencyUnit, latency};
+use std::{sync::Mutex, time::Duration};
+
+/// Specifies how long a benchmark should run for. Encapsulates a target number of iterations for the benchmark to run
+/// and a time duration. The benchmark run length can be set as a number of iterations, a time duration, or
+/// a number of iterations with a timeout duration.
+#[derive(Debug, Clone, Copy)]
+pub enum RunLength {
+    Count(usize),
+    Duration(Duration),
+    CountWithTimeout(usize, Duration),
+}
+
+impl RunLength {
+    /// Returns a [`RunLength`] that specifies the benchmark will run for `count` iterations, with no timeout.
+    pub const fn from_count(count: usize) -> Self {
+        Self::Count(count)
+    }
+
+    /// Returns a [`RunLength`] that specifies the benchmark will run for until `duration` is reached or exceeded,
+    /// regardless of the number of iterations required.
+    pub const fn from_duration(duration: Duration) -> Self {
+        Self::Duration(duration)
+    }
+
+    /// Returns a [`RunLength`] that specifies the benchmark will run for `count` iterations, with `duration` as
+    /// the timeout limit.
+    pub const fn from_count_and_duration(count: usize, timeout: Duration) -> Self {
+        Self::CountWithTimeout(count, timeout)
+    }
+
+    /// Returns both the number of iterations and time duration specified for the benchmark to run.
+    ///
+    /// The benchmark ends when the specified number of iterations is reached (or exceeded)
+    /// or when the time duration is reached (or exceeded), whichever comes first.
+    pub fn get_exec_count_and_duration(&self) -> (usize, Duration) {
+        match self {
+            Self::Count(count) => (*count, Duration::MAX),
+            Self::Duration(duration) => (usize::MAX, *duration),
+            Self::CountWithTimeout(count, duration) => (*count, *duration),
+        }
+    }
+
+    pub fn estimated_count<T>(&self, cfg: &BenchCfg, f: impl FnMut() -> T) -> usize {
+        match self {
+            Self::Count(count) => *count,
+            Self::Duration(duration) => {
+                (duration.as_millis() as f64 * cfg.executions_per_milli(f)) as usize
+            }
+            Self::CountWithTimeout(count, duration) => {
+                let count_from_duration =
+                    (duration.as_millis() as f64 * cfg.executions_per_milli(f)) as usize;
+                *count.min(&count_from_duration)
+            }
+        }
+    }
+
+    pub fn estimated_duration<T>(&self, cfg: &BenchCfg, f: impl FnMut() -> T) -> Duration {
+        match self {
+            Self::Count(count) => {
+                Duration::from_millis((*count as f64 / cfg.executions_per_milli(f)) as u64)
+            }
+            Self::Duration(duration) => *duration,
+            Self::CountWithTimeout(count, duration) => {
+                let duration_from_count =
+                    Duration::from_millis((*count as f64 / cfg.executions_per_milli(f)) as u64);
+                *duration.min(&duration_from_count)
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct BenchCfg {
-    warmup_millis: u64,
+    warmup_run_length: RunLength,
     recording_unit: LatencyUnit,
     reporting_unit: LatencyUnit,
     sigfig: u8,
@@ -16,7 +84,7 @@ pub struct BenchCfg {
 impl BenchCfg {
     #[doc(hidden)]
     pub const fn new(
-        warmup_millis: u64,
+        warmup_run_length: RunLength,
         recording_unit: LatencyUnit,
         reporting_unit: LatencyUnit,
         sigfig: u8,
@@ -25,7 +93,7 @@ impl BenchCfg {
         static_ref: &'static Mutex<BenchCfg>,
     ) -> BenchCfg {
         BenchCfg {
-            warmup_millis,
+            warmup_run_length,
             recording_unit,
             reporting_unit,
             sigfig,
@@ -35,9 +103,9 @@ impl BenchCfg {
         }
     }
 
-    /// The currently defined number of milliseconds used to "warm-up" the benchmark. The default is 3,000 ms.
-    pub fn warmup_millis(&self) -> u64 {
-        self.warmup_millis
+    /// The currently defined [`RunLength`] used to "warm-up" the benchmark. The default is 3,000 ms.
+    pub fn warmup_run_length(&self) -> RunLength {
+        self.warmup_run_length
     }
 
     pub fn recording_unit(&self) -> LatencyUnit {
@@ -57,8 +125,8 @@ impl BenchCfg {
     }
 
     /// Changes the number of milliseconds used to "warm-up" the benchmark. The default is 3,000 ms.
-    pub fn with_warmup_millis(mut self, warmup_millis: u64) -> Self {
-        self.warmup_millis = warmup_millis;
+    pub fn with_warmup_run_length(mut self, warmup_run_length: RunLength) -> Self {
+        self.warmup_run_length = warmup_run_length;
         self
     }
 
@@ -92,21 +160,16 @@ impl BenchCfg {
         *guard = self;
     }
 
-    pub fn executions_per_milli(&self, mut f: impl FnMut()) -> f64 {
+    pub fn executions_per_milli<T>(&self, mut f: impl FnMut() -> T) -> f64 {
         let latency_millis = latency(|| {
             for _ in 0..self.status_calibr {
-                f()
+                f();
             }
         })
         .as_secs_f64()
             * 1000.;
 
         self.status_calibr as f64 / latency_millis
-    }
-
-    pub fn warmup_execs(&self, f: impl FnMut()) -> usize {
-        let warmup_millis = self.warmup_millis;
-        (warmup_millis as f64 * self.executions_per_milli(f)) as usize
     }
 
     pub fn status_freq(&self, f: impl FnMut()) -> usize {
@@ -119,25 +182,33 @@ impl BenchCfg {
 #[cfg(test)]
 #[cfg(feature = "_bench_run")]
 mod test {
-    use crate::{LatencyUnit, get_bench_cfg};
+    use std::time::Duration;
+
+    use crate::{LatencyUnit, RunLength, get_bench_cfg};
 
     #[test]
     fn test_bench_cfg() {
         let cfg = get_bench_cfg();
         println!("cfg={cfg:?}");
-        assert_eq!(cfg.warmup_millis(), 3000);
+        assert_eq!(
+            cfg.warmup_run_length().get_exec_count_and_duration().1,
+            Duration::from_millis(3000)
+        );
         assert_eq!(cfg.recording_unit(), LatencyUnit::Nano);
         assert_eq!(cfg.reporting_unit(), LatencyUnit::Micro);
         assert_eq!(cfg.sigfig(), 3);
 
         cfg.with_recording_unit(LatencyUnit::Micro)
-            .with_warmup_millis(100)
+            .with_warmup_run_length(RunLength::Duration(Duration::from_millis(100)))
             .with_reporting_unit(LatencyUnit::Milli)
             .with_sigfig(5)
             .set();
         let cfg = get_bench_cfg();
         println!("cfg={cfg:?}");
-        assert_eq!(cfg.warmup_millis(), 100);
+        assert_eq!(
+            cfg.warmup_run_length().get_exec_count_and_duration().1,
+            Duration::from_millis(100)
+        );
         assert_eq!(cfg.recording_unit(), LatencyUnit::Micro);
         assert_eq!(cfg.reporting_unit(), LatencyUnit::Milli);
         assert_eq!(cfg.sigfig(), 5);
