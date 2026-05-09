@@ -9,7 +9,7 @@ use std::{
 };
 
 static BENCH_CFG: Mutex<BenchCfg> = Mutex::new(BenchCfg::new(
-    RunLength::from_duration(Duration::from_millis(3000)),
+    3000,
     LatencyUnit::Nano,
     LatencyUnit::Micro,
     3,
@@ -75,7 +75,7 @@ impl BenchState {
 ///   current number of executions performed.
 pub fn bench_run_x(
     mut f: impl FnMut(),
-    warmup_run_length: RunLength,
+    warmup_millis: u64,
     exec_run_length: RunLength,
     warmup_status: Option<impl FnMut(usize)>,
     exec_status: Option<impl FnMut(usize)>,
@@ -85,7 +85,12 @@ pub fn bench_run_x(
     let status_freq = cfg.status_freq(&mut f);
 
     // Warm-up.
-    state.execute(&mut f, warmup_run_length, status_freq, warmup_status);
+    state.execute(
+        &mut f,
+        RunLength::Duration(Duration::from_millis(warmup_millis)),
+        status_freq,
+        warmup_status,
+    );
     state.reset();
 
     state.execute(f, exec_run_length, status_freq, exec_status);
@@ -104,11 +109,11 @@ pub fn bench_run_x(
 /// - `f` - benchmark target.
 /// - `exec_count` - number of executions (sample size) for the function.
 pub fn bench_run(mut f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
-    let warmup_run_length = get_bench_cfg().warmup_run_length();
+    let warmup_millis = get_bench_cfg().warmup_millis();
 
     bench_run_x(
         f,
-        warmup_run_length,
+        warmup_millis,
         exec_run_length,
         None::<fn(usize)>,
         None::<fn(usize)>,
@@ -136,7 +141,7 @@ pub fn bench_run_with_status(
 ) -> BenchOut {
     let cfg = get_bench_cfg();
 
-    let status = |preamble: &'static str, millis: u128, count: usize| {
+    let status = |preamble: &'static str, millis: u64, count: usize| {
         let mut status_len: usize = 0;
 
         move |i: usize| {
@@ -145,20 +150,18 @@ pub fn bench_run_with_status(
                 stderr().flush().expect("unexpected I/O error");
             }
             eprint!("{}", "\u{8}".repeat(status_len));
-            let status = format!("{i} of {count}.");
+            let status = format!("{i} of (approx.) {count}.");
             status_len = status.len();
             eprint!("{status}");
             stderr().flush().expect("unexpected I/O error");
         }
     };
 
-    let warmup_run_length = cfg.warmup_run_length();
-    let warmup_count = warmup_run_length.estimated_count(&cfg, &mut f);
-    let warmup_millis = warmup_run_length
-        .estimated_duration(&cfg, &mut f)
-        .as_millis();
+    let warmup_millis = cfg.warmup_millis();
+    let warmup_run_length = RunLength::Duration(Duration::from_millis(warmup_millis));
+    let warmup_est_count = warmup_run_length.estimated_count(&cfg, &mut f);
 
-    let warmup_status = status("Warming up", warmup_millis, warmup_count);
+    let warmup_status = status("Warming up", warmup_millis, warmup_est_count);
 
     // let warmup_status = |preamble: &str, millis: u128, count: usize| {
     //     let mut status_len: usize = 0;
@@ -177,7 +180,7 @@ pub fn bench_run_with_status(
     // };
 
     let exec_count = exec_run_length.estimated_count(&cfg, &mut f);
-    let exec_millis = exec_run_length.estimated_duration(&cfg, &mut f).as_millis();
+    let exec_millis = exec_run_length.estimated_duration(&cfg, &mut f).as_millis() as u64;
 
     let exec_status = status(" Executing bench_run", exec_millis, exec_count);
 
@@ -201,7 +204,7 @@ pub fn bench_run_with_status(
 
     let out = bench_run_x(
         f,
-        warmup_run_length,
+        warmup_millis,
         exec_run_length,
         Some(warmup_status),
         Some(exec_status),
