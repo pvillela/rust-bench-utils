@@ -84,7 +84,6 @@ pub fn bench_run_x(
     let mut state = BenchOut::default();
     let cfg = get_bench_cfg();
     let status_freq = cfg.status_freq(&mut f);
-    println!("status_freq={status_freq}");
 
     // Warm-up.
     state.execute(
@@ -152,7 +151,7 @@ pub fn bench_run_with_status(
                 stderr().flush().expect("unexpected I/O error");
             }
             eprint!("{}", "\u{8}".repeat(status_len));
-            let status = format!("{i} of (approx.) {count}.");
+            let status = format!("{i} of (approx.) {count} executions.");
             status_len = status.len();
             eprint!("{status}");
             stderr().flush().expect("unexpected I/O error");
@@ -166,7 +165,9 @@ pub fn bench_run_with_status(
 
     let exec_count = exec_run_length.estimated_count(&cfg, &mut f);
     let exec_millis = exec_run_length.estimated_duration(&cfg, &mut f).as_millis() as u64;
-    let exec_status = status(" Executing bench_run", exec_millis, exec_count);
+    // The `\n` below is to separate warmup status from exec status. Otherwise, they get mixed up due to
+    // the `eprint!("{}", "\u{8}".repeat(status_len))` line in the `status` closure.
+    let exec_status = status("\nExecuting bench_run", exec_millis, exec_count);
 
     header(exec_count);
 

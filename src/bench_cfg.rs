@@ -154,18 +154,22 @@ impl BenchCfg {
 
         for i in 1.. {
             let iter_start = Instant::now();
+
             for _ in 0..self.base_status_calibr * 2u64.pow(i - 1) {
                 black_box(f());
             }
 
-            let iter_latency = iter_start.elapsed().as_millis() as u64;
-            let acc_latency = start.elapsed().as_millis() as u64;
+            let iter_latency_nanos = iter_start.elapsed().as_nanos() as f64;
+            let acc_latency_nanos = start.elapsed().as_nanos() as f64;
+            let status_nanos = self.status_millis as f64 * 1_000_000.0;
 
-            if iter_latency >= self.status_millis / 2 || acc_latency >= self.status_millis {
+            if iter_latency_nanos >= status_nanos / 2.2 || acc_latency_nanos >= status_nanos {
                 let iter_execs_per_milli =
-                    (self.base_status_calibr * i as u64) as f64 / iter_latency as f64;
-                let acc_execs_per_milli =
-                    (self.base_status_calibr * (2u64.pow(i) - 1)) as f64 / acc_latency as f64;
+                    (self.base_status_calibr * 2u64.pow(i - 1) as u64) as f64 / iter_latency_nanos
+                        * 1_000_000.;
+                let acc_execs_per_milli = (self.base_status_calibr * (2u64.pow(i) - 1)) as f64
+                    / acc_latency_nanos
+                    * 1_000_000.;
                 return iter_execs_per_milli.min(acc_execs_per_milli);
             }
         }
