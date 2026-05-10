@@ -29,30 +29,25 @@ impl RunLength {
     }
 
     // Used only for status reporting, not for execution control
-    pub(crate) fn estimated_count(&self, cfg: &BenchCfg, f: impl FnMut()) -> usize {
+    pub fn estimated_count(&self, execs_per_milli: f64) -> usize {
         match self {
             Self::Count(count) => *count,
-            Self::Duration(duration) => {
-                (duration.as_millis() as f64 * cfg.executions_per_milli(f)) as usize
-            }
+            Self::Duration(duration) => (duration.as_millis() as f64 * execs_per_milli) as usize,
             Self::CountWithTimeout(count, duration) => {
-                let count_from_duration =
-                    (duration.as_millis() as f64 * cfg.executions_per_milli(f)) as usize;
+                let count_from_duration = (duration.as_millis() as f64 * execs_per_milli) as usize;
                 *count.min(&count_from_duration)
             }
         }
     }
 
     // Used only for status reporting, not for execution control
-    pub(crate) fn estimated_duration(&self, cfg: &BenchCfg, f: impl FnMut()) -> Duration {
+    pub fn estimated_duration(&self, execs_per_milli: f64) -> Duration {
         match self {
-            Self::Count(count) => {
-                Duration::from_millis((*count as f64 / cfg.executions_per_milli(f)) as u64)
-            }
+            Self::Count(count) => Duration::from_millis((*count as f64 / execs_per_milli) as u64),
             Self::Duration(duration) => *duration,
             Self::CountWithTimeout(count, duration) => {
                 let duration_from_count =
-                    Duration::from_millis((*count as f64 / cfg.executions_per_milli(f)) as u64);
+                    Duration::from_millis((*count as f64 / execs_per_milli) as u64);
                 *duration.min(&duration_from_count)
             }
         }
@@ -149,7 +144,7 @@ impl BenchCfg {
         *guard = self;
     }
 
-    pub(crate) fn executions_per_milli(&self, mut f: impl FnMut()) -> f64 {
+    pub fn executions_per_milli(&self, mut f: impl FnMut()) -> f64 {
         let start = Instant::now();
 
         for i in 1.. {
@@ -177,9 +172,8 @@ impl BenchCfg {
         unreachable!("above loop must return at some point")
     }
 
-    pub fn status_freq(&self, f: impl FnMut()) -> usize {
-        let executions_per_milli = self.executions_per_milli(f);
-        let status_freq = self.status_millis as f64 * executions_per_milli;
+    pub fn status_freq(&self, execs_per_milli: f64) -> usize {
+        let status_freq = self.status_millis as f64 * execs_per_milli;
         status_freq.ceil() as usize
     }
 }

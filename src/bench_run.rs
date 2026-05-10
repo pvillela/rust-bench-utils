@@ -83,7 +83,8 @@ pub fn bench_run_x(
 ) -> BenchOut {
     let mut state = BenchOut::default();
     let cfg = get_bench_cfg();
-    let status_freq = cfg.status_freq(&mut f);
+    let execs_per_milli = cfg.executions_per_milli(&mut f);
+    let status_freq = cfg.status_freq(execs_per_milli);
 
     // Warm-up.
     state.execute(
@@ -158,13 +159,17 @@ pub fn bench_run_with_status(
         }
     };
 
+    let execs_per_milli = cfg.executions_per_milli(&mut f);
+
     let warmup_millis = cfg.warmup_millis();
     let warmup_run_length = RunLength::Duration(Duration::from_millis(warmup_millis));
-    let warmup_est_count = warmup_run_length.estimated_count(&cfg, &mut f);
+    let warmup_est_count = warmup_run_length.estimated_count(execs_per_milli);
     let warmup_status = status("Warming up", warmup_millis, warmup_est_count);
 
-    let exec_count = exec_run_length.estimated_count(&cfg, &mut f);
-    let exec_millis = exec_run_length.estimated_duration(&cfg, &mut f).as_millis() as u64;
+    let exec_count = exec_run_length.estimated_count(execs_per_milli);
+    let exec_millis = exec_run_length
+        .estimated_duration(execs_per_milli)
+        .as_millis() as u64;
     // The `\n` below is to separate warmup status from exec status. Otherwise, they get mixed up due to
     // the `eprint!("{}", "\u{8}".repeat(status_len))` line in the `status` closure.
     let exec_status = status("\nExecuting bench_run", exec_millis, exec_count);
