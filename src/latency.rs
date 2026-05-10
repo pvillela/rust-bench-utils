@@ -5,7 +5,7 @@ use std::{
 
 /// Invokes `f` once and returns its latency.
 #[inline(always)]
-pub fn latency<T>(f: impl FnOnce() -> T) -> Duration {
+pub fn latency(f: impl FnOnce()) -> Duration {
     let start = Instant::now();
     black_box(f());
     start.elapsed()
