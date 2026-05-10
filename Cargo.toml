@@ -69,3 +69,7 @@ harness = false
 [[bench]]
 name = "validate_bench_run"
 harness = false
+
+[[bench]]
+name = "validate_latency_overhead"
+harness = false

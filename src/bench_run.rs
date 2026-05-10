@@ -38,6 +38,7 @@ impl BenchState {
         assert!(status_freq > 0, "status_freq must be > 0");
 
         let (exec_count, run_time) = run_length.get_exec_count_and_duration();
+        assert!(exec_count > 0, "exec_count must be > 0");
 
         let unit = get_bench_cfg().recording_unit();
         let start = Instant::now();
@@ -83,6 +84,7 @@ pub fn bench_run_x(
     let mut state = BenchOut::default();
     let cfg = get_bench_cfg();
     let status_freq = cfg.status_freq(&mut f);
+    println!("status_freq={status_freq}");
 
     // Warm-up.
     state.execute(
@@ -108,7 +110,7 @@ pub fn bench_run_x(
 /// Arguments:
 /// - `f` - benchmark target.
 /// - `exec_count` - number of executions (sample size) for the function.
-pub fn bench_run(mut f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
+pub fn bench_run(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
     let warmup_millis = get_bench_cfg().warmup_millis();
 
     bench_run_x(
@@ -146,7 +148,7 @@ pub fn bench_run_with_status(
 
         move |i: usize| {
             if status_len == 0 {
-                eprint!("{preamble} for approximately {millis} millis: ");
+                eprint!("{preamble} for (approx.) {millis} millis: ");
                 stderr().flush().expect("unexpected I/O error");
             }
             eprint!("{}", "\u{8}".repeat(status_len));
@@ -160,45 +162,11 @@ pub fn bench_run_with_status(
     let warmup_millis = cfg.warmup_millis();
     let warmup_run_length = RunLength::Duration(Duration::from_millis(warmup_millis));
     let warmup_est_count = warmup_run_length.estimated_count(&cfg, &mut f);
-
     let warmup_status = status("Warming up", warmup_millis, warmup_est_count);
-
-    // let warmup_status = |preamble: &str, millis: u128, count: usize| {
-    //     let mut status_len: usize = 0;
-
-    //     move |i: usize| {
-    //         if status_len == 0 {
-    //             eprint!("Warming up for approximately {millis} millis: ");
-    //             stderr().flush().expect("unexpected I/O error");
-    //         }
-    //         eprint!("{}", "\u{8}".repeat(status_len));
-    //         let status = format!("{i} of {count}.");
-    //         status_len = status.len();
-    //         eprint!("{status}");
-    //         stderr().flush().expect("unexpected I/O error");
-    //     }
-    // };
 
     let exec_count = exec_run_length.estimated_count(&cfg, &mut f);
     let exec_millis = exec_run_length.estimated_duration(&cfg, &mut f).as_millis() as u64;
-
     let exec_status = status(" Executing bench_run", exec_millis, exec_count);
-
-    // let exec_status = {
-    //     let mut status_len: usize = 0;
-
-    //     move |i: usize| {
-    //         if status_len == 0 {
-    //             eprint!(" Executing bench_run for approximately {exec_millis} millis: ");
-    //             stderr().flush().expect("unexpected I/O error");
-    //         }
-    //         eprint!("{}", "\u{8}".repeat(status_len));
-    //         let status = format!("{i} of {exec_count}. ");
-    //         status_len = status.len();
-    //         eprint!("{status}");
-    //         stderr().flush().expect("unexpected I/O error");
-    //     }
-    // };
 
     header(exec_count);
 

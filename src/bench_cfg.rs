@@ -1,4 +1,4 @@
-use crate::{LatencyUnit, latency};
+use crate::LatencyUnit;
 use std::{
     hint::black_box,
     sync::Mutex,
@@ -152,9 +152,9 @@ impl BenchCfg {
     pub(crate) fn executions_per_milli<T>(&self, mut f: impl FnMut() -> T) -> f64 {
         let start = Instant::now();
 
-        for i in 0.. {
+        for i in 1.. {
             let iter_start = Instant::now();
-            for _ in 0..self.base_status_calibr * 2u64.pow(i) {
+            for _ in 0..self.base_status_calibr * 2u64.pow(i - 1) {
                 black_box(f());
             }
 
@@ -165,7 +165,7 @@ impl BenchCfg {
                 let iter_execs_per_milli =
                     (self.base_status_calibr * i as u64) as f64 / iter_latency as f64;
                 let acc_execs_per_milli =
-                    (self.base_status_calibr * 2u64.pow(i + 1) - 1) as f64 / acc_latency as f64;
+                    (self.base_status_calibr * (2u64.pow(i) - 1)) as f64 / acc_latency as f64;
                 return iter_execs_per_milli.min(acc_execs_per_milli);
             }
         }
@@ -175,8 +175,8 @@ impl BenchCfg {
 
     pub(crate) fn status_freq(&self, f: impl FnMut()) -> usize {
         let executions_per_milli = self.executions_per_milli(f);
-        let executions_per_status_millis = self.status_millis as f64 * executions_per_milli;
-        executions_per_status_millis as usize
+        let status_freq = self.status_millis as f64 * executions_per_milli;
+        status_freq.ceil() as usize
     }
 }
 
