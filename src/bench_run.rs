@@ -80,10 +80,10 @@ pub fn bench_run_x(
     exec_run_length: RunLength,
     warmup_status: Option<impl FnMut(usize)>,
     exec_status: Option<impl FnMut(usize)>,
+    execs_per_milli: f64,
 ) -> BenchOut {
     let mut state = BenchOut::default();
     let cfg = get_bench_cfg();
-    let execs_per_milli = cfg.executions_per_milli(&mut f);
     let status_freq = cfg.status_freq(execs_per_milli);
 
     // Warm-up.
@@ -110,8 +110,10 @@ pub fn bench_run_x(
 /// Arguments:
 /// - `f` - benchmark target.
 /// - `exec_count` - number of executions (sample size) for the function.
-pub fn bench_run(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
-    let warmup_millis = get_bench_cfg().warmup_millis();
+pub fn bench_run(mut f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
+    let cfg = get_bench_cfg();
+    let warmup_millis = cfg.warmup_millis();
+    let execs_per_milli = cfg.executions_per_milli(&mut f);
 
     bench_run_x(
         f,
@@ -119,6 +121,7 @@ pub fn bench_run(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
         exec_run_length,
         None::<fn(usize)>,
         None::<fn(usize)>,
+        execs_per_milli,
     )
 }
 
@@ -182,6 +185,7 @@ pub fn bench_run_with_status(
         exec_run_length,
         Some(warmup_status),
         Some(exec_status),
+        execs_per_milli,
     );
     eprintln!();
     out
