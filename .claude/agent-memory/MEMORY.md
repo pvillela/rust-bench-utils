@@ -1,0 +1,1 @@
+- [Test Audit 2026-05-11](test-doctor/audit-2026-05-11.md) -- Test-doctor audit: fixed 4 existing bugs, added 23 new tests, coverage 4->27 tests
