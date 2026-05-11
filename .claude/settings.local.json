@@ -3,7 +3,15 @@
     "allow": [
       "Bash(pip list *)",
       "Bash(python3 *)",
-      "Bash(./clippy.sh *)"
+      "Bash(./clippy.sh *)",
+      "Bash(./check.sh *)",
+      "Bash(./check-features.sh *)",
+      "Bash(cargo check *)",
+      "Bash(chmod +x /workspaces/bench-utils/check-features.sh /workspaces/bench-utils/test-features.sh /workspaces/bench-utils/check.sh /workspaces/bench-utils/clippy.sh)",
+      "Bash(./test-features.sh *)",
+      "Bash(cargo test *)",
+      "Bash(cargo clippy *)",
+      "Bash(echo \"=== exit: $?\")"
     ]
   }
 }

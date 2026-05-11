@@ -43,9 +43,7 @@ __stats_opt = ["basic_stats/wilcoxon"]
 
 # Internal
 _bench_run = [] # not used by `bench_diff` crate default
-_dev_utils = [
-    "basic_stats/_dev_utils",
-] # enables approx_eq traits and macros, regex
+_dev_utils = ["basic_stats/_dev_utils"] # enables approx_eq traits and macros
 _dev_support = [
     "__stats_opt",
     "basic_stats/aok",
