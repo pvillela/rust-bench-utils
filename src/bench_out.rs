@@ -126,17 +126,17 @@ impl BenchOut {
 
     /// Sample mean of latencies.
     pub fn mean(&self) -> f64 {
-        sample_mean(self.n(), self.sum as f64).aok() * self.converson_factor()
+        sample_mean(self.n(), self.sum).aok() * self.converson_factor()
     }
 
     /// Sample standard deviation of latencies.
     pub fn stdev(&self) -> f64 {
-        sample_stdev(self.n(), self.sum as f64, self.sum2 as f64).aok() * self.converson_factor()
+        sample_stdev(self.n(), self.sum, self.sum2).aok() * self.converson_factor()
     }
 
     /// Sample median of latencies.
     pub fn median(&self) -> f64 {
-        self.summary().median as f64
+        self.summary().median
     }
 
     /// Sample mean of the natural logarithms of latencies.
@@ -376,15 +376,15 @@ mod test {
 
         rel_approx_eq!(exp_mean, summary.mean, EPSILON);
         rel_approx_eq!(exp_stdev, summary.stdev, EPSILON);
-        rel_approx_eq!(exp_p1, summary.p1 as f64, EPSILON);
-        rel_approx_eq!(exp_p5, summary.p5 as f64, EPSILON);
-        rel_approx_eq!(exp_p10, summary.p10 as f64, EPSILON);
-        rel_approx_eq!(exp_p25, summary.p25 as f64, EPSILON);
-        rel_approx_eq!(exp_median, summary.median as f64, EPSILON);
-        rel_approx_eq!(exp_p75, summary.p75 as f64, EPSILON);
-        rel_approx_eq!(exp_p90, summary.p90 as f64, EPSILON);
-        rel_approx_eq!(exp_p95, summary.p95 as f64, EPSILON);
-        rel_approx_eq!(exp_p99, summary.p99 as f64, EPSILON);
+        rel_approx_eq!(exp_p1, summary.p1, EPSILON);
+        rel_approx_eq!(exp_p5, summary.p5, EPSILON);
+        rel_approx_eq!(exp_p10, summary.p10, EPSILON);
+        rel_approx_eq!(exp_p25, summary.p25, EPSILON);
+        rel_approx_eq!(exp_median, summary.median, EPSILON);
+        rel_approx_eq!(exp_p75, summary.p75, EPSILON);
+        rel_approx_eq!(exp_p90, summary.p90, EPSILON);
+        rel_approx_eq!(exp_p95, summary.p95, EPSILON);
+        rel_approx_eq!(exp_p99, summary.p99, EPSILON);
     }
 
     #[test]

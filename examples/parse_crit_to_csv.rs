@@ -126,7 +126,7 @@ fn parse_section(lines: &mut Lines<BufReader<File>>) -> Option<Section> {
         );
         fn_times
             .entry(fn_name)
-            .or_insert_with(|| Vec::default())
+            .or_default()
             .push((time0, time1, time2));
     };
 
@@ -164,12 +164,8 @@ fn parse_file(infile: &str) -> Vec<Section> {
 
     let mut sections = Vec::<Section>::new();
 
-    loop {
-        if let Some(section) = parse_section(&mut lines) {
-            sections.push(section);
-        } else {
-            break;
-        }
+    while let Some(section) = parse_section(&mut lines) {
+        sections.push(section);
     }
 
     sections
@@ -184,7 +180,6 @@ fn print_section_to_csv(s: &Section) {
     println!();
 
     let nkeys = s.fn_times.keys().len();
-    let nrows = s.fn_times.iter().next().unwrap().1.len();
 
     for j in 0..nkeys {
         print!("fn_name|lo_time|unit|mid_time|unit|hi_time|unit");
@@ -204,17 +199,17 @@ fn print_section_to_csv(s: &Section) {
         }
     }
 
-    for i in 0..nrows {
-        for j in 0..nkeys {
+    for (i, _) in time_table[0].iter().enumerate() {
+        for (j, col) in time_table.iter().enumerate() {
             print!(
                 "{}|{}|{}|{}|{}|{}|{}",
                 name_vec[j],
-                time_table[j][i].0.0,
-                time_table[j][i].0.1,
-                time_table[j][i].1.0,
-                time_table[j][i].1.1,
-                time_table[j][i].2.0,
-                time_table[j][i].2.1,
+                col[i].0.0,
+                col[i].0.1,
+                col[i].1.0,
+                col[i].1.1,
+                col[i].2.0,
+                col[i].2.1,
             );
             if j < nkeys - 1 {
                 print!("| |")

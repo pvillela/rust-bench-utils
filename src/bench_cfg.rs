@@ -1,6 +1,5 @@
 use crate::LatencyUnit;
 use std::{
-    hint::black_box,
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -151,7 +150,7 @@ impl BenchCfg {
             let iter_start = Instant::now();
 
             for _ in 0..self.base_status_calibr * 2u64.pow(i - 1) {
-                black_box(f());
+                f();
             }
 
             let iter_latency_nanos = iter_start.elapsed().as_nanos() as f64;
@@ -160,7 +159,7 @@ impl BenchCfg {
 
             if iter_latency_nanos >= status_nanos / 2.2 || acc_latency_nanos >= status_nanos {
                 let iter_execs_per_milli =
-                    (self.base_status_calibr * 2u64.pow(i - 1) as u64) as f64 / iter_latency_nanos
+                    (self.base_status_calibr * 2u64.pow(i - 1)) as f64 / iter_latency_nanos
                         * 1_000_000.;
                 let acc_execs_per_milli = (self.base_status_calibr * (2u64.pow(i) - 1)) as f64
                     / acc_latency_nanos

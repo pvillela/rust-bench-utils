@@ -27,11 +27,10 @@ pub fn get_args() -> Args {
     };
     let target_ratio = target_ratio_str
         .parse::<f64>()
-        .map(|r| {
-            if !(r > 0.) {
+        .inspect(|&r| {
+            if r <= 0. {
                 target_ratio_msg();
             }
-            r
         })
         .unwrap_or_else(|_| target_ratio_msg());
 
