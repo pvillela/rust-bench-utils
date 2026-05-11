@@ -18,6 +18,7 @@ static BENCH_CFG: Mutex<BenchCfg> = Mutex::new(BenchCfg::new(
     &BENCH_CFG,
 ));
 
+/// Returns a clone of the global benchmark configuration.
 pub fn get_bench_cfg() -> BenchCfg {
     let guard = BENCH_CFG.lock().unwrap();
     guard.deref().clone()
@@ -64,16 +65,17 @@ impl BenchState {
 /// *optionally* outputs information about the benchmark and its execution status.
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
-/// [`get_warmup_millis`] milliseconds.
+/// `warmup_millis` milliseconds.
 ///
 /// Arguments:
 /// - `f` - benchmark target.
-/// - `warmup_execs` - number of warm-up executions to perform.
-/// - `exec_count` - number of executions (sample size) for the function.
+/// - `warmup_millis` - duration (in milliseconds) of warm-up execution.
+/// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 /// - `warmup_status` - optionally invoked periodically during warm-up. Its argument is the current
 ///   warm-up execution iteration.
 /// - `exec_status` - optionally invoked periodically during data collection. Its argument is the
 ///   current number of executions performed.
+/// - `execs_per_milli` - estimate of how many executions of `f` fit in one millisecond.
 pub fn bench_run_x(
     mut f: impl FnMut(),
     warmup_millis: u64,
@@ -103,13 +105,13 @@ pub fn bench_run_x(
 /// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
-/// [`get_warmup_millis`] milliseconds.
+/// [`BenchCfg::warmup_millis`] milliseconds.
 /// This function calls [`bench_run_x`] with no-op closures for the arguments that support the output of
 /// benchmark status.
 ///
 /// Arguments:
 /// - `f` - benchmark target.
-/// - `exec_count` - number of executions (sample size) for the function.
+/// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run(mut f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
     let cfg = get_bench_cfg();
     let warmup_millis = cfg.warmup_millis();
@@ -129,16 +131,16 @@ pub fn bench_run(mut f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
 /// outputs information about the benchmark and its execution status.
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
-/// [`get_warmup_millis`] milliseconds.
+/// [`BenchCfg::warmup_millis`] milliseconds.
 /// This function calls [`bench_run_x`] with pre-defined closures for the arguments that support the output of
 /// benchmark status to `stderr`.
 ///
 /// Arguments:
 /// - `f` - benchmark target.
-/// - `exec_count` - number of executions (sample size) for the function.
+/// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 /// - `header` - is invoked once at the start of this function's execution; it can be used, for example,
 ///   to output information about the function being benchmarked to `stdout` and/or `stderr`. Its argument
-///   is `exec_count`.
+///   is the estimated execution count.
 pub fn bench_run_with_status(
     mut f: impl FnMut(),
     exec_run_length: RunLength,

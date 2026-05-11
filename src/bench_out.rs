@@ -144,7 +144,7 @@ impl BenchOut {
         sample_mean(self.n_ln, self.sum_ln).aok() + self.converson_factor().ln()
     }
 
-    /// Sample standard deviation of the natural logarithms latencies.
+    /// Sample standard deviation of the natural logarithms of latencies.
     pub fn stdev_ln(&self) -> f64 {
         sample_stdev(self.n_ln, self.sum_ln, self.sum2_ln).aok()
     }
@@ -247,36 +247,42 @@ impl BenchOut {
 
     #[cfg(feature = "_dev_support")]
     #[inline(always)]
+    /// Reference to the raw HDR histogram. Requires feature `_dev_support`.
     pub fn hist(&self) -> &Timing {
         &self.hist
     }
 
     #[cfg(feature = "_bench_diff")]
     #[inline(always)]
+    /// Raw sum of recorded latencies. Requires feature `_bench_diff`.
     pub fn sum(&self) -> f64 {
         self.sum
     }
 
     #[cfg(feature = "_bench_diff")]
     #[inline(always)]
+    /// Raw sum of squares of recorded latencies. Requires feature `_bench_diff`.
     pub fn sum2(&self) -> f64 {
         self.sum2
     }
 
     #[cfg(feature = "_bench_diff")]
     #[inline(always)]
+    /// Sample size for log-latencies. Requires feature `_bench_diff`.
     pub fn n_ln(&self) -> u64 {
         self.n_ln
     }
 
     #[cfg(feature = "_bench_diff")]
     #[inline(always)]
+    /// Raw sum of natural logarithms of latencies. Requires feature `_bench_diff`.
     pub fn sum_ln(&self) -> f64 {
         self.sum_ln
     }
 
     #[cfg(feature = "_bench_diff")]
     #[inline(always)]
+    /// Raw sum of squares of natural logarithms of latencies. Requires feature `_bench_diff`.
     pub fn sum2_ln(&self) -> f64 {
         self.sum2_ln
     }

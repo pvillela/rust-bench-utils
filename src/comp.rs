@@ -17,7 +17,7 @@ use basic_stats::wilcoxon::RankSum;
 /// time-dependent noise. See crate [`bench_diff`](https://docs.rs/bench_diff/latest/bench_diff/) for a discussion
 /// of time-dependent noise and why the use `bench_diff` should be preferred for latency comparisons.
 ///
-/// The `*_ln_*` methods provide statistics for `mean(ln(latency(f1))) - mean(ln(latency(f1)))`,
+/// The `*_ln_*` methods provide statistics for `mean(ln(latency(f1))) - mean(ln(latency(f2)))`,
 /// where `ln` is the natural logarithm.
 /// Under the assumption that latency distributions are approximately log-normal,
 /// `mean(ln(latency(f))) == ln(median(latency(f)))`.
@@ -43,10 +43,12 @@ impl<'a> Comp<'a> {
         Self(f1_out, f2_out)
     }
 
+    /// Reference to the first benchmark output.
     pub fn out_f1(&self) -> &BenchOut {
         self.0
     }
 
+    /// Reference to the second benchmark output.
     pub fn out_f2(&self) -> &BenchOut {
         self.1
     }
@@ -97,7 +99,7 @@ impl<'a> Comp<'a> {
 
     /// Welch's t statistic for the hypothesis that
     /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm), or equivalently,
-    /// `median(latency(f1)) / median(latency(f1)) == exp(ln_d0)`.
+    /// `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
     ///
     /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
@@ -114,14 +116,14 @@ impl<'a> Comp<'a> {
     ///
     /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
-    /// Thus, this statistics equivalently pertains to `ln(median(latency(f1)) / median(latency(f2)))`.
+    /// Thus, this statistic equivalently pertains to `ln(median(latency(f1)) / median(latency(f2)))`.
     pub fn welch_ln_df(&self) -> f64 {
         welch_df(&self.moments_ln_f1(), &self.moments_ln_f2()).aok()
     }
 
     /// p-value of Welch's two-sample t-test of the hypothesis that
     /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm), or equivalently,
-    /// `median(latency(f1)) / median(latency(f1)) == exp(ln_d0)`.
+    /// `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
     ///
     /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
@@ -172,7 +174,7 @@ impl<'a> Comp<'a> {
 
     /// Welch's two-sample t-test of the hypothesis that
     /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm), or equivalently,
-    /// `median(latency(f1)) / median(latency(f1)) == exp(ln_d0)`.
+    /// `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
     ///
     /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
@@ -214,25 +216,33 @@ impl<'a> Comp<'a> {
 
     #[cfg(feature = "_dev_support")]
     /// Wilcoxon rank sum *W* statistic for `latency(f1)` and `latency(f2)`.
+    ///
+    /// Requires feature `_dev_support`.
     pub fn wilcoxon_rank_sum_w(&self) -> f64 {
         self.rank_sum().w()
     }
 
     #[cfg(feature = "_dev_support")]
     /// Wilcoxon rank sum normal approximation *z* value for `latency(f1)` and `latency(f2)`.
+    ///
+    /// Requires feature `_dev_support`.
     pub fn wilcoxon_rank_sum_z(&self) -> f64 {
         self.rank_sum().z().aok()
     }
 
     #[cfg(feature = "_dev_support")]
     /// Wilcoxon rank sum normal approximation *p* value for `latency(f1)` and `latency(f2)`.
+    ///
+    /// Requires feature `_dev_support`.
     pub fn wilcoxon_rank_sum_p(&self, alt_hyp: AltHyp) -> f64 {
         self.rank_sum().z_p(alt_hyp).aok()
     }
 
     #[cfg(feature = "_dev_support")]
-    /// Wilcoxon rank sum test for for `latency(f1)` and `latency(f2)`,
+    /// Wilcoxon rank sum test for `latency(f1)` and `latency(f2)`,
     /// with alternative hypothesis `alt_hyp` and confidence level `(1 - alpha)`.
+    ///
+    /// Requires feature `_dev_support`.
     pub fn wilcoxon_rank_sum_test(&self, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
         self.rank_sum().z_test(alt_hyp, alpha).aok()
     }

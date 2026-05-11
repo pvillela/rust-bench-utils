@@ -11,8 +11,11 @@ pub fn latency(f: impl FnOnce()) -> Duration {
 /// Unit of time used to record latencies. Used as an argument in benchmarking functions.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LatencyUnit {
+    /// Milliseconds.
     Milli,
+    /// Microseconds.
     Micro,
+    /// Nanoseconds.
     Nano,
 }
 

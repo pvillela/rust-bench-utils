@@ -11,7 +11,8 @@
       "Bash(./test-features.sh *)",
       "Bash(cargo test *)",
       "Bash(cargo clippy *)",
-      "Bash(echo \"=== exit: $?\")"
+      "Bash(echo \"=== exit: $?\")",
+      "Bash(grep *)"
     ]
   }
 }

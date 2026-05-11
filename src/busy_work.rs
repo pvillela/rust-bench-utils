@@ -18,17 +18,17 @@ pub fn busy_work(effort: u32) {
 }
 
 /// Returns an estimate of the number of iterations required for [`busy_work`] to have a latency
-/// of `target_micros`.
+/// of `target_latency`.
 /// Gated by feature **"busy_work"**.
 ///
-/// Calls [`calibrate_busy_work_x`] with a predefined `calibration_effort`;
+/// Calls [`calibrate_busy_work_x`] with a predefined `calibration_effort`.
 pub fn calibrate_busy_work(target_latency: Duration) -> u32 {
     const CALIBRATION_EFFORT: u32 = 200_000;
     calibrate_busy_work_x(CALIBRATION_EFFORT, target_latency)
 }
 
 /// Returns an estimate of the number of iterations required for [`busy_work`] to have a latency
-/// of `target_micros`. `calibration_effort` is the number of iterations executed during calibration.
+/// of `target_latency`. `calibration_effort` is the number of iterations executed during calibration.
 /// Gated by feature **"busy_work"**.
 pub fn calibrate_busy_work_x(calibration_effort: u32, target_latency: Duration) -> u32 {
     let latency = latency(|| busy_work(calibration_effort));

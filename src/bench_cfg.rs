@@ -9,8 +9,11 @@ use std::{
 /// a number of iterations with a timeout duration.
 #[derive(Debug, Clone, Copy)]
 pub enum RunLength {
+    /// Run for a fixed number of iterations.
     Count(usize),
+    /// Run for a fixed duration.
     Duration(Duration),
+    /// Run for a fixed number of iterations, but stop early if the given duration is exceeded.
     CountWithTimeout(usize, Duration),
 }
 
@@ -27,7 +30,7 @@ impl RunLength {
         }
     }
 
-    // Used only for status reporting, not for execution control
+    /// Estimated number of iterations, used only for status reporting.
     pub fn estimated_count(&self, execs_per_milli: f64) -> usize {
         match self {
             Self::Count(count) => *count,
@@ -39,7 +42,7 @@ impl RunLength {
         }
     }
 
-    // Used only for status reporting, not for execution control
+    /// Estimated run duration, used only for status reporting.
     pub fn estimated_duration(&self, execs_per_milli: f64) -> Duration {
         match self {
             Self::Count(count) => Duration::from_millis((*count as f64 / execs_per_milli) as u64),
@@ -53,6 +56,11 @@ impl RunLength {
     }
 }
 
+/// Global benchmark configuration: warm-up duration, recording/reporting units,
+/// significant figures, and status-reporting calibration parameters.
+///
+/// Stored in a `static Mutex` and accessed via [`get_bench_cfg`](crate::get_bench_cfg).
+/// Modified through the builder methods and committed with [`set`](BenchCfg::set).
 #[derive(Debug, Clone)]
 pub struct BenchCfg {
     warmup_millis: u64,
@@ -91,18 +99,22 @@ impl BenchCfg {
         self.warmup_millis
     }
 
+    /// Unit in which latencies are recorded.
     pub fn recording_unit(&self) -> LatencyUnit {
         self.recording_unit
     }
 
+    /// Unit in which benchmark results are reported.
     pub fn reporting_unit(&self) -> LatencyUnit {
         self.reporting_unit
     }
 
+    /// Factor to convert from the recording unit to the reporting unit.
     pub fn conversion_factor(&self) -> f64 {
         self.recording_unit.conversion_factor(self.reporting_unit)
     }
 
+    /// Number of significant figures used for the HDR histogram.
     pub fn sigfig(&self) -> u8 {
         self.sigfig
     }
@@ -113,36 +125,43 @@ impl BenchCfg {
         self
     }
 
+    /// Sets the recording unit.
     pub fn with_recording_unit(mut self, recording_unit: LatencyUnit) -> Self {
         self.recording_unit = recording_unit;
         self
     }
 
+    /// Sets the reporting unit.
     pub fn with_reporting_unit(mut self, reporting_unit: LatencyUnit) -> Self {
         self.reporting_unit = reporting_unit;
         self
     }
 
+    /// Sets the number of significant figures for the HDR histogram.
     pub fn with_sigfig(mut self, sigfig: u8) -> Self {
         self.sigfig = sigfig;
         self
     }
 
+    /// Sets the base calibration iteration count for status reporting.
     pub fn with_status_calibr(mut self, status_calibr: u64) -> Self {
         self.base_status_calibr = status_calibr;
         self
     }
 
+    /// Sets the status reporting interval in milliseconds.
     pub fn with_status_millis(mut self, status_millis: u64) -> Self {
         self.status_millis = status_millis;
         self
     }
 
+    /// Commits this configuration as the global benchmark configuration.
     pub fn set(self) {
         let mut guard = self.static_ref.lock().unwrap();
         *guard = self;
     }
 
+    /// Estimates how many executions of `f` fit in one millisecond, for status-reporting estimates.
     pub fn executions_per_milli(&self, mut f: impl FnMut()) -> f64 {
         let start = Instant::now();
 
@@ -171,6 +190,7 @@ impl BenchCfg {
         unreachable!("above loop must return at some point")
     }
 
+    /// Number of executions between status updates, derived from `execs_per_milli`.
     pub fn status_freq(&self, execs_per_milli: f64) -> usize {
         let status_freq = self.status_millis as f64 * execs_per_milli;
         status_freq.ceil() as usize
