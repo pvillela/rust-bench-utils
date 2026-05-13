@@ -16,8 +16,8 @@ When invoked, you will thoroughly audit the `bench_utils` crate's test suite to 
 
 ### Test infrastructure
 - Tests use `cargo nextest run` (not `cargo test`)
-- Test command: `cargo nextest run --lib --bins --examples --tests --features _dev_utils,busy_work --target-dir target/test-target`
-- Most tests require `_dev_utils` + `_bench_run` features
+- Test command: `cargo nextest run --lib --bins --examples --tests --features _dev_support,busy_work --target-dir target/test-target`
+- Most tests require `_dev_support` + `_bench_run` features
 - Feature gating is complex — see AGENTS.md for the full feature tier documentation
 
 ### Testing patterns used in this crate

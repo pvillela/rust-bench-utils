@@ -194,7 +194,7 @@ pub fn bench_run_with_status(
 }
 
 #[cfg(test)]
-#[cfg(feature = "_dev_utils")]
+#[cfg(feature = "_dev_support")]
 mod test {
     use super::*;
     use crate::{LatencyUnit, RunLength};

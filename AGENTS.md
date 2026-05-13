@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Run a single test with nextest:
 ```bash
-cargo nextest run --lib --features _dev_utils,busy_work --target-dir target/test-target -- <test_name>
+cargo nextest run --lib --features _dev_support,busy_work --target-dir target/test-target -- <test_name>
 ```
 
 ## Feature flags
@@ -24,9 +24,9 @@ This crate has complex feature gating with several tiers:
 
 - **Public features**: `default` (= `_bench_run` + `__core`), `busy_work` (gates `sha2`-based CPU work), `criterion` (gates criterion bench harness)
 - **Helper features**: `__core` enables `basic_stats/normal` and `basic_stats/aok`. `__null` enables `basic_stats` crate. `__stats_opt` enables `basic_stats/wilcoxon`.
-- **Internal features**: `_bench_run` (enables `bench_run` module), `_dev_utils` (enables approx_eq macros + regex), `_dev_support` (Wilcoxon + AOK + regex, for friend crates). `_bench_diff` bundles what the `bench_diff` sibling crate needs.
+- **Internal features**: `_bench_run` (enables `bench_run` module), `_dev_support` (enables approx_eq macros + regex), `_dev_support` (Wilcoxon + AOK + regex, for friend crates). `_bench_diff` bundles what the `bench_diff` sibling crate needs.
 
-Most tests require `_dev_utils` + `_bench_run`. The feature `_bench_diff` is for use by the sibling `bench_diff` crate.
+Most tests require `_dev_support` + `_bench_run`. The feature `_bench_diff` is for use by the sibling `bench_diff` crate.
 
 ## Architecture
 

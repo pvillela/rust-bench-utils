@@ -2,37 +2,6 @@ use super::latency;
 use sha2::{Digest, Sha256};
 use std::{hint::black_box, time::Duration};
 
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_busy_work_minimal() {
-        // Should not panic with minimal effort
-        busy_work(1);
-    }
-
-    #[test]
-    fn test_busy_work_zero() {
-        // Should not panic with zero effort
-        busy_work(0);
-    }
-
-    #[test]
-    fn test_calibrate_busy_work_x() {
-        // Calibration should return a positive effort value
-        let effort = calibrate_busy_work_x(100_000, Duration::from_nanos(1000));
-        assert!(effort > 0);
-    }
-
-    #[test]
-    fn test_calibrate_busy_work() {
-        // Default calibration should return a positive effort value
-        let effort = calibrate_busy_work(Duration::from_nanos(2000));
-        assert!(effort > 0);
-    }
-}
-
 /// Function that does a significant amount of computation to support validation of benchmarking frameworks.
 /// `effort` is the number of iterations that determines the amount of work performed.
 /// Gated by feature **"busy_work"**.
@@ -64,4 +33,35 @@ pub fn calibrate_busy_work(target_latency: Duration) -> u32 {
 pub fn calibrate_busy_work_x(calibration_effort: u32, target_latency: Duration) -> u32 {
     let latency = latency(|| busy_work(calibration_effort));
     (target_latency.as_nanos() * calibration_effort as u128 / latency.as_nanos()) as u32
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_busy_work_minimal() {
+        // Should not panic with minimal effort
+        busy_work(1);
+    }
+
+    #[test]
+    fn test_busy_work_zero() {
+        // Should not panic with zero effort
+        busy_work(0);
+    }
+
+    #[test]
+    fn test_calibrate_busy_work_x() {
+        // Calibration should return a positive effort value
+        let effort = calibrate_busy_work_x(100_000, Duration::from_nanos(1000));
+        assert!(effort > 0);
+    }
+
+    #[test]
+    fn test_calibrate_busy_work() {
+        // Default calibration should return a positive effort value
+        let effort = calibrate_busy_work(Duration::from_nanos(2000));
+        assert!(effort > 0);
+    }
 }

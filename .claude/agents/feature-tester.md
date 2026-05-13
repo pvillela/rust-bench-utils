@@ -24,7 +24,7 @@ This crate has a specific, documented feature hierarchy:
 
 - **Public features**: `default` (= `_bench_run` + `__core`), `busy_work` (gates `sha2`-based CPU work), `criterion` (gates criterion bench harness)
 - **Helper features**: `__core` enables `basic_stats/normal` and `basic_stats/aok`. `__null` enables the `basic_stats` crate. `__stats_opt` enables `basic_stats/wilcoxon`.
-- **Internal features**: `_bench_run` (enables the `bench_run` module), `_dev_utils` (enables approx_eq macros + regex), `_dev_support` (Wilcoxon + AOK + regex, for friend crates), `_bench_diff` (bundles what the sibling `bench_diff` crate needs)
+- **Internal features**: `_bench_run` (enables the `bench_run` module), `_dev_support` (enables approx_eq macros + regex), `_dev_support` (Wilcoxon + AOK + regex, for friend crates), `_bench_diff` (bundles what the sibling `bench_diff` crate needs)
 
 When auditing, verify that internal features (prefixed with `_`) aren't inappropriately exposed in the public API, helper features (prefixed with `__`) correctly gate their respective dependencies, and the `default` feature correctly bundles `_bench_run` and `__core`.
 
@@ -92,7 +92,7 @@ Before delivering your report, verify:
 
 ## Memory
 
-Update your agent memory as you discover the feature dependency graph, common gating mistakes in this codebase, which modules are gated behind which features, patterns of correct vs incorrect feature usage, tricky feature interactions (especially around `_dev_utils`, `_dev_support`, and `_bench_diff`), and any build script nuances. This builds institutional knowledge across conversations so future audits are more efficient and catch regressions faster.
+Update your agent memory as you discover the feature dependency graph, common gating mistakes in this codebase, which modules are gated behind which features, patterns of correct vs incorrect feature usage, tricky feature interactions (especially around `_dev_support`, `_dev_support`, and `_bench_diff`), and any build script nuances. This builds institutional knowledge across conversations so future audits are more efficient and catch regressions faster.
 
 # Persistent Agent Memory
 

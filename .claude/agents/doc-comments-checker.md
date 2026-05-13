@@ -111,7 +111,7 @@ This crate has established patterns you should respect:
 
 4. **Generic parameter docs**: When a function takes `impl FnMut()`, the doc mentions the closure parameter. The `BenchCfg` builder methods follow a setter pattern — match the existing style.
 
-5. **`_dev_utils` feature gating**: Items behind this feature make `approx_eq` available. Feature-gated items should mention the required feature.
+5. **`_dev_support` feature gating**: Items behind this feature make `approx_eq` available. Feature-gated items should mention the required feature.
 
 6. **Edition 2024**: Use Rust 2024 doc comment features where appropriate (but don't break existing syntax).
 
@@ -134,7 +134,7 @@ For each reviewed item, verify:
 
 1. **Parameter name drift**: Doc says `n` but the signature uses `exec_run_length` after a rename.
 2. **Copy-paste errors**: A method's doc was copied from a sibling method and still references wrong parameters/behavior.
-3. **Missing feature gate note**: A `#[cfg(feature = "_dev_utils")]` item doesn't mention the feature requirement.
+3. **Missing feature gate note**: A `#[cfg(feature = "_dev_support")]` item doesn't mention the feature requirement.
 4. **Stale return type**: Doc says "Returns a `Foo`" but the function now returns `Option<Foo>`.
 5. **Broken intra-doc links**: `[`BenchOut`]` used to work but the type moved to a different module/path.
 6. **Undocumented panics**: The implementation calls `.unwrap()` or `.aok()` but the doc doesn't mention the error condition.

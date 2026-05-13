@@ -21,10 +21,10 @@ exclude = ["CHANGELOG.md", "*.sh", ".gitignore", "examples", "bin"]
 
 [dependencies]
 basic_stats = { path = "../basic-stats", default-features = false, optional = true }
-criterion = { version = "0.7.0", optional = true }
+criterion = { version = "0.8.2", optional = true }
 hdrhistogram = "7.5"
-regex = { version = "1.11.1", optional = true }
-sha2 = { version = "0.10.9", optional = true }
+regex = { version = "1.12.3", optional = true }
+sha2 = { version = "0.11.0", optional = true }
 
 [dev-dependencies]
 statrs = "0.18"
@@ -32,26 +32,30 @@ statrs = "0.18"
 [features]
 
 # Public
-default = ["__core", "_bench_run"] # should always be enabled for public use
+default = [
+    "__stats_core",
+    "_bench_run",
+] # should always be enabled for public use
 busy_work = ["dep:sha2"]
-criterion = ["dep:criterion"]
 
 # Helper
 __null = ["dep:basic_stats"]
-__core = ["basic_stats/normal", "basic_stats/aok"]
-__stats_opt = ["basic_stats/wilcoxon"]
+__stats_core = ["basic_stats/normal", "basic_stats/aok"]
 
 # Internal
-_bench_run = [] # flags items not to be used by `bench_diff` crate
-_dev_utils = ["basic_stats/_dev_utils"] # enables approx_eq traits and macros
+_bench_run = []              # flags items not to be used by `bench_diff` crate
+_benches = ["dep:criterion"] # used only by benches that enable criterion
+# Utilities used for testing or benchmarking, as well as
+# functionality developed but not intended for clients
 _dev_support = [
-    "__stats_opt",
+    "basic_stats/_dev_utils",
     "basic_stats/aok",
+    "basic_stats/wilcoxon",
     "dep:regex",
-] # to hide functionality developed but not intended for clients
+]
 
 # Shared with friends
-_bench_diff = ["__core", "_dev_support"] # for use by `bench_diff` crate
+_bench_diff = ["__stats_core", "_dev_support"] # for use by `bench_diff` crate
 
 [package.metadata.docs.rs]
 features = ["busy_work"]

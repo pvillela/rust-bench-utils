@@ -67,7 +67,7 @@ impl LatencyUnit {
 }
 
 #[cfg(test)]
-#[cfg(feature = "_dev_utils")]
+#[cfg(feature = "_dev_support")]
 mod test {
     use super::*;
     use basic_stats::approx_eq;
@@ -82,19 +82,55 @@ mod test {
     #[test]
     fn test_conversion_factor() {
         // Identity factors
-        approx_eq!(1.0, LatencyUnit::Milli.conversion_factor(LatencyUnit::Milli), 1e-15);
-        approx_eq!(1.0, LatencyUnit::Micro.conversion_factor(LatencyUnit::Micro), 1e-15);
-        approx_eq!(1.0, LatencyUnit::Nano.conversion_factor(LatencyUnit::Nano), 1e-15);
+        approx_eq!(
+            1.0,
+            LatencyUnit::Milli.conversion_factor(LatencyUnit::Milli),
+            1e-15
+        );
+        approx_eq!(
+            1.0,
+            LatencyUnit::Micro.conversion_factor(LatencyUnit::Micro),
+            1e-15
+        );
+        approx_eq!(
+            1.0,
+            LatencyUnit::Nano.conversion_factor(LatencyUnit::Nano),
+            1e-15
+        );
 
         // Convert from larger to smaller: Nano -> Micro -> Milli
-        approx_eq!(0.001, LatencyUnit::Nano.conversion_factor(LatencyUnit::Micro), 1e-15);
-        approx_eq!(0.000_001, LatencyUnit::Nano.conversion_factor(LatencyUnit::Milli), 1e-15);
-        approx_eq!(0.001, LatencyUnit::Micro.conversion_factor(LatencyUnit::Milli), 1e-15);
+        approx_eq!(
+            0.001,
+            LatencyUnit::Nano.conversion_factor(LatencyUnit::Micro),
+            1e-15
+        );
+        approx_eq!(
+            0.000_001,
+            LatencyUnit::Nano.conversion_factor(LatencyUnit::Milli),
+            1e-15
+        );
+        approx_eq!(
+            0.001,
+            LatencyUnit::Micro.conversion_factor(LatencyUnit::Milli),
+            1e-15
+        );
 
         // Convert from smaller to larger: Milli -> Micro -> Nano
-        approx_eq!(1000.0, LatencyUnit::Micro.conversion_factor(LatencyUnit::Nano), 1e-12);
-        approx_eq!(1_000_000.0, LatencyUnit::Milli.conversion_factor(LatencyUnit::Nano), 1e-9);
-        approx_eq!(1000.0, LatencyUnit::Milli.conversion_factor(LatencyUnit::Micro), 1e-12);
+        approx_eq!(
+            1000.0,
+            LatencyUnit::Micro.conversion_factor(LatencyUnit::Nano),
+            1e-12
+        );
+        approx_eq!(
+            1_000_000.0,
+            LatencyUnit::Milli.conversion_factor(LatencyUnit::Nano),
+            1e-9
+        );
+        approx_eq!(
+            1000.0,
+            LatencyUnit::Milli.conversion_factor(LatencyUnit::Micro),
+            1e-12
+        );
     }
 
     #[test]
