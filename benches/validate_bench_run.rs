@@ -23,7 +23,7 @@ fn run_bench(name: &'static str, target_latency: Duration, check: bool) {
     println!(
         "target_median={target_median}, out.median()={}, rel_diff={}",
         out.median(),
-        target_median.abs_rel_diff(out.median(), 0.)
+        target_median.abs_rel_diff(out.median(), EPSILON)
     );
     println!("{:?}", out.summary());
     println!();

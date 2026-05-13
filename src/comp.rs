@@ -250,13 +250,13 @@ impl<'a> Comp<'a> {
 
 #[cfg(test)]
 #[cfg(feature = "_dev_utils")]
-#[cfg(feature = "_bench_run")]
 mod test {
     use super::*;
     use crate::test_support::{
         HI_STDEV_LN, LO_STDEV_LN, lognormal_moments_ln, lognormal_moments_ln_jittered,
         lognormal_out, lognormal_out_jittered,
     };
+    use crate::{LatencyUnit, get_bench_cfg};
     use basic_stats::{approx_eq, core::AcceptedHyp};
 
     const EPSILON: f64 = 0.001;
@@ -271,6 +271,48 @@ mod test {
             && out1.n_ln == out2.n_ln
             && out1.sum_ln == out2.sum_ln
             && out1.sum2_ln == out2.sum2_ln
+    }
+
+    #[test]
+    fn test_comp_new_panics_on_recording_unit_mismatch() {
+        let saved_cfg = get_bench_cfg();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let cfg1 = get_bench_cfg();
+            cfg1.with_recording_unit(LatencyUnit::Nano).set();
+            let out1 = lognormal_out(8., *LO_STDEV_LN, 5);
+
+            let cfg2 = get_bench_cfg();
+            cfg2.with_recording_unit(LatencyUnit::Micro).set();
+            let out2 = lognormal_out(8., *LO_STDEV_LN, 5);
+
+            Comp::new(&out1, &out2);
+        }));
+        saved_cfg.set();
+        assert!(
+            result.is_err(),
+            "expected Comp::new to panic on recording unit mismatch"
+        );
+    }
+
+    #[test]
+    fn test_comp_new_panics_on_reporting_unit_mismatch() {
+        let saved_cfg = get_bench_cfg();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let cfg1 = get_bench_cfg();
+            cfg1.with_reporting_unit(LatencyUnit::Nano).set();
+            let out1 = lognormal_out(8., *LO_STDEV_LN, 5);
+
+            let cfg2 = get_bench_cfg();
+            cfg2.with_reporting_unit(LatencyUnit::Micro).set();
+            let out2 = lognormal_out(8., *LO_STDEV_LN, 5);
+
+            Comp::new(&out1, &out2);
+        }));
+        saved_cfg.set();
+        assert!(
+            result.is_err(),
+            "expected Comp::new to panic on reporting unit mismatch"
+        );
     }
 
     #[test]

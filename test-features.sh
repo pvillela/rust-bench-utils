@@ -20,7 +20,11 @@ echo "***** --no-default-features --features _dev_support"
 cargo nextest run --lib --tests --no-default-features --features _dev_support --target-dir target/test-target
 
 echo "***** --examples --all-features"
-cargo nextest run --examples --all-features
+cargo nextest run --examples --all-features --target-dir target/test-target
+
+
+echo "***** --bench (selected benches)"
+cargo bench --bench validate_latency_overhead --all-features
 
 
 echo "***** doc"

@@ -28,5 +28,4 @@ pub mod stats_types {
 }
 
 #[cfg(test)]
-#[cfg(feature = "_bench_run")]
 pub mod test_support;

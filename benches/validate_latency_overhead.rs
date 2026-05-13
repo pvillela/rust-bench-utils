@@ -2,10 +2,15 @@ use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
 use bench_utils::{
     RunLength, bench_run_with_status, busy_work, calibrate_busy_work, get_bench_cfg,
 };
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Compares latency outputs for `n` executions of a function `f` with `n/group_size` executions of `f` grouped `group_size` times.
-fn run_bench(bench_time: Duration, target_latency: Duration, group_size: usize) -> (f64, f64) {
+fn run_bench(
+    bench_time: Duration,
+    target_latency: Duration,
+    group_size: usize,
+    epsilon: f64,
+) -> (f64, f64) {
     let name = "Group of ".to_owned() + &group_size.to_string();
     let effort = calibrate_busy_work(target_latency);
     let solo_f = || busy_work(effort);
@@ -36,7 +41,7 @@ fn run_bench(bench_time: Duration, target_latency: Duration, group_size: usize) 
     println!(
         "target_median_solo={target_median_solo}, out_solo.median()={}, rel_diff={}",
         out_solo.median(),
-        target_median_solo.abs_rel_diff(out_solo.median(), 0.)
+        target_median_solo.abs_rel_diff(out_solo.median(), epsilon)
     );
     println!();
 
@@ -47,7 +52,7 @@ fn run_bench(bench_time: Duration, target_latency: Duration, group_size: usize) 
     println!(
         "target_median_group={target_median_group}, out_group.median()={}, rel_diff={}",
         out_group.median(),
-        target_median_group.abs_rel_diff(out_group.median(), 0.)
+        target_median_group.abs_rel_diff(out_group.median(), epsilon)
     );
     println!();
 
@@ -55,7 +60,7 @@ fn run_bench(bench_time: Duration, target_latency: Duration, group_size: usize) 
         "Solo vs. grouped: group_size={group_size}, out_solo.median()*group_size={}, out_group.median()={}, rel_diff={}",
         out_solo.median() * group_size as f64,
         out_group.median(),
-        target_median_group.abs_rel_diff(out_group.median(), 0.)
+        target_median_group.abs_rel_diff(out_group.median(), epsilon)
     );
     println!();
 
@@ -63,13 +68,20 @@ fn run_bench(bench_time: Duration, target_latency: Duration, group_size: usize) 
 }
 
 fn main() {
-    let bench_time = Duration::from_millis(3000);
+    const EPSILON: f64 = 0.1;
+
+    let start = Instant::now();
+    let cfg = get_bench_cfg();
+    cfg.with_warmup_millis(500).set();
+
+    let bench_time = Duration::from_millis(500);
     let target_latency = Duration::from_micros(100);
-    let epsilon: f64 = 0.1;
 
-    let (solo_median_20, group_median_20) = run_bench(bench_time, target_latency, 20);
-    let (solo_median_100, group_median_100) = run_bench(bench_time, target_latency, 100);
+    let (solo_median_20, group_median_20) = run_bench(bench_time, target_latency, 20, EPSILON);
+    let (solo_median_100, group_median_100) = run_bench(bench_time, target_latency, 100, EPSILON);
 
-    rel_approx_eq!(solo_median_20 * 20., group_median_20, epsilon);
-    rel_approx_eq!(solo_median_100 * 100., group_median_100, epsilon);
+    println!("elapsed time: {} millis", start.elapsed().as_millis());
+
+    rel_approx_eq!(solo_median_20 * 20., group_median_20, EPSILON);
+    rel_approx_eq!(solo_median_100 * 100., group_median_100, EPSILON);
 }

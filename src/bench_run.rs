@@ -192,3 +192,70 @@ pub fn bench_run_with_status(
     eprintln!();
     out
 }
+
+#[cfg(test)]
+#[cfg(feature = "_dev_utils")]
+mod test {
+    use super::*;
+    use crate::{LatencyUnit, RunLength};
+    use std::time::Duration;
+
+    /// Helper to get a clean config with minimal warmup/calibration for fast tests.
+    fn minimal_cfg_snapshot() -> BenchCfg {
+        let cfg = get_bench_cfg();
+        cfg.with_warmup_millis(0)
+            .with_status_calibr(100_000)
+            .with_status_millis(1)
+            .with_recording_unit(LatencyUnit::Nano)
+            .with_reporting_unit(LatencyUnit::Nano)
+            .set();
+        get_bench_cfg()
+    }
+
+    #[test]
+    fn test_bench_run_with_count() {
+        let saved_cfg = get_bench_cfg();
+        let _cfg = minimal_cfg_snapshot();
+
+        let out = bench_run(|| {}, RunLength::Count(5));
+        // With 5 count and no timeout, we should have exactly 5 iterations
+        assert_eq!(out.n(), 5);
+
+        // Reset config
+        saved_cfg.set();
+    }
+
+    #[test]
+    fn test_bench_run_x() {
+        let saved_cfg = get_bench_cfg();
+        let _cfg = minimal_cfg_snapshot();
+        // Use the snapshot cfg for calibration
+        let cfg = get_bench_cfg();
+        let execs_per_milli = cfg.executions_per_milli(|| {});
+
+        let out = bench_run_x(
+            || {},
+            0,
+            RunLength::Count(10),
+            None::<fn(usize)>,
+            None::<fn(usize)>,
+            execs_per_milli,
+        );
+        assert_eq!(out.n(), 10);
+
+        saved_cfg.set();
+    }
+
+    #[test]
+    fn test_bench_run_with_timeout() {
+        let saved_cfg = get_bench_cfg();
+        let _cfg = minimal_cfg_snapshot();
+
+        // Use a very short timeout that should be exceeded immediately
+        let out = bench_run(|| {}, RunLength::Duration(Duration::from_nanos(1)));
+        // At least some executions should have been captured
+        assert!(out.n() > 0);
+
+        saved_cfg.set();
+    }
+}

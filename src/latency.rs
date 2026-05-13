@@ -65,3 +65,99 @@ impl LatencyUnit {
         self.latency_from_u64(elapsed as u64)
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "_dev_utils")]
+mod test {
+    use super::*;
+    use basic_stats::approx_eq;
+
+    #[test]
+    fn test_latency() {
+        let dur = latency(|| {});
+        // latency of a no-op closure should be sub-second
+        assert!(dur < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn test_conversion_factor() {
+        // Identity factors
+        approx_eq!(1.0, LatencyUnit::Milli.conversion_factor(LatencyUnit::Milli), 1e-15);
+        approx_eq!(1.0, LatencyUnit::Micro.conversion_factor(LatencyUnit::Micro), 1e-15);
+        approx_eq!(1.0, LatencyUnit::Nano.conversion_factor(LatencyUnit::Nano), 1e-15);
+
+        // Convert from larger to smaller: Nano -> Micro -> Milli
+        approx_eq!(0.001, LatencyUnit::Nano.conversion_factor(LatencyUnit::Micro), 1e-15);
+        approx_eq!(0.000_001, LatencyUnit::Nano.conversion_factor(LatencyUnit::Milli), 1e-15);
+        approx_eq!(0.001, LatencyUnit::Micro.conversion_factor(LatencyUnit::Milli), 1e-15);
+
+        // Convert from smaller to larger: Milli -> Micro -> Nano
+        approx_eq!(1000.0, LatencyUnit::Micro.conversion_factor(LatencyUnit::Nano), 1e-12);
+        approx_eq!(1_000_000.0, LatencyUnit::Milli.conversion_factor(LatencyUnit::Nano), 1e-9);
+        approx_eq!(1000.0, LatencyUnit::Milli.conversion_factor(LatencyUnit::Micro), 1e-12);
+    }
+
+    #[test]
+    fn test_latency_as_u64() {
+        let dur = Duration::new(1, 500_000_000); // 1.5 seconds
+        assert_eq!(1500, LatencyUnit::Milli.latency_as_u64(dur));
+        assert_eq!(1_500_000, LatencyUnit::Micro.latency_as_u64(dur));
+        assert_eq!(1_500_000_000, LatencyUnit::Nano.latency_as_u64(dur));
+
+        let zero = Duration::ZERO;
+        assert_eq!(0, LatencyUnit::Milli.latency_as_u64(zero));
+        assert_eq!(0, LatencyUnit::Micro.latency_as_u64(zero));
+        assert_eq!(0, LatencyUnit::Nano.latency_as_u64(zero));
+    }
+
+    #[test]
+    fn test_latency_from_u64_roundtrip() {
+        // Milli round-trip
+        let dur = LatencyUnit::Milli.latency_from_u64(42);
+        assert_eq!(42, LatencyUnit::Milli.latency_as_u64(dur));
+
+        // Micro round-trip
+        let dur = LatencyUnit::Micro.latency_from_u64(42);
+        assert_eq!(42, LatencyUnit::Micro.latency_as_u64(dur));
+
+        // Nano round-trip
+        let dur = LatencyUnit::Nano.latency_from_u64(42);
+        assert_eq!(42, LatencyUnit::Nano.latency_as_u64(dur));
+
+        // Zero
+        let dur = LatencyUnit::Micro.latency_from_u64(0);
+        assert_eq!(0, LatencyUnit::Micro.latency_as_u64(dur));
+
+        // Large value (fits exactly in Duration)
+        let val: u64 = 1_000_000_000_000_000; // 10^15 nanos = ~11.6 days
+        let dur = LatencyUnit::Nano.latency_from_u64(val);
+        assert_eq!(val, LatencyUnit::Nano.latency_as_u64(dur));
+    }
+
+    #[test]
+    fn test_latency_as_f64() {
+        // Use durations that are exact in each unit to avoid truncation.
+        // 2 ms = 2000 us = 2_000_000 ns
+        let dur = Duration::from_millis(2);
+        approx_eq!(2.0, LatencyUnit::Milli.latency_as_f64(dur), 1e-12);
+        approx_eq!(2000.0, LatencyUnit::Micro.latency_as_f64(dur), 1e-9);
+        approx_eq!(2_000_000.0, LatencyUnit::Nano.latency_as_f64(dur), 1e-6);
+
+        // Very small duration in nanos, should be 0 in larger units
+        let small = Duration::from_nanos(500);
+        approx_eq!(0.0, LatencyUnit::Milli.latency_as_f64(small), 1e-12);
+    }
+
+    #[test]
+    fn test_latency_from_f64() {
+        // Milli truncation (f64 truncation when cast to u64)
+        assert_eq!(
+            Duration::from_millis(1000),
+            LatencyUnit::Milli.latency_from_f64(1000.9)
+        );
+        assert_eq!(
+            Duration::from_micros(500),
+            LatencyUnit::Micro.latency_from_f64(500.7)
+        );
+    }
+}

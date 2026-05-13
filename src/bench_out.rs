@@ -305,7 +305,6 @@ impl Debug for BenchOut {
 
 #[cfg(test)]
 #[cfg(feature = "_dev_utils")]
-#[cfg(feature = "_bench_run")]
 mod test {
     use super::*;
     use crate::{
@@ -314,7 +313,7 @@ mod test {
     };
     use basic_stats::{
         approx_eq,
-        core::AcceptedHyp,
+        core::{AcceptedHyp, PositionWrtCi},
         normal::{normal_detm_samp, student_1samp_df, student_1samp_p},
         rel_approx_eq,
     };
@@ -417,6 +416,11 @@ mod test {
         assert_eq!(out.n(), 2 * k * k - 1);
         assert_eq!(out.nf(), out.n() as f64);
 
+        // The true median (exp(mu)) should lie inside the CI
+        let true_median = mu.exp();
+        let position = out.student_value_position_wrt_median_ci(true_median, ALPHA);
+        assert_eq!(position, PositionWrtCi::In);
+
         {
             let ratio_medians: f64 = 1.0;
             let mu0 = mu - ratio_medians.ln();
@@ -429,7 +433,7 @@ mod test {
             let exp_ln_ci = student_1samp_ci(&moments_ln, ALPHA).unwrap();
             let exp_ci = Ci(exp_ln_ci.0.exp(), exp_ln_ci.1.exp());
 
-            rel_approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON); // doesn't pass
+            approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON);
             approx_eq!(exp_df, out.student_ln_df(), EPSILON);
             rel_approx_eq!(exp_p, out.student_ln_p(mu0, alt_hyp), EPSILON);
             rel_approx_eq!(exp_ci.0, out.student_median_ci(ALPHA).0, EPSILON);
@@ -451,7 +455,7 @@ mod test {
             let exp_ln_ci = student_1samp_ci(&moments_ln, ALPHA).unwrap();
             let exp_ci = Ci(exp_ln_ci.0.exp(), exp_ln_ci.1.exp());
 
-            rel_approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON); // doesn't pass
+            rel_approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON);
             approx_eq!(exp_df, out.student_ln_df(), EPSILON);
             rel_approx_eq!(exp_p, out.student_ln_p(mu0, alt_hyp), EPSILON);
             rel_approx_eq!(exp_ci.0, out.student_median_ci(ALPHA).0, EPSILON);
