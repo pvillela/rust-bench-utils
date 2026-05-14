@@ -60,7 +60,7 @@ fn run_bench(
         "Solo vs. grouped: group_size={group_size}, out_solo.median()*group_size={}, out_group.median()={}, rel_diff={}",
         out_solo.median() * group_size as f64,
         out_group.median(),
-        target_median_group.abs_rel_diff(out_group.median(), epsilon)
+        (out_solo.median() * group_size as f64).abs_rel_diff(out_group.median(), epsilon)
     );
     println!();
 
