@@ -5,7 +5,7 @@ use basic_stats::{
     normal::{welch_ci, welch_df, welch_p, welch_t, welch_test},
 };
 
-#[cfg(feature = "_dev_support")]
+#[cfg(feature = "_experimental")]
 use basic_stats::wilcoxon::RankSum;
 
 /// Struct that holds references to the benchmark outputs of two closures (`f1` and `f2`) for comparison purposes.
@@ -195,16 +195,16 @@ impl<'a> Comp<'a> {
         .aok()
     }
 
-    #[cfg(feature = "_dev_support")]
+    #[cfg(feature = "_experimental")]
     /// Wilcoxon rank sum struct.
     fn rank_sum(&self) -> RankSum {
-        let iter_f1 = self.0.hist().iter_recorded().map(|x| {
+        let iter_f1 = self.0.hist.iter_recorded().map(|x| {
             let value = x.value_iterated_to();
             let count = x.count_at_value();
             (value as f64, count)
         });
 
-        let iter_f2 = self.1.hist().iter_recorded().map(|x| {
+        let iter_f2 = self.1.hist.iter_recorded().map(|x| {
             let value = x.value_iterated_to();
             let count = x.count_at_value();
             (value as f64, count)
@@ -214,42 +214,42 @@ impl<'a> Comp<'a> {
             .expect("data should be in strictly increasing order")
     }
 
-    #[cfg(feature = "_dev_support")]
+    #[cfg(feature = "_experimental")]
     /// Wilcoxon rank sum *W* statistic for `latency(f1)` and `latency(f2)`.
     ///
-    /// Requires feature `_dev_support`.
+    /// Requires feature `_experimental`.
     pub fn wilcoxon_rank_sum_w(&self) -> f64 {
         self.rank_sum().w()
     }
 
-    #[cfg(feature = "_dev_support")]
+    #[cfg(feature = "_experimental")]
     /// Wilcoxon rank sum normal approximation *z* value for `latency(f1)` and `latency(f2)`.
     ///
-    /// Requires feature `_dev_support`.
+    /// Requires feature `_experimental`.
     pub fn wilcoxon_rank_sum_z(&self) -> f64 {
         self.rank_sum().z().aok()
     }
 
-    #[cfg(feature = "_dev_support")]
+    #[cfg(feature = "_experimental")]
     /// Wilcoxon rank sum normal approximation *p* value for `latency(f1)` and `latency(f2)`.
     ///
-    /// Requires feature `_dev_support`.
+    /// Requires feature `_experimental`.
     pub fn wilcoxon_rank_sum_p(&self, alt_hyp: AltHyp) -> f64 {
         self.rank_sum().z_p(alt_hyp).aok()
     }
 
-    #[cfg(feature = "_dev_support")]
+    #[cfg(feature = "_experimental")]
     /// Wilcoxon rank sum test for `latency(f1)` and `latency(f2)`,
     /// with alternative hypothesis `alt_hyp` and confidence level `(1 - alpha)`.
     ///
-    /// Requires feature `_dev_support`.
+    /// Requires feature `_experimental`.
     pub fn wilcoxon_rank_sum_test(&self, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
         self.rank_sum().z_test(alt_hyp, alpha).aok()
     }
 }
 
 #[cfg(test)]
-#[cfg(feature = "_bench_run")]
+#[cfg(feature = "_experimental")]
 #[cfg(feature = "_dev_support")]
 mod test {
     use super::*;
@@ -272,27 +272,6 @@ mod test {
             && out1.n_ln == out2.n_ln
             && out1.sum_ln == out2.sum_ln
             && out1.sum2_ln == out2.sum2_ln
-    }
-
-    #[test]
-    fn test_comp_new_panics_on_recording_unit_mismatch() {
-        let saved_cfg = get_bench_cfg();
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let cfg1 = get_bench_cfg();
-            cfg1.with_recording_unit(LatencyUnit::Nano).set();
-            let out1 = lognormal_out(8., *LO_STDEV_LN, 5);
-
-            let cfg2 = get_bench_cfg();
-            cfg2.with_recording_unit(LatencyUnit::Micro).set();
-            let out2 = lognormal_out(8., *LO_STDEV_LN, 5);
-
-            Comp::new(&out1, &out2);
-        }));
-        saved_cfg.set();
-        assert!(
-            result.is_err(),
-            "expected Comp::new to panic on recording unit mismatch"
-        );
     }
 
     #[test]

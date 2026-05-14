@@ -12,9 +12,7 @@ pub use fake_work::*;
 pub use latency::*;
 pub use summary_stats::*;
 
-#[cfg(feature = "_bench_run")]
 mod bench_run;
-#[cfg(feature = "_bench_run")]
 pub use bench_run::*;
 
 #[cfg(feature = "busy_work")]
@@ -26,6 +24,9 @@ pub use busy_work::*;
 pub mod stats_types {
     pub use basic_stats::core::{AcceptedHyp, AltHyp, Ci, HypTestResult, PositionWrtCi};
 }
+
+#[cfg(feature = "_benches")]
+pub mod bench_support;
 
 #[cfg(test)]
 pub mod test_support;

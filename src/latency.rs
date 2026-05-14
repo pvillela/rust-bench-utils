@@ -80,15 +80,36 @@ impl LatencyUnit {
 
 #[cfg(test)]
 #[cfg(feature = "_dev_support")]
+#[cfg(feature = "_benches")]
 mod test {
     use super::*;
-    use basic_stats::approx_eq;
+    use crate::{bench_support::validate_latency_overhead, get_bench_cfg};
+    use basic_stats::{approx_eq, rel_approx_eq};
 
     #[test]
-    fn test_latency() {
-        let dur = latency(|| {});
-        // latency of a no-op closure should be sub-second
-        assert!(dur < Duration::from_secs(1));
+    fn test_latency_overhead() {
+        const EPSILON: f64 = 0.1;
+
+        let start = Instant::now();
+
+        let saved = get_bench_cfg();
+        let cfg = get_bench_cfg();
+        cfg.with_warmup_millis(100).set();
+
+        let bench_time = Duration::from_millis(100);
+        let target_latency = Duration::from_micros(50);
+
+        let (solo_median_20, group_median_20) =
+            validate_latency_overhead(bench_time, target_latency, 20, EPSILON);
+        let (solo_median_100, group_median_100) =
+            validate_latency_overhead(bench_time, target_latency, 100, EPSILON);
+
+        saved.set();
+
+        println!("elapsed time: {} millis", start.elapsed().as_millis());
+
+        rel_approx_eq!(solo_median_20 * 20., group_median_20, EPSILON);
+        rel_approx_eq!(solo_median_100 * 100., group_median_100, EPSILON);
     }
 
     #[test]

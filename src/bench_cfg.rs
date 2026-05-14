@@ -198,7 +198,6 @@ impl BenchCfg {
 }
 
 #[cfg(test)]
-#[cfg(feature = "_bench_run")] // needed for `get_bench_cfg`
 mod test {
     use crate::{LatencyUnit, RunLength, get_bench_cfg};
     use std::time::Duration;

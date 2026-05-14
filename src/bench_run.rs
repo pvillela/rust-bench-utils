@@ -194,7 +194,6 @@ pub fn bench_run_with_status(
 }
 
 #[cfg(test)]
-#[cfg(feature = "_bench_run")] // redundant, for additional clarity
 #[cfg(feature = "_dev_support")]
 mod test {
     use super::*;

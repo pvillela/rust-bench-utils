@@ -2,5 +2,13 @@
 
 export RUSTFLAGS="-Awarnings"
 
-cargo nextest run --lib --bins --examples --tests --features _dev_support,busy_work --target-dir target/test-target
+# NOCOVER environment variable enables tests that are excluded from test coverage measurement.
+export NOCOVER="1"
+
+./check-features.sh || { echo "Error: check-features failed"; exit 1; }
+
+echo "***** all except benches, all features"
+cargo nextest run  --lib --bins --examples --tests --all-features --target-dir target/test-target
+
+echo "***** doc"
 cargo test --doc

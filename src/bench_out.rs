@@ -53,7 +53,6 @@ impl BenchOut {
         }
     }
 
-    #[cfg(feature = "_bench_run")]
     /// Creates a new empty instance with `recording_unit`, `reporting_unit`, and `sigfig` from [`crate::BenchCfg`].
     pub(super) fn default() -> Self {
         use crate::get_bench_cfg;
@@ -245,9 +244,9 @@ impl BenchOut {
         student_1samp_test(&moments, ln_mu0_rec, alt_hyp, alpha).aok()
     }
 
-    #[cfg(feature = "_dev_support")]
+    #[cfg(feature = "_bench_diff")]
     #[inline(always)]
-    /// Reference to the raw HDR histogram. Requires feature `_dev_support`.
+    /// Reference to the raw HDR histogram. Requires feature `_bench_diff`.
     pub fn hist(&self) -> &Timing {
         &self.hist
     }
@@ -304,7 +303,6 @@ impl Debug for BenchOut {
 }
 
 #[cfg(test)]
-#[cfg(feature = "_bench_run")]
 #[cfg(feature = "_dev_support")]
 mod test {
     use super::*;

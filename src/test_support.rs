@@ -1,5 +1,3 @@
-#![cfg(feature = "_bench_run")]
-
 use crate::BenchOut;
 use basic_stats::{core::SampleMoments, normal::normal_detm_samp};
 use std::sync::LazyLock;
