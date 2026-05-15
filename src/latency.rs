@@ -79,8 +79,8 @@ impl LatencyUnit {
 }
 
 #[cfg(test)]
-#[cfg(feature = "_dev_support")]
-#[cfg(feature = "_benches")]
+#[cfg(feature = "_test_support")]
+#[cfg(feature = "_bench")]
 mod test {
     use super::*;
     use crate::{bench_support::validate_latency_overhead, get_bench_cfg};

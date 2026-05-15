@@ -31,7 +31,7 @@ fi
 
 echo "Started ${tag} at: `date +"%H:%M:%S"`, output_target=$output_target" | tee /dev/stderr > $output_target
 
-cargo criterion --bench criterion_comp --features _benches --target-dir target/bench-target 2>> $output_target
+cargo criterion --bench criterion_comp --features _bench --target-dir target/bench-target 2>> $output_target
 
 echo "Finished ${tag} at: `date +"%H:%M:%S"`" | tee /dev/stderr >> $output_target
 

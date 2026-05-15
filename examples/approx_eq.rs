@@ -1,3 +1,6 @@
+//! Private example.
+//! Requires private feature(s) for execution.
+
 use basic_stats::approx_eq;
 
 fn main() {

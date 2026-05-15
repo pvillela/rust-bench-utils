@@ -63,7 +63,7 @@ The primary way users access the global benchmark config -- no doc comment.
 
 #### Feature-gated `BenchOut` accessors (bench_out.rs:248-282)
 Six methods behind feature gates with no doc comments:
-- `hist()` at line 250 (`#[cfg(feature = "_dev_support")]`)
+- `hist()` at line 250 (`#[cfg(feature = "_test_support")]`)
 - `sum()` at line 256 (`#[cfg(feature = "_bench_diff")]`)
 - `sum2()` at line 261 (`#[cfg(feature = "_bench_diff")]`)
 - `n_ln()` at line 267 (`#[cfg(feature = "_bench_diff")]`)
@@ -109,7 +109,7 @@ Doc says "for for" -- duplicate word.
 Doc says "natural logarithms latencies" -- should be "natural logarithms of latencies" or "of the natural logarithms of latencies."
 
 #### Feature-gated `Comp` methods missing feature mention (comp.rs:215-237)
-Four `_dev_support`-gated `Comp` methods (wilcoxon_rank_sum_w, wilcoxon_rank_sum_z, wilcoxon_rank_sum_p, wilcoxon_rank_sum_test) have doc comments but do not mention they require feature `_dev_support`.
+Four `_test_support`-gated `Comp` methods (wilcoxon_rank_sum_w, wilcoxon_rank_sum_z, wilcoxon_rank_sum_p, wilcoxon_rank_sum_test) have doc comments but do not mention they require feature `_test_support`.
 
 ### Minor Issues
 
@@ -137,4 +137,4 @@ No `rust` code blocks were found inside `///` doc comments in any source file. T
 5. Fix copy-paste bug in `Comp::welch_ln_p` and `Comp::welch_ln_test` docs (`f1/f1` -> `f1/f2`)
 6. Add doc comments to feature-gated `BenchOut` accessors
 7. Add doc comments to `get_bench_cfg()`, `Comp::out_f1()`, `Comp::out_f2()`
-8. Add feature requirement mentions to `_dev_support`-gated `Comp` methods
+8. Add feature requirement mentions to `_test_support`-gated `Comp` methods

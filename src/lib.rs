@@ -25,7 +25,7 @@ pub mod stats_types {
     pub use basic_stats::core::{AcceptedHyp, AltHyp, Ci, HypTestResult, PositionWrtCi};
 }
 
-#[cfg(feature = "_benches")]
+#[cfg(feature = "_bench")]
 pub mod bench_support;
 
 #[cfg(test)]

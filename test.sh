@@ -7,8 +7,8 @@ export NOCOVER="1"
 
 ./check-features.sh || { echo "Error: check-features failed"; exit 1; }
 
-echo "***** all except benches, all features"
+echo "***** test all except benches, all features"
 cargo nextest run  --lib --bins --examples --tests --all-features --target-dir target/test-target
 
-echo "***** doc"
-cargo test --doc
+echo "***** test doc"
+cargo test --doc --target-dir target/test-target

@@ -303,7 +303,7 @@ impl Debug for BenchOut {
 }
 
 #[cfg(test)]
-#[cfg(feature = "_dev_support")]
+#[cfg(feature = "_test_support")]
 mod test {
     use super::*;
     use crate::{

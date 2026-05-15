@@ -1,5 +1,6 @@
+//! Private example.
+//! Requires private feature(s) for execution.
 //! Parses a file containing the outputs of Criterion runs and prints it in CSV format to `stdout` with '|' as separator.
-//! Requires feature "_dev_support".
 
 use regex::Regex;
 use std::{
@@ -203,13 +204,7 @@ fn print_section_to_csv(s: &Section) {
         for (j, col) in time_table.iter().enumerate() {
             print!(
                 "{}|{}|{}|{}|{}|{}|{}",
-                name_vec[j],
-                col[i].0.0,
-                col[i].0.1,
-                col[i].1.0,
-                col[i].1.1,
-                col[i].2.0,
-                col[i].2.1,
+                name_vec[j], col[i].0.0, col[i].0.1, col[i].1.0, col[i].1.1, col[i].2.0, col[i].2.1,
             );
             if j < nkeys - 1 {
                 print!("| |")

@@ -250,7 +250,7 @@ impl<'a> Comp<'a> {
 
 #[cfg(test)]
 #[cfg(feature = "_experimental")]
-#[cfg(feature = "_dev_support")]
+#[cfg(feature = "_test_support")]
 mod test {
     use super::*;
     use crate::test_support::{

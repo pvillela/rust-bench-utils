@@ -16,8 +16,8 @@ When invoked, you will thoroughly audit the `bench_utils` crate's test suite to 
 
 ### Test infrastructure
 - Tests use `cargo nextest run` (not `cargo test`)
-- Test command: `cargo nextest run --lib --bins --examples --tests --features _dev_support,busy_work --target-dir target/test-target`
-- Most tests require `_dev_support` + `_bench_run` features
+- Test command: `cargo nextest run --lib --bins --examples --tests --features _test_support,busy_work --target-dir target/test-target`
+- Most tests require `_test_support` + `_bench_run` features
 - Feature gating is complex — see AGENTS.md for the full feature tier documentation
 
 ### Testing patterns used in this crate
@@ -37,7 +37,7 @@ When invoked, you will thoroughly audit the `bench_utils` crate's test suite to 
 | `bench_run` | ❌ No | `bench_run()`, `bench_run_x()`, `bench_run_with_status()`, `get_bench_cfg()` — core orchestration |
 | `bench_cfg` | ✅ Yes | `test_bench_cfg()` tests getters/setters but NOT `executions_per_milli()`, `status_freq()`, `estimated_count()`, `estimated_duration()` |
 | `bench_out` | ✅ Yes | Descriptive and Student's-t stats tested with lognormal samples |
-| `comp` | ✅ Yes | Welch's t methods tested; Wilcoxon (`_dev_support`-gated) methods NOT tested |
+| `comp` | ✅ Yes | Welch's t methods tested; Wilcoxon (`_test_support`-gated) methods NOT tested |
 | `summary_stats` | ❌ No | `new_timing()`, `summary_stats()` are `#[doc(hidden)]` — lower priority |
 | `test_support` | N/A | Test helper module, not itself tested |
 
@@ -78,7 +78,7 @@ Beyond per-function coverage, identify systematic testing gaps:
    - `Comp::new()` panics when units don't match — is this tested?
    - `BenchState::execute()` asserts `status_freq > 0` and `exec_count > 0` — are these paths tested?
 
-2. **Feature-gated code tests**: Check if tests exist for code behind non-default features (`_dev_support`, `_bench_diff`, `criterion`). Check `./test-features.sh` to see which feature combinations are tested.
+2. **Feature-gated code tests**: Check if tests exist for code behind non-default features (`_test_support`, `_bench_diff`, `criterion`). Check `./test-features.sh` to see which feature combinations are tested.
 
 3. **Edge case tests**:
    - Zero iterations / empty sample
@@ -118,7 +118,7 @@ Prioritize critical gaps first. Each recommendation should be specific enough th
 
 3. **Calibration instability**: `executions_per_milli()` uses an iterative doubling approach. Edge cases (extremely fast or slow functions) could cause it to return inaccurate estimates or loop excessively.
 
-4. **Feature gate surprises**: A change to `Cargo.toml` feature definitions could silently disable code paths. The `busy_work` and `_dev_support` features are particularly vulnerable.
+4. **Feature gate surprises**: A change to `Cargo.toml` feature definitions could silently disable code paths. The `busy_work` and `_test_support` features are particularly vulnerable.
 
 5. **Duration arithmetic edge cases**: `RunLength` combinations with `usize::MAX`, `Duration::MAX`, and the min/max logic in `estimated_count`/`estimated_duration`.
 

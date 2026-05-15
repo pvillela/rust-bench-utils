@@ -20,7 +20,10 @@ exclude = ["CHANGELOG.md", "*.sh", ".gitignore", "examples", "bin"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-basic_stats = { path = "../basic-stats", default-features = false, optional = true }
+basic_stats = { path = "../basic-stats", default-features = false, features = [
+    "normal",
+    "aok",
+], optional = true }
 criterion = { version = "0.8.2", optional = true }
 hdrhistogram = "7.5"
 regex = { version = "1.12.3", optional = true }
@@ -31,32 +34,25 @@ statrs = "0.18"
 
 [features]
 
-# Public
-default = [
-    "basic_stats/normal",
-    "basic_stats/aok",
-] # should always be enabled for public use
+## Public
+default = ["dep:basic_stats"] # should always be enabled for public use
 busy_work = ["dep:sha2"]
 
-# Helper
-__null = ["dep:basic_stats"]
-
-# Internal
-_benches = [
-    "_dev_support",
+## Internal
+_bench = [
+    "_test_support",
     "busy_work",
     "dep:criterion",
 ] # used by some benches and some tests
-_dev_support = [
+_test_support = [
     "basic_stats/_dev_utils",
     "dep:regex",
 ] # utilities used for testing or benchmarking
 _experimental = [
     "basic_stats/wilcoxon",
-    # "basic_stats/aok",
 ] # functionality developed but not intended for clients
 
-# Shared with friends
+## Shared with friends
 _bench_diff = ["_experimental"] # for use by `bench_diff` crate
 
 [package.metadata.docs.rs]

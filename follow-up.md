@@ -23,4 +23,4 @@ Consider adding public getter methods for consistency with `warmup_millis()`, `r
 
 ## Review `fn hist` accessor
 
-`bench_out.rs` — the `hist()` accessor is gated behind `feature = "_dev_support"`. It returns a reference to the raw HDR histogram. Review whether this feature gate is appropriate or if it should be made more broadly available.
+`bench_out.rs` — the `hist()` accessor is gated behind `feature = "_test_support"`. It returns a reference to the raw HDR histogram. Review whether this feature gate is appropriate or if it should be made more broadly available.
