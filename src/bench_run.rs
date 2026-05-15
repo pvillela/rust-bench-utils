@@ -1,6 +1,6 @@
 //! Implements functions to collect latency statistics for a closure.
 
-use crate::{BenchCfg, BenchOut, LatencyUnit, RunLength, latency};
+use crate::{BenchCfg, BenchOut, RunLength, latency};
 use std::{
     io::{Write, stderr},
     ops::Deref,
@@ -9,12 +9,11 @@ use std::{
 };
 
 static BENCH_CFG: Mutex<BenchCfg> = Mutex::new(BenchCfg::new(
-    3000,
-    LatencyUnit::Nano,
-    LatencyUnit::Micro,
-    3,
-    3,
-    1000,
+    BenchCfg::DEFAULT_WARMUP_MILLIS,
+    BenchCfg::DEFAULT_RECORDING_UNIT,
+    BenchCfg::DEFAULT_REPORTING_UNIT,
+    BenchCfg::DEFAULT_SIGFIG,
+    BenchCfg::DEFAULT_STATUS_MILLIS,
     &BENCH_CFG,
 ));
 
@@ -204,7 +203,6 @@ mod test {
     fn minimal_cfg_snapshot() -> BenchCfg {
         let cfg = get_bench_cfg();
         cfg.with_warmup_millis(0)
-            .with_status_calibr(100_000)
             .with_status_millis(1)
             .with_recording_unit(LatencyUnit::Nano)
             .with_reporting_unit(LatencyUnit::Nano)

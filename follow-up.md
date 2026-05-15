@@ -1,7 +1,7 @@
 # Follow-up Items
 
 ## Review `welch_ln_ci` doc comment
-
+**DONE**
 `comp.rs` — the doc for `Comp::welch_ln_ci` currently says:
 
 > This is also the confidence interval for the difference of medians of logarithms under the above assumption.

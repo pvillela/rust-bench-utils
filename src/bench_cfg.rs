@@ -56,18 +56,25 @@ impl RunLength {
     }
 }
 
-/// Global benchmark configuration: warm-up duration, recording/reporting units,
-/// significant figures, and status-reporting calibration parameters.
+/// Global benchmark configuration.
 ///
-/// Stored in a `static Mutex` and accessed via [`get_bench_cfg`](crate::get_bench_cfg).
-/// Modified through the builder methods and committed with [`set`](BenchCfg::set).
+/// Encapsulates:
+/// -   warm-up duration in milliseconds
+/// -   recording and reporting units
+/// -   significant figures; as data is stored in an
+///     [HDR (high dynamic range) histogram](https://docs.rs/hdrhistogram/latest/hdrhistogram/index.html),
+///     this is the number of significant decimal digits to which the histogram will maintain value resolution
+///     and separation
+/// -   milliseconds between status reports during bench execution
+///
+/// Stored in a `static Mutex`, and accessed via function `get_bench_cfg` (which not a method),
+/// modified through builder methods, and committed with the `set` method.
 #[derive(Debug, Clone)]
 pub struct BenchCfg {
     warmup_millis: u64,
     recording_unit: LatencyUnit,
     reporting_unit: LatencyUnit,
     sigfig: u8,
-    base_status_calibr: u64,
     status_millis: u64,
     static_ref: &'static Mutex<BenchCfg>,
 }
@@ -79,7 +86,6 @@ impl BenchCfg {
         recording_unit: LatencyUnit,
         reporting_unit: LatencyUnit,
         sigfig: u8,
-        base_status_calibr: u64,
         status_millis: u64,
         static_ref: &'static Mutex<BenchCfg>,
     ) -> BenchCfg {
@@ -88,13 +94,18 @@ impl BenchCfg {
             recording_unit,
             reporting_unit,
             sigfig,
-            base_status_calibr,
             status_millis,
             static_ref,
         }
     }
 
-    /// The currently defined [`RunLength`] used to "warm-up" the benchmark. The default is 3,000 ms.
+    pub const DEFAULT_WARMUP_MILLIS: u64 = 3000;
+    pub const DEFAULT_RECORDING_UNIT: LatencyUnit = LatencyUnit::Nano;
+    pub const DEFAULT_REPORTING_UNIT: LatencyUnit = LatencyUnit::Micro;
+    pub const DEFAULT_SIGFIG: u8 = 3;
+    pub const DEFAULT_STATUS_MILLIS: u64 = 1000;
+
+    /// The number of milliseconds used to "warm-up" the benchmark.
     pub fn warmup_millis(&self) -> u64 {
         self.warmup_millis
     }
@@ -109,17 +120,24 @@ impl BenchCfg {
         self.reporting_unit
     }
 
+    /// Number of significant figures used for the HDR histogram.
+    ///
+    /// This is the number of significant decimal digits to which the histogram will maintain value resolution and separation.
+    pub fn sigfig(&self) -> u8 {
+        self.sigfig
+    }
+
+    /// Status reporting interval in milliseconds
+    pub fn status_millis(&self) -> u64 {
+        self.status_millis
+    }
+
     /// Factor to convert from the recording unit to the reporting unit.
     pub fn conversion_factor(&self) -> f64 {
         self.recording_unit.conversion_factor(self.reporting_unit)
     }
 
-    /// Number of significant figures used for the HDR histogram.
-    pub fn sigfig(&self) -> u8 {
-        self.sigfig
-    }
-
-    /// Changes the number of milliseconds used to "warm-up" the benchmark. The default is 3,000 ms.
+    /// Changes the number of milliseconds used to "warm-up" the benchmark.
     pub fn with_warmup_millis(mut self, warmup_millis: u64) -> Self {
         self.warmup_millis = warmup_millis;
         self
@@ -143,12 +161,6 @@ impl BenchCfg {
         self
     }
 
-    /// Sets the base calibration iteration count for status reporting.
-    pub fn with_status_calibr(mut self, status_calibr: u64) -> Self {
-        self.base_status_calibr = status_calibr;
-        self
-    }
-
     /// Sets the status reporting interval in milliseconds.
     pub fn with_status_millis(mut self, status_millis: u64) -> Self {
         self.status_millis = status_millis;
@@ -168,7 +180,7 @@ impl BenchCfg {
         for i in 1.. {
             let iter_start = Instant::now();
 
-            for _ in 0..self.base_status_calibr * 2u64.pow(i - 1) {
+            for _ in 0..2u64.pow(i - 1) {
                 f();
             }
 
@@ -177,12 +189,9 @@ impl BenchCfg {
             let status_nanos = self.status_millis as f64 * 1_000_000.0;
 
             if iter_latency_nanos >= status_nanos / 2.2 || acc_latency_nanos >= status_nanos {
-                let iter_execs_per_milli = (self.base_status_calibr * 2u64.pow(i - 1)) as f64
-                    / iter_latency_nanos
-                    * 1_000_000.;
-                let acc_execs_per_milli = (self.base_status_calibr * (2u64.pow(i) - 1)) as f64
-                    / acc_latency_nanos
-                    * 1_000_000.;
+                let iter_execs_per_milli =
+                    (2u64.pow(i - 1)) as f64 / iter_latency_nanos * 1_000_000.;
+                let acc_execs_per_milli = (2u64.pow(i) - 1) as f64 / acc_latency_nanos * 1_000_000.;
                 return iter_execs_per_milli.min(acc_execs_per_milli);
             }
         }
@@ -199,7 +208,7 @@ impl BenchCfg {
 
 #[cfg(test)]
 mod test {
-    use crate::{LatencyUnit, RunLength, get_bench_cfg};
+    use crate::{BenchCfg, LatencyUnit, RunLength, get_bench_cfg};
     use std::time::Duration;
 
     #[test]
@@ -207,10 +216,11 @@ mod test {
         let cfg = get_bench_cfg();
 
         println!("cfg={cfg:?}");
-        assert_eq!(cfg.warmup_millis(), 3000);
-        assert_eq!(cfg.recording_unit(), LatencyUnit::Nano);
-        assert_eq!(cfg.reporting_unit(), LatencyUnit::Micro);
-        assert_eq!(cfg.sigfig(), 3);
+        assert_eq!(cfg.warmup_millis(), BenchCfg::DEFAULT_WARMUP_MILLIS);
+        assert_eq!(cfg.recording_unit(), BenchCfg::DEFAULT_RECORDING_UNIT);
+        assert_eq!(cfg.reporting_unit(), BenchCfg::DEFAULT_REPORTING_UNIT);
+        assert_eq!(cfg.sigfig(), BenchCfg::DEFAULT_SIGFIG);
+        assert_eq!(cfg.status_millis(), BenchCfg::DEFAULT_STATUS_MILLIS);
     }
 
     #[test]
@@ -221,11 +231,12 @@ mod test {
         println!("saved_cfg={saved_cfg:?}");
         let cfg = get_bench_cfg();
 
-        // Test chaining of with_with_recording_unit, warmup_millis, with_reporting_unit, with_sigfig
+        // Test chaining
         cfg.with_recording_unit(LatencyUnit::Micro)
             .with_warmup_millis(100)
             .with_reporting_unit(LatencyUnit::Milli)
             .with_sigfig(5)
+            .with_status_millis(200)
             .set();
         let cfg = get_bench_cfg();
         println!("cfg={cfg:?}");
@@ -233,21 +244,6 @@ mod test {
         assert_eq!(cfg.recording_unit(), LatencyUnit::Micro);
         assert_eq!(cfg.reporting_unit(), LatencyUnit::Milli);
         assert_eq!(cfg.sigfig(), 5);
-
-        // Test with_status_calibr
-        cfg.with_status_calibr(10).set();
-        let cfg = get_bench_cfg();
-        assert_eq!(10, cfg.base_status_calibr);
-
-        // Test with_status_millis
-        cfg.with_status_millis(500).set();
-        let cfg = get_bench_cfg();
-        assert_eq!(500, cfg.status_millis);
-
-        // Test chaining of with_status_calibr, with_status_millis
-        cfg.with_status_calibr(7).with_status_millis(200).set();
-        let cfg = get_bench_cfg();
-        assert_eq!(7, cfg.base_status_calibr);
         assert_eq!(200, cfg.status_millis);
 
         saved_cfg.set();
