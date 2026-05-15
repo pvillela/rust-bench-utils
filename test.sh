@@ -11,4 +11,4 @@ echo "***** test all except benches, all features"
 cargo nextest run  --lib --bins --examples --tests --all-features --target-dir target/test-target
 
 echo "***** test doc"
-cargo test --doc --target-dir target/test-target
+cargo test --doc --features busy_work --target-dir target/test-target

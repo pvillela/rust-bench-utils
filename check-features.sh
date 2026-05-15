@@ -2,9 +2,7 @@
 
 set -e  # Stop script immediately on any error
 
-### With default feature
-
-## Externally exposed feature combinations
+### With default features: Externally exposed feature combinations
 
 echo "***** (default feature)"
 cargo check --lib --tests
@@ -20,14 +18,14 @@ cargo check --lib --tests --features _bench_diff
 echo "***** --all-targets --all-features"
 cargo check --all-targets --all-features
 
-## Benches
-
-echo "***** --features _bench"
-cargo check --lib --tests --benches --features _bench
-
-### Without default feature
+### Without default features: Externally exposed feature combinations
 
 # Can't run publicly without default features.
 
 echo "***** --no-default-features --features _bench_diff"
 cargo check --lib --tests --no-default-features --features _bench_diff
+
+### Benches
+
+echo "***** --features _bench"
+cargo check --lib --tests --benches --features _bench
