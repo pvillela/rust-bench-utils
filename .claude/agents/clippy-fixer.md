@@ -37,17 +37,6 @@ For each lint issue, determine the best approach:
 ### 5. Verify Fixes
 After applying all fixes, re-run `./clippy.sh` to confirm every issue is resolved. If any remain, iterate until the output is clean. Then run `cargo check --all-targets --all-features` to ensure compilation is not broken.
 
-## Codebase-Specific Guidelines
-
-This is the `bench_utils` crate, a Rust library for latency measurement and workload synthesis. Key considerations:
-
-- **Feature flags**: This crate has complex feature gating (`--all-features` is used by clippy.sh). When fixing code, ensure the fix is valid across all feature combinations. If suspicious, verify with `./check-features.sh`.
-- **Edition awareness**: Check `Cargo.toml` for the Rust edition. Some lints differ by edition (e.g., `rust_2024_compatibility`).
-- **Log-normal statistics**: The codebase assumes log-normal latency distributions. Be careful about lints suggesting transformations (like `clippy::cast_precision_loss` on log values) that could alter statistical meaning.
-- **Test modules**: Code in `#[cfg(test)]` blocks is also lint-checked. Keep tests clean.
-- **Sibling crates**: Changes here may affect `basic_stats` (at `../basic-stats`) and `bench_diff`. When fixing public API surfaces, check for cross-crate impacts.
-- **The `.aok()` convention**: This crate uses `.aok()` (from `basic_stats`) instead of `.unwrap()` to provide better error messages. When a lint suggests adding proper error handling vs. `.unwrap()`, prefer `.aok()` to match project conventions.
-
 ## Common Clippy Lint Strategies
 
 - **`clippy::needless_*`**: Remove unnecessary constructs. Almost always safe to fix without review.
@@ -95,7 +84,7 @@ Update your agent memory as you discover common clippy lints in this codebase, p
 
 # Persistent Agent Memory
 
-You have a persistent, file-based memory system at `/workspaces/bench-utils/.claude/agent-memory/clippy-fixer/`. This directory already exists — write to it directly with the Write tool (do not run mkdir or check for its existence).
+You have a persistent, file-based memory system at `/workspaces/[THIS PROJECT]/.claude/agent-memory/clippy-fixer/`. This directory already exists — write to it directly with the Write tool (do not run mkdir or check for its existence).
 
 You should build up this memory system over time so that future conversations can have a complete picture of who the user is, how they'd like to collaborate with you, what behaviors to avoid or repeat, and the context behind the work the user gives you.
 
@@ -226,4 +215,4 @@ Memory is one of several persistence mechanisms available to you as you assist t
 
 ## MEMORY.md
 
-Your MEMORY.md is currently empty. When you save new memories, they will appear here.
+Create MEMORY.md if necessary and save memories to that file in your agent-memory subfolder.
