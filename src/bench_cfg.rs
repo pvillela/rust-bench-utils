@@ -261,14 +261,12 @@ mod test {
     }
 
     #[test]
-    fn test_bench_cfg_builder_methods() {
-        // Saving hack below may not work if this test fails or
-        // if concurrent tests call `BenchCfg::get()`.
+    fn test_bench_cfg_builder_method_chaining() {
+        // Saving hack below may not work if concurrent tests call `BenchCfg::get()`.
         let saved_cfg = BenchCfg::get();
         println!("saved_cfg={saved_cfg:?}");
         let cfg = BenchCfg::get();
 
-        // Test chaining
         cfg.with_recording_unit(LatencyUnit::Micro)
             .with_warmup_millis(100)
             .with_reporting_unit(LatencyUnit::Milli)
@@ -277,6 +275,8 @@ mod test {
             .with_panic_on_error(true)
             .set();
         let cfg = BenchCfg::get();
+        saved_cfg.set(); // restore previous config
+
         println!("cfg={cfg:?}");
         assert_eq!(cfg.warmup_millis(), 100);
         assert_eq!(cfg.recording_unit(), LatencyUnit::Micro);
@@ -284,8 +284,6 @@ mod test {
         assert_eq!(cfg.sigfig(), 5);
         assert_eq!(200, cfg.status_millis);
         assert_eq!(true, cfg.panic_on_error);
-
-        saved_cfg.set();
     }
 
     #[test]
