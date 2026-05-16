@@ -1,5 +1,5 @@
 use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
-use bench_utils::{RunLength, bench_run_with_status, get_bench_cfg};
+use bench_utils::{BenchCfg, RunLength, bench_run_with_status};
 use std::{thread, time::Duration};
 
 const EPSILON: f64 = 0.005;
@@ -10,7 +10,7 @@ fn sleep_fn(target_latency: Duration) {
 }
 
 fn run_bench(name: &'static str, target_latency: Duration, check: bool) {
-    let reporting_unit = get_bench_cfg().reporting_unit();
+    let reporting_unit = BenchCfg::get().reporting_unit();
     let target_median = reporting_unit.latency_as_f64(target_latency);
     let exec_count = (reporting_unit.latency_as_f64(BENCH_TIME) / target_median) as usize;
     let out = bench_run_with_status(

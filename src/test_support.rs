@@ -1,4 +1,4 @@
-use crate::BenchOut;
+use crate::{BenchCfg, BenchOut};
 use basic_stats::{core::SampleMoments, normal::normal_detm_samp};
 use std::sync::LazyLock;
 
@@ -61,7 +61,7 @@ pub fn lognormal_out_jittered(
     jitter_epsilon: f64,
 ) -> BenchOut {
     let lognormal_samp = lognormal_samp_jittered(mu, sigma, k, n_jitter, jitter_epsilon);
-    let mut out = BenchOut::default();
+    let mut out = BenchOut::new(&BenchCfg::get());
     out.collect_data(lognormal_samp);
     out
 }

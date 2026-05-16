@@ -1,7 +1,7 @@
 //! Validates that the overhead associated with the collection of latency on each target function execution
 //! is acceptable.
 
-use crate::{RunLength, bench_run_with_status, busy_work, calibrate_busy_work, get_bench_cfg};
+use crate::{BenchCfg, RunLength, bench_run_with_status, busy_work, calibrate_busy_work};
 use basic_stats::dev_utils::ApproxEq;
 use std::time::Duration;
 
@@ -21,7 +21,7 @@ pub fn validate_latency_overhead(
         }
     };
 
-    let reporting_unit = get_bench_cfg().reporting_unit();
+    let reporting_unit = BenchCfg::get().reporting_unit();
     let target_median_solo = reporting_unit.latency_as_f64(target_latency);
     let target_median_group = target_median_solo * group_size as f64;
     let exec_count_group =

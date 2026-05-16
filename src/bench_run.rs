@@ -3,25 +3,8 @@
 use crate::{BenchCfg, BenchOut, RunLength, latency};
 use std::{
     io::{Write, stderr},
-    ops::Deref,
-    sync::Mutex,
     time::{Duration, Instant},
 };
-
-static BENCH_CFG: Mutex<BenchCfg> = Mutex::new(BenchCfg::new(
-    BenchCfg::DEFAULT_WARMUP_MILLIS,
-    BenchCfg::DEFAULT_RECORDING_UNIT,
-    BenchCfg::DEFAULT_REPORTING_UNIT,
-    BenchCfg::DEFAULT_SIGFIG,
-    BenchCfg::DEFAULT_STATUS_MILLIS,
-    &BENCH_CFG,
-));
-
-/// Returns a clone of the global benchmark configuration.
-pub fn get_bench_cfg() -> BenchCfg {
-    let guard = BENCH_CFG.lock().unwrap();
-    guard.deref().clone()
-}
 
 type BenchState = BenchOut;
 
@@ -40,7 +23,7 @@ impl BenchState {
         let (exec_count, run_time) = run_length.get_exec_count_and_duration();
         assert!(exec_count > 0, "exec_count must be > 0");
 
-        let unit = get_bench_cfg().recording_unit();
+        let unit = BenchCfg::get().recording_unit();
         let start = Instant::now();
 
         for i in 1..=exec_count {
@@ -83,8 +66,8 @@ pub fn bench_run_x(
     exec_status: Option<impl FnMut(usize)>,
     execs_per_milli: f64,
 ) -> BenchOut {
-    let mut state = BenchOut::default();
-    let cfg = get_bench_cfg();
+    let mut state = BenchOut::new(&BenchCfg::get());
+    let cfg = BenchCfg::get();
     let status_freq = cfg.status_freq(execs_per_milli);
 
     // Warm-up.
@@ -112,7 +95,7 @@ pub fn bench_run_x(
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run(mut f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
-    let cfg = get_bench_cfg();
+    let cfg = BenchCfg::get();
     let warmup_millis = cfg.warmup_millis();
     let execs_per_milli = cfg.executions_per_milli(&mut f);
 
@@ -145,7 +128,7 @@ pub fn bench_run_with_status(
     exec_run_length: RunLength,
     header: impl FnOnce(usize),
 ) -> BenchOut {
-    let cfg = get_bench_cfg();
+    let cfg = BenchCfg::get();
 
     let status = |preamble: &'static str, millis: u64, count: usize| {
         let mut status_len: usize = 0;
@@ -201,18 +184,18 @@ mod test {
 
     /// Helper to get a clean config with minimal warmup/calibration for fast tests.
     fn minimal_cfg_snapshot() -> BenchCfg {
-        let cfg = get_bench_cfg();
+        let cfg = BenchCfg::get();
         cfg.with_warmup_millis(0)
             .with_status_millis(1)
             .with_recording_unit(LatencyUnit::Nano)
             .with_reporting_unit(LatencyUnit::Nano)
             .set();
-        get_bench_cfg()
+        BenchCfg::get()
     }
 
     #[test]
     fn test_bench_run_with_count() {
-        let saved_cfg = get_bench_cfg();
+        let saved_cfg = BenchCfg::get();
         let _cfg = minimal_cfg_snapshot();
 
         let out = bench_run(|| {}, RunLength::Count(5));
@@ -225,10 +208,10 @@ mod test {
 
     #[test]
     fn test_bench_run_x() {
-        let saved_cfg = get_bench_cfg();
+        let saved_cfg = BenchCfg::get();
         let _cfg = minimal_cfg_snapshot();
         // Use the snapshot cfg for calibration
-        let cfg = get_bench_cfg();
+        let cfg = BenchCfg::get();
         let execs_per_milli = cfg.executions_per_milli(|| {});
 
         let out = bench_run_x(
@@ -246,7 +229,7 @@ mod test {
 
     #[test]
     fn test_bench_run_with_timeout() {
-        let saved_cfg = get_bench_cfg();
+        let saved_cfg = BenchCfg::get();
         let _cfg = minimal_cfg_snapshot();
 
         // Use a very short timeout that should be exceeded immediately

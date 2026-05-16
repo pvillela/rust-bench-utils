@@ -83,7 +83,7 @@ impl LatencyUnit {
 #[cfg(feature = "_bench")]
 mod test {
     use super::*;
-    use crate::{bench_support::validate_latency_overhead, get_bench_cfg};
+    use crate::{BenchCfg, bench_support::validate_latency_overhead};
     use basic_stats::{approx_eq, rel_approx_eq};
 
     #[test]
@@ -92,8 +92,8 @@ mod test {
 
         let start = Instant::now();
 
-        let saved = get_bench_cfg();
-        let cfg = get_bench_cfg();
+        let saved = BenchCfg::get();
+        let cfg = BenchCfg::get();
         cfg.with_warmup_millis(100).set();
 
         let bench_time = Duration::from_millis(100);

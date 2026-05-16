@@ -34,7 +34,7 @@ When invoked, you will thoroughly audit the `bench_utils` crate's test suite to 
 | `latency` | ❌ No | `latency()` function, all `LatencyUnit` methods (conversion, as_u64, from_u64, etc.) |
 | `busy_work` | ❌ No | `busy_work()`, `calibrate_busy_work()`, `calibrate_busy_work_x()` — gated behind `busy_work` feature |
 | `fake_work` | ❌ No | `fake_work()` — simple sleep wrapper |
-| `bench_run` | ❌ No | `bench_run()`, `bench_run_x()`, `bench_run_with_status()`, `get_bench_cfg()` — core orchestration |
+| `bench_run` | ❌ No | `bench_run()`, `bench_run_x()`, `bench_run_with_status()`, `BenchCfg::get()` — core orchestration |
 | `bench_cfg` | ✅ Yes | `test_bench_cfg()` tests getters/setters but NOT `executions_per_milli()`, `status_freq()`, `estimated_count()`, `estimated_duration()` |
 | `bench_out` | ✅ Yes | Descriptive and Student's-t stats tested with lognormal samples |
 | `comp` | ✅ Yes | Welch's t methods tested; Wilcoxon (`_test_support`-gated) methods NOT tested |

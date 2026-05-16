@@ -1,12 +1,12 @@
 use basic_stats::rel_approx_eq;
-use bench_utils::{bench_support::validate_latency_overhead, get_bench_cfg};
+use bench_utils::{BenchCfg, bench_support::validate_latency_overhead};
 use std::time::{Duration, Instant};
 
 fn main() {
     const EPSILON: f64 = 0.1;
 
     let start = Instant::now();
-    let cfg = get_bench_cfg();
+    let cfg = BenchCfg::get();
     cfg.with_warmup_millis(500).set();
 
     let bench_time = Duration::from_millis(500);

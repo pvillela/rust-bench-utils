@@ -2,9 +2,11 @@
 
 use std::fmt::Debug;
 
-use crate::{BenchCfg, LatencyUnit, SummaryStats, Timing, new_timing, summary_stats};
+use crate::{
+    BenchCfg, LatencyUnit, PanicIfNeeded, SummaryStats, Timing, new_timing, summary_stats,
+};
 use basic_stats::{
-    aok::{AokBasicStats, AokFloat},
+    aok::Aok,
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean, sample_stdev},
     normal::{student_1samp_ci, student_1samp_p, student_1samp_t, student_1samp_test},
 };
@@ -20,14 +22,14 @@ use basic_stats::{
 /// This assumption is widely supported by performance analysis theory and empirical data.
 /// Thus, the `*_ln_*` methods are useful for the analysis of median latencies.
 pub struct BenchOut {
-    pub(super) recording_unit: LatencyUnit,
-    pub(super) reporting_unit: LatencyUnit,
-    pub(super) hist: Timing,
-    pub(super) sum: f64,
-    pub(super) sum2: f64,
-    pub(super) n_ln: u64,
-    pub(super) sum_ln: f64,
-    pub(super) sum2_ln: f64,
+    pub(crate) recording_unit: LatencyUnit,
+    pub(crate) reporting_unit: LatencyUnit,
+    pub(crate) hist: Timing,
+    pub(crate) sum: f64,
+    pub(crate) sum2: f64,
+    pub(crate) n_ln: u64,
+    pub(crate) sum_ln: f64,
+    pub(crate) sum2_ln: f64,
 }
 
 impl BenchOut {
@@ -53,15 +55,8 @@ impl BenchOut {
         }
     }
 
-    /// Creates a new empty instance with `recording_unit`, `reporting_unit`, and `sigfig` from [`crate::BenchCfg`].
-    pub(super) fn default() -> Self {
-        use crate::get_bench_cfg;
-
-        Self::new(&get_bench_cfg())
-    }
-
     /// Factor to convert from `recording_unit` to `reporting_unit`.
-    pub(super) fn converson_factor(&self) -> f64 {
+    pub(crate) fn converson_factor(&self) -> f64 {
         self.recording_unit.conversion_factor(self.reporting_unit)
     }
 
@@ -104,6 +99,12 @@ impl BenchOut {
         self.reporting_unit
     }
 
+    /// The current value of [`BenchCfg::panic_on_error`].
+    pub fn panic_on_error(&self) -> bool {
+        let cfg = BenchCfg::get();
+        BenchCfg::panic_on_error(&cfg)
+    }
+
     /// Number of observations (sample size) for a function, as an integer.
     #[inline(always)]
     pub fn n(&self) -> u64 {
@@ -124,13 +125,25 @@ impl BenchOut {
     }
 
     /// Sample mean of latencies.
+    ///
+    /// # Panics
+    /// Panics if `self.panic_on_error() == true` and the number of observations is zero.
     pub fn mean(&self) -> f64 {
-        sample_mean(self.n(), self.sum).aok() * self.converson_factor()
+        sample_mean(self.n(), self.sum)
+            .aok()
+            .panic_if_needed(self.panic_on_error(), "number of observations is zero")
+            * self.converson_factor()
     }
 
     /// Sample standard deviation of latencies.
+    ///
+    /// # Panics
+    /// Panics if `self.panic_on_error() == true` the number of observations is zero.
     pub fn stdev(&self) -> f64 {
-        sample_stdev(self.n(), self.sum, self.sum2).aok() * self.converson_factor()
+        sample_stdev(self.n(), self.sum, self.sum2)
+            .aok()
+            .panic_if_needed(self.panic_on_error(), "number of observations is zero")
+            * self.converson_factor()
     }
 
     /// Sample median of latencies.
@@ -139,13 +152,24 @@ impl BenchOut {
     }
 
     /// Sample mean of the natural logarithms of latencies.
+    ///
+    /// # Panics
+    /// Panics if `self.panic_on_error() == true` the number of observations is zero.
     pub fn mean_ln(&self) -> f64 {
-        sample_mean(self.n_ln, self.sum_ln).aok() + self.converson_factor().ln()
+        sample_mean(self.n_ln, self.sum_ln)
+            .aok()
+            .panic_if_needed(self.panic_on_error(), "number of observations is zero")
+            + self.converson_factor().ln()
     }
 
     /// Sample standard deviation of the natural logarithms of latencies.
+    ///
+    /// # Panics
+    /// Panics if `self.panic_on_error() == true` the number of observations is zero.
     pub fn stdev_ln(&self) -> f64 {
-        sample_stdev(self.n_ln, self.sum_ln, self.sum2_ln).aok()
+        sample_stdev(self.n_ln, self.sum_ln, self.sum2_ln)
+            .aok()
+            .panic_if_needed(self.panic_on_error(), "number of observations is zero")
     }
 
     /// Student's one-sample t statistic for
@@ -157,10 +181,19 @@ impl BenchOut {
     ///
     /// Arguments:
     /// - `ln_mu0`: hypothesized `mean(ln(latency(f)))`, or equivalently, `ln(median(latency(f)))`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - `number of observations <= 1`.
+    /// - `self.stdev_ln() == 0`.
     pub fn student_ln_t(&self, ln_mu0: f64) -> f64 {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
         let ln_mu0_rec = ln_mu0 - self.converson_factor().ln();
-        student_1samp_t(&moments, ln_mu0_rec).aok()
+        student_1samp_t(&moments, ln_mu0_rec).aok().panic_if_needed(
+            self.panic_on_error(),
+            "`number of observations <= 1` or `self.stdev_ln() == 0`",
+        )
     }
 
     /// Degrees of freedom for Student's t statistic for `mean(ln(latency(f)))` (where `ln` is the natural logarithm).
@@ -181,10 +214,21 @@ impl BenchOut {
     ///
     /// Arguments:
     /// - `ln_mu0`: hypothesized `mean(ln(latency(f)))`, or equivalently, `ln(median(latency(f)))`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - Sample size <= 1.
+    /// - `self.stdev_ln()` == 0.
     pub fn student_ln_p(&self, ln_mu0: f64, alt_hyp: AltHyp) -> f64 {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
         let ln_mu0_rec = ln_mu0 - self.converson_factor().ln();
-        student_1samp_p(&moments, ln_mu0_rec, alt_hyp).aok()
+        student_1samp_p(&moments, ln_mu0_rec, alt_hyp)
+            .aok()
+            .panic_if_needed(
+                self.panic_on_error(),
+                "`number of observations <= 1` or `self.stdev_ln() == 0`",
+            )
     }
 
     /// Student's one-sample confidence interval for
@@ -193,9 +237,18 @@ impl BenchOut {
     ///
     /// Assumes that `latency(f)` is approximately log-normal.
     /// This assumption is widely supported by performance analysis theory and empirical data.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - `Sample size <= 1`.
+    /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_ln_ci(&self, alpha: f64) -> Ci {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        let ci_rec = student_1samp_ci(&moments, alpha).aok();
+        let ci_rec = student_1samp_ci(&moments, alpha).aok().panic_if_needed(
+            self.panic_on_error(),
+            "`number of observations <= 1` or `alpha` not in open interval `(0, 1)`",
+        );
         Ci(
             ci_rec.0 + self.converson_factor().ln(),
             ci_rec.1 + self.converson_factor().ln(),
@@ -208,6 +261,12 @@ impl BenchOut {
     ///
     /// Assumes that `latency(f)` is approximately log-normal.
     /// This assumption is widely supported by performance analysis theory and empirical data.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - `Sample size <= 1`.
+    /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_median_ci(&self, alpha: f64) -> Ci {
         let Ci(log_low, log_high) = self.student_ln_ci(alpha);
         let low = log_low.exp();
@@ -222,6 +281,12 @@ impl BenchOut {
     ///
     /// Assumes that `latency(f)` is approximately log-normal.
     /// This assumption is widely supported by performance analysis theory and empirical data.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - `Sample size <= 1`.
+    /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_value_position_wrt_median_ci(&self, value: f64, alpha: f64) -> PositionWrtCi {
         let ci = self.student_median_ci(alpha);
         ci.position_of(value)
@@ -238,6 +303,13 @@ impl BenchOut {
     /// - `ln_mu0`: hypothesized `mean(ln(latency(f)))`, or equivalently, `ln(median(latency(f)))`.
     /// - `alt_hyp`: alternative hypothesis.
     /// - `alpha`: confidence level is `1 - alpha`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - `Sample size <= 1`.
+    /// - `self.stdev_ln()` == 0.
+    /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_ln_test(&self, ln_mu0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
         let ln_mu0_rec = ln_mu0 - self.converson_factor().ln();
@@ -307,7 +379,7 @@ impl Debug for BenchOut {
 mod test {
     use super::*;
     use crate::{
-        get_bench_cfg,
+        BenchCfg,
         test_support::{LO_STDEV_LN, lognormal_samp},
     };
     use basic_stats::{
@@ -328,12 +400,12 @@ mod test {
         let sigma = *LO_STDEV_LN;
         let k = 100;
 
-        let conv_factor = get_bench_cfg().conversion_factor();
+        let conv_factor = BenchCfg::get().conversion_factor();
         println!("conv_factor={conv_factor}");
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
         let lognormal_samp = lognormal_samp(rec_mu, sigma, k);
-        let mut out = BenchOut::default();
+        let mut out = BenchOut::new(&BenchCfg::get());
         out.collect_data(lognormal_samp);
 
         assert_eq!(out.recording_unit(), LatencyUnit::Nano);
@@ -399,12 +471,12 @@ mod test {
         let sigma = *LO_STDEV_LN;
         let k = 100;
 
-        let conv_factor = get_bench_cfg().conversion_factor();
+        let conv_factor = BenchCfg::get().conversion_factor();
         println!("conv_factor={conv_factor}");
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
         let lognormal_samp = lognormal_samp(rec_mu, sigma, k);
-        let mut out = BenchOut::default();
+        let mut out = BenchOut::new(&BenchCfg::get());
         out.collect_data(lognormal_samp);
 
         let normal_samp = normal_detm_samp(mu, sigma, k).unwrap();

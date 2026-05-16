@@ -53,7 +53,7 @@ Most tests require `_test_support` + `_bench_run`. The feature `_bench_diff` is 
 - **Stats delegation**: Inferential statistics (t-tests, CIs) are delegated to the sibling `basic_stats` crate. All results are unwrapped via `.aok()` (an extension trait from `basic_stats` that panics on error with a message).
 - **Log-normal assumption**: Latency distributions are treated as approximately log-normal. Statistics on `ln(latency)` are central to the API (Student's t on one sample, Welch's t for two-sample comparison).
 - **HDR histogram**: Latencies are recorded into a resizable `hdrhistogram::Histogram<u64>`, which provides quantile/percentile queries.
-- **Global config**: `BenchCfg` is stored in a `static Mutex`, accessed via `get_bench_cfg()` and mutated via builder `.set()`.
+- **Global config**: `BenchCfg` is stored in a `static Mutex`, accessed via `BenchCfg::get()` and mutated via builder `.set()`.
 - **Feature-gated API surface**: Some `BenchOut` fields and `Comp` methods are only available with specific features (`_bench_diff`, `_test_support`, `_bench_run`).
 
 ### Sibling crates

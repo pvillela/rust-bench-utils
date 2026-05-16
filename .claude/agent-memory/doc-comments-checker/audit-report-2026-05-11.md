@@ -54,7 +54,7 @@ Two methods have regular `//` comments instead of `///` doc comments:
 - `estimated_count()` at line 31
 - `estimated_duration()` at line 43
 
-#### `get_bench_cfg()` free function (bench_run.rs:21)
+#### `BenchCfg::get()` free function (bench_run.rs:21)
 The primary way users access the global benchmark config -- no doc comment.
 
 #### `Comp` accessor methods (comp.rs:46-51)
@@ -136,5 +136,5 @@ No `rust` code blocks were found inside `///` doc comments in any source file. T
 4. Fix `target_micros` -> `target_latency` in `calibrate_busy_work` / `calibrate_busy_work_x` docs
 5. Fix copy-paste bug in `Comp::welch_ln_p` and `Comp::welch_ln_test` docs (`f1/f1` -> `f1/f2`)
 6. Add doc comments to feature-gated `BenchOut` accessors
-7. Add doc comments to `get_bench_cfg()`, `Comp::out_f1()`, `Comp::out_f2()`
+7. Add doc comments to `BenchCfg::get()`, `Comp::out_f1()`, `Comp::out_f2()`
 8. Add feature requirement mentions to `_test_support`-gated `Comp` methods

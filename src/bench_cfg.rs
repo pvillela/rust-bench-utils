@@ -1,5 +1,8 @@
+use basic_stats::aok::AokValue;
+
 use crate::LatencyUnit;
 use std::{
+    ops::Deref,
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -58,14 +61,17 @@ impl RunLength {
 
 /// Global benchmark configuration.
 ///
-/// Encapsulates:
-/// -   warm-up duration in milliseconds
-/// -   recording and reporting units
-/// -   significant figures; as data is stored in an
-///     [HDR (high dynamic range) histogram](https://docs.rs/hdrhistogram/latest/hdrhistogram/index.html),
-///     this is the number of significant decimal digits to which the histogram will maintain value resolution
-///     and separation
-/// -   milliseconds between status reports during bench execution
+/// Encapsulates the following data:
+/// - `warmup_millis`: warm-up duration in milliseconds
+/// - `recording_unit`: time unit for latency recording
+/// - `reporting_unit`: time unit for latency reporting
+/// - `sigfig`: as data is stored in an [HDR (high dynamic range) histogram](https://docs.rs/hdrhistogram/latest/hdrhistogram/index.html),
+///   this is the number of significant decimal digits (of `recording_unit`) to which the histogram will maintain
+///   value resolution and separation
+/// - `status_millis`: milliseconds between status reports during bench execution
+/// - `panic_on_error`: if set to `true`, library functions that don't return a [`Result`] should panic upon
+///   encountering an error condition; when set to `false`, instead of panicking, functions should return a
+///   tainted value, i.e., `NaN` or a data structure that has `NaN` in one or more fields.
 ///
 /// Stored in a `static Mutex`, and accessed via function `get_bench_cfg` (which not a method),
 /// modified through builder methods, and committed with the `set` method.
@@ -76,34 +82,33 @@ pub struct BenchCfg {
     reporting_unit: LatencyUnit,
     sigfig: u8,
     status_millis: u64,
+    panic_on_error: bool,
     static_ref: &'static Mutex<BenchCfg>,
 }
 
-impl BenchCfg {
-    #[doc(hidden)]
-    pub const fn new(
-        warmup_millis: u64,
-        recording_unit: LatencyUnit,
-        reporting_unit: LatencyUnit,
-        sigfig: u8,
-        status_millis: u64,
-        static_ref: &'static Mutex<BenchCfg>,
-    ) -> BenchCfg {
-        BenchCfg {
-            warmup_millis,
-            recording_unit,
-            reporting_unit,
-            sigfig,
-            status_millis,
-            static_ref,
-        }
-    }
+static BENCH_CFG: Mutex<BenchCfg> = Mutex::new(BenchCfg {
+    warmup_millis: BenchCfg::DEFAULT_WARMUP_MILLIS,
+    recording_unit: BenchCfg::DEFAULT_RECORDING_UNIT,
+    reporting_unit: BenchCfg::DEFAULT_REPORTING_UNIT,
+    sigfig: BenchCfg::DEFAULT_SIGFIG,
+    status_millis: BenchCfg::DEFAULT_STATUS_MILLIS,
+    panic_on_error: BenchCfg::DEFAULT_PANIC_ON_ERROR,
+    static_ref: &BENCH_CFG,
+});
 
+impl BenchCfg {
     pub const DEFAULT_WARMUP_MILLIS: u64 = 3000;
     pub const DEFAULT_RECORDING_UNIT: LatencyUnit = LatencyUnit::Nano;
     pub const DEFAULT_REPORTING_UNIT: LatencyUnit = LatencyUnit::Micro;
     pub const DEFAULT_SIGFIG: u8 = 3;
     pub const DEFAULT_STATUS_MILLIS: u64 = 1000;
+    pub const DEFAULT_PANIC_ON_ERROR: bool = false;
+
+    /// Returns a clone of the global benchmark configuration.
+    pub fn get() -> Self {
+        let guard = BENCH_CFG.lock().unwrap();
+        guard.deref().clone()
+    }
 
     /// The number of milliseconds used to "warm-up" the benchmark.
     pub fn warmup_millis(&self) -> u64 {
@@ -127,14 +132,16 @@ impl BenchCfg {
         self.sigfig
     }
 
-    /// Status reporting interval in milliseconds
+    /// Status reporting interval in milliseconds.
     pub fn status_millis(&self) -> u64 {
         self.status_millis
     }
 
-    /// Factor to convert from the recording unit to the reporting unit.
-    pub fn conversion_factor(&self) -> f64 {
-        self.recording_unit.conversion_factor(self.reporting_unit)
+    /// Flag determining error behavior of library functions that don't return a [`Result`].
+    ///
+    /// See [`BenchCfg`] struct documentation.
+    pub fn panic_on_error(&self) -> bool {
+        self.panic_on_error
     }
 
     /// Changes the number of milliseconds used to "warm-up" the benchmark.
@@ -167,10 +174,23 @@ impl BenchCfg {
         self
     }
 
+    /// Flag determining error behavior of library functions that don't return a [`Result`].
+    ///
+    /// See [`BenchCfg`] struct documentation.
+    pub fn with_panic_on_error(mut self, panic_on_error: bool) -> Self {
+        self.panic_on_error = panic_on_error;
+        self
+    }
+
     /// Commits this configuration as the global benchmark configuration.
     pub fn set(self) {
         let mut guard = self.static_ref.lock().unwrap();
         *guard = self;
+    }
+
+    /// Factor to convert from the recording unit to the reporting unit.
+    pub fn conversion_factor(&self) -> f64 {
+        self.recording_unit.conversion_factor(self.reporting_unit)
     }
 
     /// Estimates how many executions of `f` fit in one millisecond, for status-reporting estimates.
@@ -206,14 +226,31 @@ impl BenchCfg {
     }
 }
 
+#[doc(hidden)]
+/// Panics if `panic == true` and the receiver is tainted. Used only internally by this crate and `bench_diff`.
+pub trait PanicIfNeeded: AokValue + Sized {
+    fn panic_if_needed(self, panic: bool, msg: &str) -> Self {
+        if panic && self.is_tainted() {
+            panic!("{msg}")
+        }
+        self
+    }
+}
+
+impl PanicIfNeeded for f64 {}
+
+impl PanicIfNeeded for basic_stats::core::Ci {}
+
+impl PanicIfNeeded for basic_stats::core::HypTestResult {}
+
 #[cfg(test)]
 mod test {
-    use crate::{BenchCfg, LatencyUnit, RunLength, get_bench_cfg};
+    use crate::{BenchCfg, LatencyUnit, RunLength};
     use std::time::Duration;
 
     #[test]
     fn test_bench_cfg_default() {
-        let cfg = get_bench_cfg();
+        let cfg = BenchCfg::get();
 
         println!("cfg={cfg:?}");
         assert_eq!(cfg.warmup_millis(), BenchCfg::DEFAULT_WARMUP_MILLIS);
@@ -226,10 +263,10 @@ mod test {
     #[test]
     fn test_bench_cfg_builder_methods() {
         // Saving hack below may not work if this test fails or
-        // if concurrent tests call `get_bench_cfg()`.
-        let saved_cfg = get_bench_cfg();
+        // if concurrent tests call `BenchCfg::get()`.
+        let saved_cfg = BenchCfg::get();
         println!("saved_cfg={saved_cfg:?}");
-        let cfg = get_bench_cfg();
+        let cfg = BenchCfg::get();
 
         // Test chaining
         cfg.with_recording_unit(LatencyUnit::Micro)
@@ -237,14 +274,16 @@ mod test {
             .with_reporting_unit(LatencyUnit::Milli)
             .with_sigfig(5)
             .with_status_millis(200)
+            .with_panic_on_error(true)
             .set();
-        let cfg = get_bench_cfg();
+        let cfg = BenchCfg::get();
         println!("cfg={cfg:?}");
         assert_eq!(cfg.warmup_millis(), 100);
         assert_eq!(cfg.recording_unit(), LatencyUnit::Micro);
         assert_eq!(cfg.reporting_unit(), LatencyUnit::Milli);
         assert_eq!(cfg.sigfig(), 5);
         assert_eq!(200, cfg.status_millis);
+        assert_eq!(true, cfg.panic_on_error);
 
         saved_cfg.set();
     }
@@ -348,7 +387,7 @@ mod test {
 
     #[test]
     fn test_bench_cfg_status_freq() {
-        let cfg = get_bench_cfg();
+        let cfg = BenchCfg::get();
 
         // 1000ms interval, 500 execs/milli => 500_000 status freq
         let freq = cfg.status_freq(500.0);
@@ -365,7 +404,7 @@ mod test {
 
     #[test]
     fn test_bench_cfg_executions_per_milli() {
-        let cfg = get_bench_cfg();
+        let cfg = BenchCfg::get();
         // Using a no-op closure, the calibration should return a reasonable positive value
         let epms = cfg.executions_per_milli(|| {});
         assert!(epms.is_finite());

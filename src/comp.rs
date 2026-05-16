@@ -1,6 +1,6 @@
 use crate::BenchOut;
 use basic_stats::{
-    aok::{AokBasicStats, AokFloat},
+    aok::Aok,
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments},
     normal::{welch_ci, welch_df, welch_p, welch_t, welch_test},
 };
@@ -257,7 +257,7 @@ mod test {
         HI_STDEV_LN, LO_STDEV_LN, lognormal_moments_ln, lognormal_moments_ln_jittered,
         lognormal_out, lognormal_out_jittered,
     };
-    use crate::{LatencyUnit, get_bench_cfg};
+    use crate::{BenchCfg, LatencyUnit};
     use basic_stats::{approx_eq, core::AcceptedHyp};
 
     const EPSILON: f64 = 0.001;
@@ -276,13 +276,13 @@ mod test {
 
     #[test]
     fn test_comp_new_panics_on_reporting_unit_mismatch() {
-        let saved_cfg = get_bench_cfg();
+        let saved_cfg = BenchCfg::get();
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let cfg1 = get_bench_cfg();
+            let cfg1 = BenchCfg::get();
             cfg1.with_reporting_unit(LatencyUnit::Nano).set();
             let out1 = lognormal_out(8., *LO_STDEV_LN, 5);
 
-            let cfg2 = get_bench_cfg();
+            let cfg2 = BenchCfg::get();
             cfg2.with_reporting_unit(LatencyUnit::Micro).set();
             let out2 = lognormal_out(8., *LO_STDEV_LN, 5);
 
