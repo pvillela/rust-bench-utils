@@ -243,6 +243,9 @@ impl PanicIfNeeded for basic_stats::core::Ci {}
 
 impl PanicIfNeeded for basic_stats::core::HypTestResult {}
 
+#[cfg(feature = "_experimental")]
+impl PanicIfNeeded for basic_stats::wilcoxon::RankSum {}
+
 #[cfg(test)]
 mod test {
     use crate::{BenchCfg, LatencyUnit, RunLength};

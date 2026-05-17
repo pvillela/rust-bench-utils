@@ -1,4 +1,4 @@
-use crate::BenchOut;
+use crate::{BenchCfg, BenchOut, PanicIfNeeded};
 use basic_stats::{
     aok::Aok,
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments},
@@ -43,6 +43,12 @@ impl<'a> Comp<'a> {
         Self(f1_out, f2_out)
     }
 
+    /// The current value of [`BenchCfg::panic_on_error`].
+    fn panic_on_error(&self) -> bool {
+        let cfg = BenchCfg::get();
+        BenchCfg::panic_on_error(&cfg)
+    }
+
     /// Reference to the first benchmark output.
     pub fn out_f1(&self) -> &BenchOut {
         self.0
@@ -64,19 +70,31 @@ impl<'a> Comp<'a> {
     }
 
     /// The difference between the mean of `f1`'s latencies and the mean of `f2`'s latencies.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** `self.out_f1().n() == 0` or `self.out_f2().n() == 0`.
     pub fn mean_diff_f1_f2(&self) -> f64 {
         self.0.mean() - self.1.mean()
     }
 
     /// The difference between the mean of the natural logarithms of `f1`'s latencies and
     /// the mean of the natural logarithms of`f2`'s latencies.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** `self.out_f1().n_ln == 0` or `self.out_f2().n_ln == 0`.
     pub fn mean_diff_ln_f1_f2(&self) -> f64 {
         self.0.mean_ln() - self.1.mean_ln()
     }
 
     /// Estimated ratio of the median `f1` latency to the median `f2` latency,
     /// computed as the `exp()` of [`Self::mean_diff_ln_f1_f2`].
-    pub fn ratio_medians_f1_f2_fromom_lns(&self) -> f64 {
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** `self.out_f1().n_ln == 0` or `self.out_f2().n_ln == 0`.
+    pub fn ratio_medians_f1_f2_from_lns(&self) -> f64 {
         self.mean_diff_ln_f1_f2().exp()
     }
 
@@ -107,8 +125,18 @@ impl<'a> Comp<'a> {
     /// Arguments:
     /// - `ln_d0`: hypothesized value of `mean(ln(latency(f1))) - mean(ln(latency(f2)))`, or equivalently,
     ///   `ln(median(latency(f1)) / median(latency(f2)))`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - `self.out_f1().n_ln <= 1`.
+    /// - `self.out_f2().n_ln <= 1`.
+    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
     pub fn welch_ln_t(&self, ln_d0: f64) -> f64 {
-        welch_t(&self.moments_ln_f1(), &self.moments_ln_f2(), ln_d0).aok()
+        welch_t(&self.moments_ln_f1(), &self.moments_ln_f2(), ln_d0).aok().panic_if_needed(
+            self.panic_on_error(),
+            "`number of observations <= 1` for either sample or `both standard deviations == 0`",
+        )
     }
 
     /// Degrees of freedom for Welch's t statistic for
@@ -117,8 +145,18 @@ impl<'a> Comp<'a> {
     /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
     /// Thus, this statistic equivalently pertains to `ln(median(latency(f1)) / median(latency(f2)))`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - `self.out_f1().n_ln <= 1`.
+    /// - `self.out_f2().n_ln <= 1`.
+    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
     pub fn welch_ln_df(&self) -> f64 {
-        welch_df(&self.moments_ln_f1(), &self.moments_ln_f2()).aok()
+        welch_df(&self.moments_ln_f1(), &self.moments_ln_f2()).aok().panic_if_needed(
+            self.panic_on_error(),
+            "`number of observations <= 1` for either sample or `both standard deviations == 0`",
+        )
     }
 
     /// p-value of Welch's two-sample t-test of the hypothesis that
@@ -131,8 +169,20 @@ impl<'a> Comp<'a> {
     /// Arguments:
     /// - `ln_d0`: hypothesized value of `mean(ln(latency(f1))) - mean(ln(latency(f2)))`, or equivalently,
     ///   `ln(median(latency(f1)) / median(latency(f2)))`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - `self.out_f1().n_ln <= 1`.
+    /// - `self.out_f2().n_ln <= 1`.
+    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
     pub fn welch_ln_p(&self, ln_d0: f64, alt_hyp: AltHyp) -> f64 {
-        welch_p(&self.moments_ln_f1(), &self.moments_ln_f2(), ln_d0, alt_hyp).aok()
+        welch_p(&self.moments_ln_f1(), &self.moments_ln_f2(), ln_d0, alt_hyp)
+            .aok()
+            .panic_if_needed(
+                self.panic_on_error(),
+                "`number of observations <= 1` for either sample or `both standard deviations == 0`",
+            )
     }
 
     /// Welch confidence interval for
@@ -143,8 +193,21 @@ impl<'a> Comp<'a> {
     /// This assumption is widely supported by performance analysis theory and empirical data.
     ///
     /// This is also the confidence interval for the difference of medians of logarithms under the above assumption.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - `self.out_f1().n_ln <= 1`.
+    /// - `self.out_f2().n_ln <= 1`.
+    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
+    /// - `alpha` not in open interval `(0, 1)`.
     pub fn welch_ln_ci(&self, alpha: f64) -> Ci {
-        welch_ci(&self.moments_ln_f1(), &self.moments_ln_f2(), alpha).aok()
+        welch_ci(&self.moments_ln_f1(), &self.moments_ln_f2(), alpha)
+            .aok()
+            .panic_if_needed(
+                self.panic_on_error(),
+                "`number of observations <= 1` for either sample, `both standard deviations == 0`, or `alpha` not in open interval `(0, 1)`",
+            )
     }
 
     /// Welch confidence interval for
@@ -153,6 +216,14 @@ impl<'a> Comp<'a> {
     ///
     /// Assumes that both `latency(f1)` and `latency(f2)` are approximately log-normal.
     /// This assumption is widely supported by performance analysis theory and empirical data.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - `self.out_f1().n_ln <= 1`.
+    /// - `self.out_f2().n_ln <= 1`.
+    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
+    /// - `alpha` not in open interval `(0, 1)`.
     pub fn welch_ratio_ci(&self, alpha: f64) -> Ci {
         let Ci(log_low, log_high) = self.welch_ln_ci(alpha);
         let low = log_low.exp();
@@ -167,6 +238,14 @@ impl<'a> Comp<'a> {
     ///
     /// Assumes that both `latency(f1)` and `latency(f2)` are approximately log-normal.
     /// This assumption is widely supported by performance analysis theory and empirical data.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - `self.out_f1().n_ln <= 1`.
+    /// - `self.out_f2().n_ln <= 1`.
+    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
+    /// - `alpha` not in open interval `(0, 1)`.
     pub fn welch_value_position_wrt_ratio_ci(&self, value: f64, alpha: f64) -> PositionWrtCi {
         let ci = self.welch_ratio_ci(alpha);
         ci.position_of(value)
@@ -184,6 +263,14 @@ impl<'a> Comp<'a> {
     ///   `ln(median(latency(f1)) / median(latency(f2)))`.
     /// - `alt_hyp`: alternative hypothesis.
     /// - `alpha`: confidence level is `1 - alpha`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - `self.out_f1().n_ln <= 1`.
+    /// - `self.out_f2().n_ln <= 1`.
+    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
+    /// - `alpha` not in open interval `(0, 1)`.
     pub fn welch_ln_test(&self, ln_d0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
         welch_test(
             &self.moments_ln_f1(),
@@ -193,6 +280,10 @@ impl<'a> Comp<'a> {
             alpha,
         )
         .aok()
+        .panic_if_needed(
+            self.panic_on_error(),
+            "`number of observations <= 1` for either sample, `both standard deviations == 0`, or `alpha` not in open interval `(0, 1)`",
+        )
     }
 
     #[cfg(feature = "_experimental")]
@@ -211,7 +302,12 @@ impl<'a> Comp<'a> {
         });
 
         RankSum::from_iters_with_counts(iter_f1, iter_f2)
-            .expect("data should be in strictly increasing order")
+            .aok()
+            .panic_if_needed(
+                self.panic_on_error(),
+                // samples not in increasing order is impossible due to use of HdrHistogram
+                "either sample is empty",
+            )
     }
 
     #[cfg(feature = "_experimental")]
@@ -226,16 +322,34 @@ impl<'a> Comp<'a> {
     /// Wilcoxon rank sum normal approximation *z* value for `latency(f1)` and `latency(f2)`.
     ///
     /// Requires feature `_experimental`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - either sample is empty.
+    /// - there are too many rank ties between the two samples.
     pub fn wilcoxon_rank_sum_z(&self) -> f64 {
-        self.rank_sum().z().aok()
+        self.rank_sum().z().aok().panic_if_needed(
+            self.panic_on_error(),
+            "either sample is empty or too many rank ties",
+        )
     }
 
     #[cfg(feature = "_experimental")]
     /// Wilcoxon rank sum normal approximation *p* value for `latency(f1)` and `latency(f2)`.
     ///
     /// Requires feature `_experimental`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - either sample is empty.
+    /// - there are too many rank ties between the two samples.
     pub fn wilcoxon_rank_sum_p(&self, alt_hyp: AltHyp) -> f64 {
-        self.rank_sum().z_p(alt_hyp).aok()
+        self.rank_sum().z_p(alt_hyp).aok().panic_if_needed(
+            self.panic_on_error(),
+            "either sample is empty or too many rank ties",
+        )
     }
 
     #[cfg(feature = "_experimental")]
@@ -243,8 +357,21 @@ impl<'a> Comp<'a> {
     /// with alternative hypothesis `alt_hyp` and confidence level `(1 - alpha)`.
     ///
     /// Requires feature `_experimental`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - either sample is empty.
+    /// - there are too many rank ties between the two samples.
+    /// - `alpha` not in open interval `(0, 1)`.
     pub fn wilcoxon_rank_sum_test(&self, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
-        self.rank_sum().z_test(alt_hyp, alpha).aok()
+        self.rank_sum()
+            .z_test(alt_hyp, alpha)
+            .aok()
+            .panic_if_needed(
+                self.panic_on_error(),
+                "either sample is empty or too many rank ties or `alpha` not in open interval `(0, 1)`",
+            )
     }
 }
 
@@ -367,11 +494,7 @@ mod test {
                 f1_out.mean_ln() - f2_out.mean_ln(),
                 comp.mean_diff_ln_f1_f2()
             );
-            approx_eq!(
-                ratio_medians,
-                comp.ratio_medians_f1_f2_fromom_lns(),
-                EPSILON
-            );
+            approx_eq!(ratio_medians, comp.ratio_medians_f1_f2_from_lns(), EPSILON);
             assert_eq!(
                 welch_t(mom_ln1, mom_ln2, ln_d0).unwrap(),
                 comp.welch_ln_t(ln_d0)
