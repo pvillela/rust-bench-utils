@@ -227,8 +227,9 @@ impl BenchCfg {
 }
 
 #[doc(hidden)]
-/// Panics if `panic == true` and the receiver is tainted. Used only internally by this crate and `bench_diff`.
+/// Extends [`AokValue`].
 pub trait PanicIfNeeded: AokValue + Sized {
+    /// Panics if `panic == true` and the receiver is tainted. Used only internally by this crate and `bench_diff`.
     fn panic_if_needed(self, panic: bool, msg: &str) -> Self {
         if panic && self.is_tainted() {
             panic!("{msg}")
@@ -237,14 +238,7 @@ pub trait PanicIfNeeded: AokValue + Sized {
     }
 }
 
-impl PanicIfNeeded for f64 {}
-
-impl PanicIfNeeded for basic_stats::core::Ci {}
-
-impl PanicIfNeeded for basic_stats::core::HypTestResult {}
-
-#[cfg(feature = "_experimental")]
-impl PanicIfNeeded for basic_stats::wilcoxon::RankSum {}
+impl<T> PanicIfNeeded for T where T: AokValue + Sized {}
 
 #[cfg(test)]
 mod test {
