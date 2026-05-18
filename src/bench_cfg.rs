@@ -1,11 +1,7 @@
 use basic_stats::aok::AokValue;
 
-use crate::LatencyUnit;
-use std::{
-    ops::Deref,
-    sync::Mutex,
-    time::{Duration, Instant},
-};
+use crate::{LatencyUnit, latency};
+use std::{ops::Deref, sync::Mutex, time::Duration};
 
 /// Specifies how long a benchmark should run for. Encapsulates a target number of iterations for the benchmark to run
 /// and a time duration. The benchmark run length can be set as a number of iterations, a time duration, or
@@ -194,29 +190,8 @@ impl BenchCfg {
     }
 
     /// Estimates how many executions of `f` fit in one millisecond, for status-reporting estimates.
-    pub fn executions_per_milli(&self, mut f: impl FnMut()) -> f64 {
-        let start = Instant::now();
-
-        for i in 1.. {
-            let iter_start = Instant::now();
-
-            for _ in 0..2u64.pow(i - 1) {
-                f();
-            }
-
-            let iter_latency_nanos = iter_start.elapsed().as_nanos() as f64;
-            let acc_latency_nanos = start.elapsed().as_nanos() as f64;
-            let status_nanos = self.status_millis as f64 * 1_000_000.0;
-
-            if iter_latency_nanos >= status_nanos / 2.2 || acc_latency_nanos >= status_nanos {
-                let iter_execs_per_milli =
-                    (2u64.pow(i - 1)) as f64 / iter_latency_nanos * 1_000_000.;
-                let acc_execs_per_milli = (2u64.pow(i) - 1) as f64 / acc_latency_nanos * 1_000_000.;
-                return iter_execs_per_milli.min(acc_execs_per_milli);
-            }
-        }
-
-        unreachable!("above loop must return at some point")
+    pub fn execs_per_milli(&self, f: impl FnMut()) -> f64 {
+        latency::executions_per_milli(self.status_millis, f)
     }
 
     /// Number of executions between status updates, derived from `execs_per_milli`.
@@ -401,7 +376,7 @@ mod test {
     fn test_bench_cfg_executions_per_milli() {
         let cfg = BenchCfg::get();
         // Using a no-op closure, the calibration should return a reasonable positive value
-        let epms = cfg.executions_per_milli(|| {});
+        let epms = cfg.execs_per_milli(|| {});
         assert!(epms.is_finite());
         assert!(epms > 0.0);
     }

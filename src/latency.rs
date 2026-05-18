@@ -78,6 +78,37 @@ impl LatencyUnit {
     }
 }
 
+/// Estimates how many executions of `f` fit in one millisecond by executing the function one or more times
+/// and doing a proportionality calculation.
+///
+/// # Arguments
+///
+/// `budget_millis` - the time budget for the estimation process, in milliseconds.
+/// `f` - the target function.
+pub fn executions_per_milli(budget_millis: u64, mut f: impl FnMut()) -> f64 {
+    let start = Instant::now();
+
+    for i in 1.. {
+        let iter_start = Instant::now();
+
+        for _ in 0..2u64.pow(i - 1) {
+            f();
+        }
+
+        let iter_latency_nanos = iter_start.elapsed().as_nanos() as f64;
+        let acc_latency_nanos = start.elapsed().as_nanos() as f64;
+        let budget_nanos = budget_millis as f64 * 1_000_000.0;
+
+        if iter_latency_nanos >= budget_nanos / 2.0 || acc_latency_nanos >= budget_nanos {
+            let iter_execs_per_milli = (2u64.pow(i - 1)) as f64 / iter_latency_nanos * 1_000_000.;
+            let acc_execs_per_milli = (2u64.pow(i) - 1) as f64 / acc_latency_nanos * 1_000_000.;
+            return iter_execs_per_milli.min(acc_execs_per_milli);
+        }
+    }
+
+    unreachable!("above loop must return at some point")
+}
+
 #[cfg(test)]
 #[cfg(feature = "_test_support")]
 #[cfg(feature = "_bench")]

@@ -1,6 +1,6 @@
 mod support;
 
-use bench_utils::{busy_work, calibrate_busy_work};
+use bench_utils::BusyWork;
 use criterion::{Criterion, criterion_group, criterion_main};
 use support::bench_basic_naive::{Args, get_args};
 
@@ -16,23 +16,24 @@ fn criterion_benchmark(c: &mut Criterion) {
     } = args;
 
     let base_latency = latency_unit.latency_from_f64(base_median);
-    let base_effort = calibrate_busy_work(base_latency);
+    let base_busy_work = BusyWork::new(base_latency);
+    let base_effort = base_busy_work.effort();
 
     eprintln!("base_latency={base_latency:?}");
     eprintln!("base_effort={}", base_effort);
 
     let effort1 = (base_effort as f64 * target_ratio) as u32;
-    let f1 = || busy_work(effort1);
+    let mut f1 = BusyWork::from_effort(effort1).fun();
 
     let effort2 = base_effort;
-    let f2 = || busy_work(effort2);
+    let mut f2 = BusyWork::from_effort(effort2).fun();
 
     for i in 1..=nrepeats {
         let name1 = format!("f1={target_ratio}@novar[{i}/{nrepeats}]");
         let name2 = format!("f2=1@novar[{i}/{nrepeats}]");
 
-        c.bench_function(&name1, |b| b.iter(f1));
-        c.bench_function(&name2, |b| b.iter(f2));
+        c.bench_function(&name1, |b| b.iter(&mut f1));
+        c.bench_function(&name2, |b| b.iter(&mut f2));
     }
 }
 

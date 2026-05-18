@@ -127,7 +127,7 @@ impl BenchOut {
     /// Sample mean of latencies.
     ///
     /// # Panics
-    /// Panics if `self.panic_on_error() == true` and the number of observations is zero.
+    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
     pub fn mean(&self) -> f64 {
         sample_mean(self.n(), self.sum)
             .aok()
@@ -138,7 +138,7 @@ impl BenchOut {
     /// Sample standard deviation of latencies.
     ///
     /// # Panics
-    /// Panics if `self.panic_on_error() == true` the number of observations is zero.
+    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
     pub fn stdev(&self) -> f64 {
         sample_stdev(self.n(), self.sum, self.sum2)
             .aok()
@@ -154,7 +154,7 @@ impl BenchOut {
     /// Sample mean of the natural logarithms of latencies.
     ///
     /// # Panics
-    /// Panics if `self.panic_on_error() == true` the number of observations is zero.
+    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
     pub fn mean_ln(&self) -> f64 {
         sample_mean(self.n_ln, self.sum_ln)
             .aok()
@@ -165,7 +165,7 @@ impl BenchOut {
     /// Sample standard deviation of the natural logarithms of latencies.
     ///
     /// # Panics
-    /// Panics if `self.panic_on_error() == true` the number of observations is zero.
+    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
     pub fn stdev_ln(&self) -> f64 {
         sample_stdev(self.n_ln, self.sum_ln, self.sum2_ln)
             .aok()

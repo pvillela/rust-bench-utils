@@ -97,7 +97,7 @@ pub fn bench_run_x(
 pub fn bench_run(mut f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
     let cfg = BenchCfg::get();
     let warmup_millis = cfg.warmup_millis();
-    let execs_per_milli = cfg.executions_per_milli(&mut f);
+    let execs_per_milli = cfg.execs_per_milli(&mut f);
 
     bench_run_x(
         f,
@@ -146,7 +146,7 @@ pub fn bench_run_with_status(
         }
     };
 
-    let execs_per_milli = cfg.executions_per_milli(&mut f);
+    let execs_per_milli = cfg.execs_per_milli(&mut f);
 
     let warmup_millis = cfg.warmup_millis();
     let warmup_run_length = RunLength::Duration(Duration::from_millis(warmup_millis));
@@ -212,7 +212,7 @@ mod test {
         let _cfg = minimal_cfg_snapshot();
         // Use the snapshot cfg for calibration
         let cfg = BenchCfg::get();
-        let execs_per_milli = cfg.executions_per_milli(|| {});
+        let execs_per_milli = cfg.execs_per_milli(|| {});
 
         let out = bench_run_x(
             || {},

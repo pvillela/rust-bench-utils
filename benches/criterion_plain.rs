@@ -1,6 +1,6 @@
 mod support;
 
-use bench_utils::{busy_work, calibrate_busy_work};
+use bench_utils::BusyWork;
 use criterion::{Criterion, criterion_group, criterion_main};
 use support::bench_basic_naive::{Args, get_args};
 
@@ -16,18 +16,15 @@ fn criterion_benchmark(c: &mut Criterion) {
     } = args;
 
     let base_latency = latency_unit.latency_from_f64(base_median);
-    let base_effort = calibrate_busy_work(base_latency);
 
     eprintln!("base_latency={base_latency:?}");
-    eprintln!("base_effort={}", base_effort);
 
-    let effort = base_effort;
-    let f = || busy_work(effort);
+    let mut f = BusyWork::new(base_latency).fun();
 
     for i in 1..=nrepeats {
         let name = format!("latency={base_latency:?}[{i}/{nrepeats}]");
 
-        c.bench_function(&name, |b| b.iter(f));
+        c.bench_function(&name, |b| b.iter(&mut f));
     }
 }
 

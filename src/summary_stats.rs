@@ -38,9 +38,14 @@ pub struct SummaryStats {
 
 #[doc(hidden)]
 /// Computes a [`SummaryStats`] from a [`BenchOut`].
+///
+/// # Panics
+///
+/// Panics if the current value of [`crate::BenchCfg::panic_on_error`] is `true` **and** the number of observations is zero.
 pub fn summary_stats(out: &BenchOut) -> SummaryStats {
     let hist = &out.hist;
     let factor = out.converson_factor();
+
     SummaryStats {
         count: hist.len(),
         mean: out.mean(),
