@@ -119,8 +119,6 @@ pub fn bench_run_x_with_cfg(
     let warmup_est_count = warmup_run_length.estimated_count(execs_per_milli);
     let exec_est_count = exec_run_length.estimated_count(execs_per_milli);
 
-    println!("*** status_freq={status_freq}");
-    println!("*** warmup_est_count={warmup_est_count}");
     // Warm-up.
     state.execute(
         &mut f,
@@ -235,7 +233,7 @@ pub fn bench_run_with_status_and_cfg(
     };
 
     let execs_per_milli = cfg.execs_per_milli(&mut f);
-    println!("*** execs_per_milli={execs_per_milli}");
+
     let warmup_millis = cfg.warmup_millis();
     let warmup_run_length = RunLength::Duration(Duration::from_millis(warmup_millis));
     let warmup_est_count = warmup_run_length.estimated_count(execs_per_milli);

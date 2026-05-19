@@ -103,10 +103,6 @@ pub fn executions_per_milli(budget_millis: u64, mut f: impl FnMut()) -> f64 {
         let budget = Duration::from_millis(budget_millis);
 
         if iter_latency >= budget / 2 || acc_latency >= budget {
-            println!(
-                "*** iter_latency={:?}, iter_execs={}",
-                iter_latency, iter_execs
-            );
             let iter_execs_per_milli = iter_execs as f64 / iter_latency.as_millis() as f64;
             let acc_execs_per_milli = acc_execs as f64 / acc_latency.as_millis() as f64;
             return iter_execs_per_milli.max(acc_execs_per_milli);
