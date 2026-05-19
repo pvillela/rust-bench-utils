@@ -60,3 +60,10 @@ Most tests require `_test_support` + `_bench_run`. The feature `_bench_diff` is 
 
 - `basic_stats` (at `../basic-stats`) — normal, Student's t, Welch's t, Wilcoxon, AOK extensions
 - `bench_diff` — uses `bench_utils` with `_bench_diff` feature for paired latency comparisons
+
+### Tests
+
+Tests in this crate that call the `latency::latency` function or call `Duration::elapsed()` to compute letencies should be executed with `cargo test -r` because latency measurements can be highly unreliable when the code is not compiled with release optimization.
+
+To test the entire crate, use should primarily use @test.sh script.
+

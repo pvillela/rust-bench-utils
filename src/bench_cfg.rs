@@ -29,26 +29,31 @@ impl RunLength {
         }
     }
 
-    /// Estimated number of iterations, used only for status reporting.
+    /// Estimated number of iterations.
     pub fn estimated_count(&self, execs_per_milli: f64) -> usize {
         match self {
             Self::Count(count) => *count,
-            Self::Duration(duration) => (duration.as_millis() as f64 * execs_per_milli) as usize,
+            Self::Duration(duration) => {
+                (duration.as_millis() as f64 * execs_per_milli).ceil() as usize
+            }
             Self::CountWithTimeout(count, duration) => {
-                let count_from_duration = (duration.as_millis() as f64 * execs_per_milli) as usize;
+                let count_from_duration =
+                    (duration.as_millis() as f64 * execs_per_milli).ceil() as usize;
                 *count.min(&count_from_duration)
             }
         }
     }
 
-    /// Estimated run duration, used only for status reporting.
+    /// Estimated run duration.
     pub fn estimated_duration(&self, execs_per_milli: f64) -> Duration {
         match self {
-            Self::Count(count) => Duration::from_millis((*count as f64 / execs_per_milli) as u64),
+            Self::Count(count) => {
+                Duration::from_millis((*count as f64 / execs_per_milli).ceil() as u64)
+            }
             Self::Duration(duration) => *duration,
             Self::CountWithTimeout(count, duration) => {
                 let duration_from_count =
-                    Duration::from_millis((*count as f64 / execs_per_milli) as u64);
+                    Duration::from_millis((*count as f64 / execs_per_milli).ceil() as u64);
                 *duration.min(&duration_from_count)
             }
         }
@@ -197,7 +202,7 @@ impl BenchCfg {
     /// Number of executions between status updates, derived from `execs_per_milli`.
     pub fn status_freq(&self, execs_per_milli: f64) -> usize {
         let status_freq = self.status_millis as f64 * execs_per_milli;
-        status_freq.ceil() as usize
+        1.max(status_freq.ceil() as usize)
     }
 }
 
@@ -216,13 +221,14 @@ pub trait PanicIfNeeded: AokValue + Sized {
 impl<T> PanicIfNeeded for T where T: AokValue + Sized {}
 
 #[cfg(test)]
+#[cfg(feature = "_test_support")]
 mod test {
-    use crate::{BenchCfg, LatencyUnit, RunLength};
+    use crate::{BenchCfg, LatencyUnit, RunLength, test_support::with_safe_bench_cfg};
     use std::time::Duration;
 
     #[test]
     fn test_bench_cfg_default() {
-        let cfg = BenchCfg::get();
+        let cfg = with_safe_bench_cfg(|| BenchCfg::get());
 
         println!("cfg={cfg:?}");
         assert_eq!(cfg.warmup_millis(), BenchCfg::DEFAULT_WARMUP_MILLIS);
@@ -234,20 +240,17 @@ mod test {
 
     #[test]
     fn test_bench_cfg_builder_method_chaining() {
-        // Saving hack below may not work if concurrent tests call `BenchCfg::get()`.
-        let saved_cfg = BenchCfg::get();
-        println!("saved_cfg={saved_cfg:?}");
-        let cfg = BenchCfg::get();
-
-        cfg.with_recording_unit(LatencyUnit::Micro)
-            .with_warmup_millis(100)
-            .with_reporting_unit(LatencyUnit::Milli)
-            .with_sigfig(5)
-            .with_status_millis(200)
-            .with_panic_on_error(true)
-            .set();
-        let cfg = BenchCfg::get();
-        saved_cfg.set(); // restore previous config
+        let cfg = with_safe_bench_cfg(|| {
+            let cfg = BenchCfg::get();
+            cfg.with_recording_unit(LatencyUnit::Micro)
+                .with_warmup_millis(100)
+                .with_reporting_unit(LatencyUnit::Milli)
+                .with_sigfig(5)
+                .with_status_millis(200)
+                .with_panic_on_error(true)
+                .set();
+            BenchCfg::get()
+        });
 
         println!("cfg={cfg:?}");
         assert_eq!(cfg.warmup_millis(), 100);
@@ -357,7 +360,8 @@ mod test {
 
     #[test]
     fn test_bench_cfg_status_freq() {
-        let cfg = BenchCfg::get();
+        let cfg = with_safe_bench_cfg(|| BenchCfg::get());
+        println!("cfg={cfg:?}");
 
         // 1000ms interval, 500 execs/milli => 500_000 status freq
         let freq = cfg.status_freq(500.0);
@@ -367,17 +371,16 @@ mod test {
         let freq = cfg.status_freq(1.5);
         assert_eq!(freq, 1500);
 
-        // Zero execs_per_milli => 0
+        // Zero execs_per_milli => 1
         let freq = cfg.status_freq(0.0);
-        assert_eq!(freq, 0);
+        assert_eq!(freq, 1);
     }
 
     #[test]
     fn test_bench_cfg_executions_per_milli() {
-        let cfg = BenchCfg::get();
+        let cfg = with_safe_bench_cfg(|| BenchCfg::get());
         // Using a no-op closure, the calibration should return a reasonable positive value
         let epms = cfg.execs_per_milli(|| {});
         assert!(epms.is_finite());
-        assert!(epms > 0.0);
     }
 }

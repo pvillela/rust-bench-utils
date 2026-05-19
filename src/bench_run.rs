@@ -16,6 +16,9 @@ impl BenchState {
         mut f: impl FnMut(),
         run_length: RunLength,
         status_freq: usize,
+        // Used in control of the exit from the iteration loop when both `status_freq` and `exec_count` are too high
+        // compared to `run_length`.
+        est_count_from_dur: usize,
         mut exec_status: Option<impl FnMut(usize)>,
     ) {
         assert!(status_freq > 0, "status_freq must be > 0");
@@ -24,19 +27,35 @@ impl BenchState {
         assert!(exec_count > 0, "exec_count must be > 0");
 
         let unit = BenchCfg::get().recording_unit();
+        let mut est_remaining_iters = est_count_from_dur;
         let start = Instant::now();
 
         for i in 1..=exec_count {
             let latency = unit.latency_as_u64(latency(&mut f));
             self.capture_data(latency);
+            if est_remaining_iters > 0 {
+                est_remaining_iters -= 1;
+            }
 
-            if i % status_freq == 0 || i == exec_count {
-                if let Some(ref mut exec_status) = exec_status {
-                    exec_status(i);
+            if i % status_freq == 0 || i == exec_count || est_remaining_iters == 0 {
+                let elapsed = start.elapsed();
+                let finished = i == exec_count || elapsed >= run_time;
+
+                if i % status_freq == 0 || finished {
+                    if let Some(ref mut exec_status) = exec_status {
+                        exec_status(i);
+                    }
                 }
 
-                if start.elapsed().ge(&run_time) {
+                if finished {
                     break;
+                }
+
+                if est_remaining_iters == 0 {
+                    let remaining_time = run_time - elapsed;
+                    let avg_time_per_iter = elapsed / i as u32;
+                    est_remaining_iters =
+                        remaining_time.div_duration_f64(avg_time_per_iter).ceil() as usize;
                 }
             }
         }
@@ -60,26 +79,32 @@ impl BenchState {
 /// - `execs_per_milli` - estimate of how many executions of `f` fit in one millisecond.
 pub fn bench_run_x(
     mut f: impl FnMut(),
-    warmup_millis: u64,
     exec_run_length: RunLength,
     warmup_status: Option<impl FnMut(usize)>,
     exec_status: Option<impl FnMut(usize)>,
     execs_per_milli: f64,
 ) -> BenchOut {
-    let mut state = BenchOut::new(&BenchCfg::get());
     let cfg = BenchCfg::get();
+    let mut state = BenchOut::new(&cfg);
     let status_freq = cfg.status_freq(execs_per_milli);
 
+    let warmup_run_length = RunLength::Duration(Duration::from_millis(cfg.warmup_millis()));
+    let warmup_est_count = warmup_run_length.estimated_count(execs_per_milli);
+    let exec_est_count = exec_run_length.estimated_count(execs_per_milli);
+
+    println!("*** status_freq={status_freq}");
+    println!("*** warmup_est_count={warmup_est_count}");
     // Warm-up.
     state.execute(
         &mut f,
-        RunLength::Duration(Duration::from_millis(warmup_millis)),
+        warmup_run_length,
         status_freq,
+        warmup_est_count,
         warmup_status,
     );
     state.reset();
 
-    state.execute(f, exec_run_length, status_freq, exec_status);
+    state.execute(f, exec_run_length, status_freq, exec_est_count, exec_status);
 
     state
 }
@@ -96,12 +121,10 @@ pub fn bench_run_x(
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run(mut f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
     let cfg = BenchCfg::get();
-    let warmup_millis = cfg.warmup_millis();
     let execs_per_milli = cfg.execs_per_milli(&mut f);
 
     bench_run_x(
         f,
-        warmup_millis,
         exec_run_length,
         None::<fn(usize)>,
         None::<fn(usize)>,
@@ -147,25 +170,24 @@ pub fn bench_run_with_status(
     };
 
     let execs_per_milli = cfg.execs_per_milli(&mut f);
-
+    println!("*** execs_per_milli={execs_per_milli}");
     let warmup_millis = cfg.warmup_millis();
     let warmup_run_length = RunLength::Duration(Duration::from_millis(warmup_millis));
     let warmup_est_count = warmup_run_length.estimated_count(execs_per_milli);
     let warmup_status = status("Warming up", warmup_millis, warmup_est_count);
 
-    let exec_count = exec_run_length.estimated_count(execs_per_milli);
-    let exec_millis = exec_run_length
+    let exec_est_count = exec_run_length.estimated_count(execs_per_milli);
+    let exec_est_millis = exec_run_length
         .estimated_duration(execs_per_milli)
         .as_millis() as u64;
     // The `\n` below is to separate warmup status from exec status. Otherwise, they get mixed up due to
     // the `eprint!("{}", "\u{8}".repeat(status_len))` line in the `status` closure.
-    let exec_status = status("\nExecuting bench_run", exec_millis, exec_count);
+    let exec_status = status("\nExecuting bench_run", exec_est_millis, exec_est_count);
 
-    header(exec_count);
+    header(exec_est_count);
 
     let out = bench_run_x(
         f,
-        warmup_millis,
         exec_run_length,
         Some(warmup_status),
         Some(exec_status),
@@ -177,10 +199,11 @@ pub fn bench_run_with_status(
 
 #[cfg(test)]
 #[cfg(feature = "_test_support")]
+/// Crappy tests created by Claude Code, improved a bit by me.
 mod test {
     use super::*;
-    use crate::{LatencyUnit, RunLength};
-    use std::time::Duration;
+    use crate::{LatencyUnit, RunLength, test_support::with_safe_bench_cfg};
+    use std::{thread, time::Duration};
 
     /// Helper to get a clean config with minimal warmup/calibration for fast tests.
     fn minimal_cfg_snapshot() -> BenchCfg {
@@ -195,48 +218,49 @@ mod test {
 
     #[test]
     fn test_bench_run_with_count() {
-        let saved_cfg = BenchCfg::get();
-        let _cfg = minimal_cfg_snapshot();
+        let out = with_safe_bench_cfg(|| {
+            let _cfg = minimal_cfg_snapshot();
 
-        let out = bench_run(|| {}, RunLength::Count(5));
+            bench_run(
+                || thread::sleep(Duration::from_nanos(1)),
+                RunLength::Count(5),
+            )
+        });
         // With 5 count and no timeout, we should have exactly 5 iterations
         assert_eq!(out.n(), 5);
-
-        // Reset config
-        saved_cfg.set();
     }
 
     #[test]
     fn test_bench_run_x() {
-        let saved_cfg = BenchCfg::get();
-        let _cfg = minimal_cfg_snapshot();
-        // Use the snapshot cfg for calibration
-        let cfg = BenchCfg::get();
-        let execs_per_milli = cfg.execs_per_milli(|| {});
+        let out = with_safe_bench_cfg(|| {
+            let cfg = minimal_cfg_snapshot();
+            // Use the snapshot cfg for calibration
+            let execs_per_milli = cfg.execs_per_milli(|| thread::sleep(Duration::from_nanos(1)));
 
-        let out = bench_run_x(
-            || {},
-            0,
-            RunLength::Count(10),
-            None::<fn(usize)>,
-            None::<fn(usize)>,
-            execs_per_milli,
-        );
+            bench_run_x(
+                || {},
+                RunLength::Count(10),
+                None::<fn(usize)>,
+                None::<fn(usize)>,
+                execs_per_milli,
+            )
+        });
+
         assert_eq!(out.n(), 10);
-
-        saved_cfg.set();
     }
 
     #[test]
     fn test_bench_run_with_timeout() {
-        let saved_cfg = BenchCfg::get();
-        let _cfg = minimal_cfg_snapshot();
+        let out = with_safe_bench_cfg(|| {
+            let _cfg = minimal_cfg_snapshot();
 
-        // Use a very short timeout that should be exceeded immediately
-        let out = bench_run(|| {}, RunLength::Duration(Duration::from_nanos(1)));
+            // Use a very short timeout that should be exceeded immediately
+            bench_run(
+                || thread::sleep(Duration::from_nanos(1)),
+                RunLength::Duration(Duration::from_nanos(1)),
+            )
+        });
         // At least some executions should have been captured
         assert!(out.n() > 0);
-
-        saved_cfg.set();
     }
 }

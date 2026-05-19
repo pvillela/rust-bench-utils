@@ -7,7 +7,7 @@ use std::time::Duration;
 
 /// Compares latency outputs for `n` executions of a function `f` with `n/group_size` executions of `f` grouped `group_size` times.
 pub fn validate_latency_overhead(
-    bench_time: Duration,
+    bench_duration: Duration,
     target_latency: Duration,
     group_size: usize,
     epsilon: f64,
@@ -24,7 +24,7 @@ pub fn validate_latency_overhead(
     let target_median_solo = reporting_unit.latency_as_f64(target_latency);
     let target_median_group = target_median_solo * group_size as f64;
     let exec_count_group =
-        (reporting_unit.latency_as_f64(bench_time) / target_median_group) as usize;
+        (reporting_unit.latency_as_f64(bench_duration) / target_median_group) as usize;
     // Guard against integer truncation to 0 when target_median is larger than
     // BENCH_TIME. Fall back to 1 execution so the benchmark still produces
     // meaningful data and the assertion doesn't fire on an empty sample.

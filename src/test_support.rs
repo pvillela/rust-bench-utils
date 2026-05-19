@@ -1,9 +1,28 @@
 use crate::{BenchCfg, BenchOut};
 use basic_stats::{core::SampleMoments, normal::normal_detm_samp};
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Mutex};
 
 pub static LO_STDEV_LN: LazyLock<f64> = LazyLock::new(|| 1.2_f64.ln() / 2.);
 pub static HI_STDEV_LN: LazyLock<f64> = LazyLock::new(|| 2.4_f64.ln() / 2.);
+
+static BENCH_CFG_TEST_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+/// To wrap test logic that modifies the global bench config to prevent race conditions and ensure restoration of the
+/// pre-existing global config.
+/// The test logic wrapped by this MUST NOT have code that can panic, otherwise the Mutex can be poisoned.
+///
+/// WARNING: USE OF THIS FUNCTION CAN CAUSE DEADLOCKS AS RUST MUTEXES ARE NOT REENTRANT.
+pub fn with_safe_bench_cfg<T>(f: impl Fn() -> T) -> T {
+    println!(">>> ENTERED with_safe_bench_cfg");
+    let lock = BENCH_CFG_TEST_LOCK.lock().unwrap();
+    let saved_cfg = BenchCfg::get();
+    println!("saved_cfg={saved_cfg:?}");
+    let res = f();
+    saved_cfg.set();
+    drop(lock);
+    println!("<<< EXITING with_safe_bench_cfg");
+    res
+}
 
 impl BenchOut {
     pub fn collect_data(&mut self, src: impl Iterator<Item = u64>) {

@@ -86,23 +86,30 @@ impl LatencyUnit {
 /// `budget_millis` - the time budget for the estimation process, in milliseconds.
 /// `f` - the target function.
 pub fn executions_per_milli(budget_millis: u64, mut f: impl FnMut()) -> f64 {
-    let start = Instant::now();
+    let mut acc_latency = Duration::from_nanos(0);
+    let mut acc_execs = 0u64;
 
     for i in 1.. {
+        let iter_execs = 2u64.pow(i - 1);
         let iter_start = Instant::now();
 
-        for _ in 0..2u64.pow(i - 1) {
+        for _ in 0..iter_execs {
             f();
         }
 
-        let iter_latency_nanos = iter_start.elapsed().as_nanos() as f64;
-        let acc_latency_nanos = start.elapsed().as_nanos() as f64;
-        let budget_nanos = budget_millis as f64 * 1_000_000.0;
+        let iter_latency = iter_start.elapsed();
+        acc_latency += iter_latency;
+        acc_execs += iter_execs;
+        let budget = Duration::from_millis(budget_millis);
 
-        if iter_latency_nanos >= budget_nanos / 2.0 || acc_latency_nanos >= budget_nanos {
-            let iter_execs_per_milli = (2u64.pow(i - 1)) as f64 / iter_latency_nanos * 1_000_000.;
-            let acc_execs_per_milli = (2u64.pow(i) - 1) as f64 / acc_latency_nanos * 1_000_000.;
-            return iter_execs_per_milli.min(acc_execs_per_milli);
+        if iter_latency >= budget / 2 || acc_latency >= budget {
+            println!(
+                "*** iter_latency={:?}, iter_execs={}",
+                iter_latency, iter_execs
+            );
+            let iter_execs_per_milli = iter_execs as f64 / iter_latency.as_millis() as f64;
+            let acc_execs_per_milli = acc_execs as f64 / acc_latency.as_millis() as f64;
+            return iter_execs_per_milli.max(acc_execs_per_milli);
         }
     }
 
@@ -112,30 +119,53 @@ pub fn executions_per_milli(budget_millis: u64, mut f: impl FnMut()) -> f64 {
 #[cfg(test)]
 #[cfg(feature = "_test_support")]
 #[cfg(feature = "_bench")]
+/// cargo test -r --package bench_utils --lib --all-features -- latency::test --nocapture
 mod test {
     use super::*;
-    use crate::{BenchCfg, bench_support::validate_latency_overhead};
+    use crate::{
+        BenchCfg, bench_support::validate_latency_overhead, test_support::with_safe_bench_cfg,
+    };
     use basic_stats::{approx_eq, rel_approx_eq};
+
+    // SEE ALSO: tests for `fake_work` and `busy_work`.
 
     #[test]
     fn test_latency_overhead() {
         const EPSILON: f64 = 0.1;
 
+        struct Medians {
+            solo_median_20: f64,
+            solo_median_100: f64,
+            group_median_20: f64,
+            group_median_100: f64,
+        }
+
         let start = Instant::now();
 
-        let saved = BenchCfg::get();
-        let cfg = BenchCfg::get();
-        cfg.with_warmup_millis(100).set();
+        let Medians {
+            solo_median_20,
+            solo_median_100,
+            group_median_20,
+            group_median_100,
+        } = with_safe_bench_cfg(|| {
+            let cfg = BenchCfg::get();
+            cfg.with_warmup_millis(50).set();
 
-        let bench_time = Duration::from_millis(100);
-        let target_latency = Duration::from_micros(50);
+            let bench_duration = Duration::from_millis(50);
+            let target_latency = Duration::from_micros(50);
 
-        let (solo_median_20, group_median_20) =
-            validate_latency_overhead(bench_time, target_latency, 20, EPSILON);
-        let (solo_median_100, group_median_100) =
-            validate_latency_overhead(bench_time, target_latency, 100, EPSILON);
+            let (solo_median_20, group_median_20) =
+                validate_latency_overhead(bench_duration, target_latency, 20, EPSILON);
+            let (solo_median_100, group_median_100) =
+                validate_latency_overhead(bench_duration, target_latency, 100, EPSILON);
 
-        saved.set();
+            Medians {
+                solo_median_20,
+                solo_median_100,
+                group_median_20,
+                group_median_100,
+            }
+        });
 
         println!("elapsed time: {} millis", start.elapsed().as_millis());
 
@@ -198,7 +228,7 @@ mod test {
     }
 
     #[test]
-    fn test_latency_as_u64() {
+    fn test_latency_unit_as_u64() {
         let dur = Duration::new(1, 500_000_000); // 1.5 seconds
         assert_eq!(1500, LatencyUnit::Milli.latency_as_u64(dur));
         assert_eq!(1_500_000, LatencyUnit::Micro.latency_as_u64(dur));
@@ -211,7 +241,7 @@ mod test {
     }
 
     #[test]
-    fn test_latency_from_u64_roundtrip() {
+    fn test_latency_unit_from_u64_roundtrip() {
         // Milli round-trip
         let dur = LatencyUnit::Milli.latency_from_u64(42);
         assert_eq!(42, LatencyUnit::Milli.latency_as_u64(dur));
@@ -235,7 +265,7 @@ mod test {
     }
 
     #[test]
-    fn test_latency_as_f64() {
+    fn test_latency_unit_as_f64() {
         let dur = Duration::from_nanos(2_001_001);
         approx_eq!(2_001_001.0, LatencyUnit::Nano.latency_as_f64(dur), 1e-6);
         approx_eq!(2_001.001, LatencyUnit::Micro.latency_as_f64(dur), 1e-9);
@@ -247,7 +277,7 @@ mod test {
     }
 
     #[test]
-    fn test_latency_from_f64() {
+    fn test_latency_unit_from_f64() {
         assert_eq!(
             LatencyUnit::Nano.latency_from_f64(500.7),
             Duration::from_nanos(500),

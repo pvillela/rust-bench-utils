@@ -1,4 +1,4 @@
-use crate::{BenchCfg, BenchOut, PanicIfNeeded};
+use crate::{BenchOut, PanicIfNeeded};
 use basic_stats::{
     aok::Aok,
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments},
@@ -43,10 +43,9 @@ impl<'a> Comp<'a> {
         Self(f1_out, f2_out)
     }
 
-    /// The current value of [`BenchCfg::panic_on_error`].
-    fn panic_on_error(&self) -> bool {
-        let cfg = BenchCfg::get();
-        BenchCfg::panic_on_error(&cfg)
+    /// The value of [`BenchCfg::panic_on_error`] at the time `self` was constructed.
+    pub fn panic_on_error(&self) -> bool {
+        self.out_f1().panic_on_error()
     }
 
     /// Reference to the first benchmark output.
@@ -382,7 +381,7 @@ mod test {
     use super::*;
     use crate::test_support::{
         HI_STDEV_LN, LO_STDEV_LN, lognormal_moments_ln, lognormal_moments_ln_jittered,
-        lognormal_out, lognormal_out_jittered,
+        lognormal_out, lognormal_out_jittered, with_safe_bench_cfg,
     };
     use crate::{BenchCfg, LatencyUnit};
     use basic_stats::{approx_eq, core::AcceptedHyp};
@@ -403,19 +402,20 @@ mod test {
 
     #[test]
     fn test_comp_new_panics_on_reporting_unit_mismatch() {
-        let saved_cfg = BenchCfg::get();
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let cfg1 = BenchCfg::get();
-            cfg1.with_reporting_unit(LatencyUnit::Nano).set();
-            let out1 = lognormal_out(8., *LO_STDEV_LN, 5);
+        let result = with_safe_bench_cfg(|| {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let cfg1 = BenchCfg::get();
+                cfg1.with_reporting_unit(LatencyUnit::Nano).set();
+                let out1 = lognormal_out(8., *LO_STDEV_LN, 5);
 
-            let cfg2 = BenchCfg::get();
-            cfg2.with_reporting_unit(LatencyUnit::Micro).set();
-            let out2 = lognormal_out(8., *LO_STDEV_LN, 5);
+                let cfg2 = BenchCfg::get();
+                cfg2.with_reporting_unit(LatencyUnit::Micro).set();
+                let out2 = lognormal_out(8., *LO_STDEV_LN, 5);
 
-            Comp::new(&out1, &out2);
-        }));
-        saved_cfg.set();
+                Comp::new(&out1, &out2);
+            }))
+        });
+
         assert!(
             result.is_err(),
             "expected Comp::new to panic on reporting unit mismatch"
@@ -431,15 +431,19 @@ mod test {
         let sigma_hi = *HI_STDEV_LN;
 
         let mu_a = 8.;
-        let out_a = lognormal_out(mu_a, sigma_lo, k);
+        let out_a = with_safe_bench_cfg(|| lognormal_out(mu_a, sigma_lo, k));
         let moments_ln_a = lognormal_moments_ln(mu_a, sigma_lo, k);
-        let out_aj = lognormal_out_jittered(mu_a, sigma_hi, k, n_jitter, JITTER_EPSILON);
+        let out_aj = with_safe_bench_cfg(|| {
+            lognormal_out_jittered(mu_a, sigma_hi, k, n_jitter, JITTER_EPSILON)
+        });
         let moments_ln_aj =
             lognormal_moments_ln_jittered(mu_a, sigma_hi, k, n_jitter, JITTER_EPSILON);
 
         let median_ratio_a_b: f64 = 1.01;
         let mu_b = mu_a - median_ratio_a_b.ln();
-        let out_bj = lognormal_out_jittered(mu_b, sigma_hi, k, n_jitter, JITTER_EPSILON);
+        let out_bj = with_safe_bench_cfg(|| {
+            lognormal_out_jittered(mu_b, sigma_hi, k, n_jitter, JITTER_EPSILON)
+        });
         let moments_ln_bj =
             lognormal_moments_ln_jittered(mu_b, sigma_hi, k, n_jitter, JITTER_EPSILON);
 

@@ -7,6 +7,12 @@ use std::{hint::black_box, time::Duration};
 /// Gated by feature **"busy_work"**.
 ///
 /// The closure executes a work function whose latency is controlled by the `effort` value encapsulated in this struct.
+///
+/// Given a desired target latency, the latency of the resulting closure is not as reliable as using
+/// `|| thread::sleep(target_latency)`. However, the busy work closure is a more realistic sythetic load as its latency
+/// is the result of computations. Nonetheless, the ratio of the latencies of two closures created from two [`BusyWork`]
+/// instances are reliably proportional to the ratios of the respective `effort` attributes, the more so the higher the
+/// sample size.
 pub struct BusyWork {
     effort: u32,
 }
@@ -134,35 +140,136 @@ impl BusyWork {
 }
 
 #[cfg(test)]
-mod test {
+#[cfg(feature = "_test_support")]
+/// cargo test --package bench_utils --lib --all-features -- busy_work::test --nocapture
+mod core_tests {
     use super::*;
+    use crate::latency;
+    use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
 
-    #[test]
-    fn test_busy_work_minimal() {
-        // Should not panic with minimal effort
-        BusyWork::from_effort(1).fun()();
-    }
-
-    #[test]
-    fn test_busy_work_zero() {
-        // Should not panic with zero effort
-        BusyWork::from_effort(0).fun()();
-    }
-
-    #[test]
-    fn test_calibrate_busy_work_x() {
-        // Calibration should return a positive effort value
-        let effort = BusyWork::effort_from_latency_and_calibration_effort(
-            Duration::from_nanos(1000),
-            100_000,
+    fn run(dur: Duration) -> (f64, f64) {
+        let f = BusyWork::new(dur).fun();
+        let latency_secs = latency(f).as_secs_f64();
+        let dur_secs = dur.as_secs_f64();
+        let rel_diff = dur_secs.abs_rel_diff(latency_secs, 0.000001);
+        println!(
+            "dur={:?}, dur_secs={}, latency_secs={}, rel_diff={}",
+            dur, dur_secs, latency_secs, rel_diff
         );
-        assert!(effort > 0);
+        (dur_secs, latency_secs)
     }
 
     #[test]
-    fn test_calibrate_busy_work() {
-        // Default calibration should return a positive effort value
-        let effort = BusyWork::new(Duration::from_nanos(2000)).effort();
-        assert!(effort > 0);
+    fn test_busy_work_new_zero() {
+        const EPSILON: f64 = 0.005;
+        let dur = Duration::ZERO;
+        let (dur_secs, latency_secs) = run(dur);
+        rel_approx_eq!(dur_secs, latency_secs, EPSILON);
+    }
+
+    #[test]
+    fn test_busy_work_new_1_nano() {
+        const EPSILON: f64 = 0.005;
+        let dur = Duration::from_nanos(1);
+        let (dur_secs, latency_secs) = run(dur);
+        rel_approx_eq!(dur_secs, latency_secs, EPSILON);
+    }
+
+    #[test]
+    fn test_busy_work_new_1_micro() {
+        const EPSILON: f64 = 0.005;
+        let dur = Duration::from_micros(1);
+        let (dur_secs, latency_secs) = run(dur);
+        rel_approx_eq!(dur_secs, latency_secs, EPSILON);
+    }
+
+    #[test]
+    fn test_busy_work_new_1_milli() {
+        const EPSILON: f64 = 0.005;
+        let dur = Duration::from_millis(1);
+        let (dur_secs, latency_secs) = run(dur);
+        rel_approx_eq!(dur_secs, latency_secs, EPSILON);
+    }
+
+    #[test]
+    fn test_busy_work_new_50_millis() {
+        const EPSILON: f64 = 0.5; // test often fails with smaller EPSILON
+        let dur = Duration::from_millis(50);
+        let (dur_secs, latency_secs) = run(dur);
+        rel_approx_eq!(dur_secs, latency_secs, EPSILON);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "_test_support")]
+// cargo test -r --package bench_utils --lib --all-features -- busy_work::ratio_tests --nocapture
+mod ratio_tests {
+    use super::*;
+    use crate::latency;
+    use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
+
+    fn run(dur1: Duration, ratio: f64, repeats: u32) -> f64 {
+        let bw1 = BusyWork::new(dur1);
+        let effort1 = bw1.effort();
+        let effort2 = (effort1 as f64 * ratio) as u32;
+
+        let f1 = bw1.fun();
+        let f2 = BusyWork::from_effort(effort2).fun();
+
+        let mut latency_secs1 = 0.0;
+        let mut latency_secs2 = 0.0;
+
+        for _ in 0..repeats {
+            latency_secs1 += latency(&f1).as_secs_f64();
+            latency_secs2 += latency(&f2).as_secs_f64();
+        }
+
+        let latency_ratio = latency_secs2 / latency_secs1;
+        let rel_diff = latency_ratio.abs_rel_diff(ratio, 0.000001);
+
+        println!(
+            "dur1={:?}, latency_ratio={}, ratio={}, rel_diff={}",
+            dur1, latency_ratio, ratio, rel_diff
+        );
+
+        latency_ratio
+    }
+
+    const RATIO: f64 = 1.10;
+
+    #[test]
+    fn test_busy_work_ratio_100_nano() {
+        const EPSILON: f64 = 0.5; // not reliable at nano scale
+        let dur1 = Duration::from_nanos(100);
+        let repeats = 100_000;
+        let latency_ratio = run(dur1, RATIO, repeats);
+        rel_approx_eq!(latency_ratio, RATIO, EPSILON);
+    }
+
+    #[test]
+    fn test_busy_work_ratio_100_micro() {
+        const EPSILON: f64 = 0.05;
+        let dur1 = Duration::from_micros(10);
+        let repeats = 1_000;
+        let latency_ratio = run(dur1, RATIO, repeats);
+        rel_approx_eq!(latency_ratio, RATIO, EPSILON);
+    }
+
+    #[test]
+    fn test_busy_work_ratio_1_milli() {
+        const EPSILON: f64 = 0.05;
+        let dur1 = Duration::from_millis(1);
+        let repeats = 100;
+        let latency_ratio = run(dur1, RATIO, repeats);
+        rel_approx_eq!(latency_ratio, RATIO, EPSILON);
+    }
+
+    #[test]
+    fn test_busy_work_ratio_10_millis() {
+        const EPSILON: f64 = 0.05;
+        let dur1 = Duration::from_millis(10);
+        let repeats = 10;
+        let latency_ratio = run(dur1, RATIO, repeats);
+        rel_approx_eq!(latency_ratio, RATIO, EPSILON);
     }
 }

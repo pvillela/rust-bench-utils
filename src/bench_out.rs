@@ -30,6 +30,7 @@ pub struct BenchOut {
     pub(crate) n_ln: u64,
     pub(crate) sum_ln: f64,
     pub(crate) sum2_ln: f64,
+    panic_on_error: bool,
 }
 
 impl BenchOut {
@@ -52,6 +53,7 @@ impl BenchOut {
             n_ln,
             sum_ln,
             sum2_ln,
+            panic_on_error: cfg.panic_on_error(),
         }
     }
 
@@ -99,10 +101,9 @@ impl BenchOut {
         self.reporting_unit
     }
 
-    /// The current value of [`BenchCfg::panic_on_error`].
+    /// The value of [`BenchCfg::panic_on_error`] at the time `self` was constructed.
     pub fn panic_on_error(&self) -> bool {
-        let cfg = BenchCfg::get();
-        BenchCfg::panic_on_error(&cfg)
+        self.panic_on_error
     }
 
     /// Number of observations (sample size) for a function, as an integer.
@@ -380,7 +381,7 @@ mod test {
     use super::*;
     use crate::{
         BenchCfg,
-        test_support::{LO_STDEV_LN, lognormal_samp},
+        test_support::{LO_STDEV_LN, lognormal_samp, with_safe_bench_cfg},
     };
     use basic_stats::{
         approx_eq,
@@ -400,12 +401,12 @@ mod test {
         let sigma = *LO_STDEV_LN;
         let k = 100;
 
-        let conv_factor = BenchCfg::get().conversion_factor();
+        let conv_factor = with_safe_bench_cfg(|| BenchCfg::get().conversion_factor());
         println!("conv_factor={conv_factor}");
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
         let lognormal_samp = lognormal_samp(rec_mu, sigma, k);
-        let mut out = BenchOut::new(&BenchCfg::get());
+        let mut out = with_safe_bench_cfg(|| BenchOut::new(&BenchCfg::get()));
         out.collect_data(lognormal_samp);
 
         assert_eq!(out.recording_unit(), LatencyUnit::Nano);
@@ -471,12 +472,12 @@ mod test {
         let sigma = *LO_STDEV_LN;
         let k = 100;
 
-        let conv_factor = BenchCfg::get().conversion_factor();
+        let conv_factor = with_safe_bench_cfg(|| BenchCfg::get().conversion_factor());
         println!("conv_factor={conv_factor}");
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
         let lognormal_samp = lognormal_samp(rec_mu, sigma, k);
-        let mut out = BenchOut::new(&BenchCfg::get());
+        let mut out = with_safe_bench_cfg(|| BenchOut::new(&BenchCfg::get()));
         out.collect_data(lognormal_samp);
 
         let normal_samp = normal_detm_samp(mu, sigma, k).unwrap();
