@@ -381,7 +381,7 @@ mod test {
     use super::*;
     use crate::{
         BenchCfg,
-        test_support::{LO_STDEV_LN, lognormal_samp, with_safe_bench_cfg},
+        test_support::{LO_STDEV_LN, lognormal_samp},
     };
     use basic_stats::{
         approx_eq,
@@ -401,12 +401,12 @@ mod test {
         let sigma = *LO_STDEV_LN;
         let k = 100;
 
-        let conv_factor = with_safe_bench_cfg(|| BenchCfg::get().conversion_factor());
+        let conv_factor = BenchCfg::default().conversion_factor();
         println!("conv_factor={conv_factor}");
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
         let lognormal_samp = lognormal_samp(rec_mu, sigma, k);
-        let mut out = with_safe_bench_cfg(|| BenchOut::new(&BenchCfg::get()));
+        let mut out = BenchOut::new(&BenchCfg::default());
         out.collect_data(lognormal_samp);
 
         assert_eq!(out.recording_unit(), LatencyUnit::Nano);
@@ -472,12 +472,12 @@ mod test {
         let sigma = *LO_STDEV_LN;
         let k = 100;
 
-        let conv_factor = with_safe_bench_cfg(|| BenchCfg::get().conversion_factor());
+        let conv_factor = BenchCfg::default().conversion_factor();
         println!("conv_factor={conv_factor}");
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
         let lognormal_samp = lognormal_samp(rec_mu, sigma, k);
-        let mut out = with_safe_bench_cfg(|| BenchOut::new(&BenchCfg::get()));
+        let mut out = BenchOut::new(&BenchCfg::default());
         out.collect_data(lognormal_samp);
 
         let normal_samp = normal_detm_samp(mu, sigma, k).unwrap();

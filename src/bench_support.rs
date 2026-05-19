@@ -7,6 +7,7 @@ use std::time::Duration;
 
 /// Compares latency outputs for `n` executions of a function `f` with `n/group_size` executions of `f` grouped `group_size` times.
 pub fn validate_latency_overhead(
+    cfg: &BenchCfg,
     bench_duration: Duration,
     target_latency: Duration,
     group_size: usize,
@@ -20,7 +21,7 @@ pub fn validate_latency_overhead(
         }
     };
 
-    let reporting_unit = BenchCfg::get().reporting_unit();
+    let reporting_unit = cfg.reporting_unit();
     let target_median_solo = reporting_unit.latency_as_f64(target_latency);
     let target_median_group = target_median_solo * group_size as f64;
     let exec_count_group =

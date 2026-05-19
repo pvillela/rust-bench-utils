@@ -26,7 +26,7 @@ impl BenchState {
         let (exec_count, run_time) = run_length.get_exec_count_and_duration();
         assert!(exec_count > 0, "exec_count must be > 0");
 
-        let unit = BenchCfg::get().recording_unit();
+        let unit = self.recording_unit();
         let mut est_remaining_iters = est_count_from_dur;
         let start = Instant::now();
 
@@ -64,6 +64,7 @@ impl BenchState {
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
 /// *optionally* outputs information about the benchmark and its execution status.
+/// Runs with the default [`BenchCfg`].
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
 /// `warmup_millis` milliseconds.
@@ -78,14 +79,40 @@ impl BenchState {
 ///   current number of executions performed.
 /// - `execs_per_milli` - estimate of how many executions of `f` fit in one millisecond.
 pub fn bench_run_x(
+    f: impl FnMut(),
+    exec_run_length: RunLength,
+    warmup_status: Option<impl FnMut(usize)>,
+    exec_status: Option<impl FnMut(usize)>,
+) -> BenchOut {
+    let cfg = BenchCfg::default();
+    bench_run_x_with_cfg(&cfg, f, exec_run_length, warmup_status, exec_status)
+}
+
+/// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
+/// *optionally* outputs information about the benchmark and its execution status.
+///
+/// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
+/// `warmup_millis` milliseconds.
+///
+/// Arguments:
+/// - `cfg` - bench configuration used to run the benchmark.
+/// - `f` - benchmark target.
+/// - `warmup_millis` - duration (in milliseconds) of warm-up execution.
+/// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
+/// - `warmup_status` - optionally invoked periodically during warm-up. Its argument is the current
+///   warm-up execution iteration.
+/// - `exec_status` - optionally invoked periodically during data collection. Its argument is the
+///   current number of executions performed.
+/// - `execs_per_milli` - estimate of how many executions of `f` fit in one millisecond.
+pub fn bench_run_x_with_cfg(
+    cfg: &BenchCfg,
     mut f: impl FnMut(),
     exec_run_length: RunLength,
     warmup_status: Option<impl FnMut(usize)>,
     exec_status: Option<impl FnMut(usize)>,
-    execs_per_milli: f64,
 ) -> BenchOut {
-    let cfg = BenchCfg::get();
-    let mut state = BenchOut::new(&cfg);
+    let mut state = BenchOut::new(cfg);
+    let execs_per_milli = cfg.execs_per_milli(&mut f);
     let status_freq = cfg.status_freq(execs_per_milli);
 
     let warmup_run_length = RunLength::Duration(Duration::from_millis(cfg.warmup_millis()));
@@ -110,6 +137,7 @@ pub fn bench_run_x(
 }
 
 /// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
+/// Runs with the default [`BenchCfg`].
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
 /// [`BenchCfg::warmup_millis`] milliseconds.
@@ -119,21 +147,35 @@ pub fn bench_run_x(
 /// Arguments:
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
-pub fn bench_run(mut f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
-    let cfg = BenchCfg::get();
-    let execs_per_milli = cfg.execs_per_milli(&mut f);
+pub fn bench_run(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
+    let cfg = BenchCfg::default();
+    bench_run_with_cfg(&cfg, f, exec_run_length)
+}
 
-    bench_run_x(
+/// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
+///
+/// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
+/// [`BenchCfg::warmup_millis`] milliseconds.
+/// This function calls [`bench_run_x`] with no-op closures for the arguments that support the output of
+/// benchmark status.
+///
+/// Arguments:
+/// - `cfg` - bench configuration used to run the benchmark.
+/// - `f` - benchmark target.
+/// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
+pub fn bench_run_with_cfg(cfg: &BenchCfg, f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
+    bench_run_x_with_cfg(
+        cfg,
         f,
         exec_run_length,
         None::<fn(usize)>,
         None::<fn(usize)>,
-        execs_per_milli,
     )
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
 /// outputs information about the benchmark and its execution status.
+/// Runs with the default [`BenchCfg`].
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
 /// [`BenchCfg::warmup_millis`] milliseconds.
@@ -147,12 +189,35 @@ pub fn bench_run(mut f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
 ///   to output information about the function being benchmarked to `stdout` and/or `stderr`. Its argument
 ///   is the estimated execution count.
 pub fn bench_run_with_status(
+    f: impl FnMut(),
+    exec_run_length: RunLength,
+    header: impl FnOnce(usize),
+) -> BenchOut {
+    let cfg = BenchCfg::default();
+    bench_run_with_status_and_cfg(&cfg, f, exec_run_length, header)
+}
+
+/// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
+/// outputs information about the benchmark and its execution status.
+///
+/// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
+/// [`BenchCfg::warmup_millis`] milliseconds.
+/// This function calls [`bench_run_x`] with pre-defined closures for the arguments that support the output of
+/// benchmark status to `stderr`.
+///
+/// Arguments:
+/// - `cfg` - bench configuration used to run the benchmark.
+/// - `f` - benchmark target.
+/// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
+/// - `header` - is invoked once at the start of this function's execution; it can be used, for example,
+///   to output information about the function being benchmarked to `stdout` and/or `stderr`. Its argument
+///   is the estimated execution count.
+pub fn bench_run_with_status_and_cfg(
+    cfg: &BenchCfg,
     mut f: impl FnMut(),
     exec_run_length: RunLength,
     header: impl FnOnce(usize),
 ) -> BenchOut {
-    let cfg = BenchCfg::get();
-
     let status = |preamble: &'static str, millis: u64, count: usize| {
         let mut status_len: usize = 0;
 
@@ -186,12 +251,12 @@ pub fn bench_run_with_status(
 
     header(exec_est_count);
 
-    let out = bench_run_x(
+    let out = bench_run_x_with_cfg(
+        cfg,
         f,
         exec_run_length,
         Some(warmup_status),
         Some(exec_status),
-        execs_per_milli,
     );
     eprintln!();
     out
@@ -202,64 +267,62 @@ pub fn bench_run_with_status(
 /// Crappy tests created by Claude Code, improved a bit by me.
 mod test {
     use super::*;
-    use crate::{LatencyUnit, RunLength, test_support::with_safe_bench_cfg};
+    use crate::{LatencyUnit, RunLength};
     use std::{thread, time::Duration};
 
     /// Helper to get a clean config with minimal warmup/calibration for fast tests.
     fn minimal_cfg_snapshot() -> BenchCfg {
-        let cfg = BenchCfg::get();
+        let cfg = BenchCfg::default();
         cfg.with_warmup_millis(0)
             .with_status_millis(1)
             .with_recording_unit(LatencyUnit::Nano)
             .with_reporting_unit(LatencyUnit::Nano)
-            .set();
-        BenchCfg::get()
     }
 
     #[test]
     fn test_bench_run_with_count() {
-        let out = with_safe_bench_cfg(|| {
-            let _cfg = minimal_cfg_snapshot();
+        let out = {
+            let cfg = minimal_cfg_snapshot();
 
-            bench_run(
+            bench_run_with_cfg(
+                &cfg,
                 || thread::sleep(Duration::from_nanos(1)),
                 RunLength::Count(5),
             )
-        });
+        };
         // With 5 count and no timeout, we should have exactly 5 iterations
         assert_eq!(out.n(), 5);
     }
 
     #[test]
     fn test_bench_run_x() {
-        let out = with_safe_bench_cfg(|| {
+        let out = {
             let cfg = minimal_cfg_snapshot();
-            // Use the snapshot cfg for calibration
-            let execs_per_milli = cfg.execs_per_milli(|| thread::sleep(Duration::from_nanos(1)));
 
-            bench_run_x(
+            bench_run_x_with_cfg(
+                &cfg,
                 || {},
                 RunLength::Count(10),
                 None::<fn(usize)>,
                 None::<fn(usize)>,
-                execs_per_milli,
             )
-        });
+        };
 
         assert_eq!(out.n(), 10);
     }
 
     #[test]
     fn test_bench_run_with_timeout() {
-        let out = with_safe_bench_cfg(|| {
-            let _cfg = minimal_cfg_snapshot();
+        let out = {
+            let cfg = minimal_cfg_snapshot();
 
             // Use a very short timeout that should be exceeded immediately
-            bench_run(
+            bench_run_with_cfg(
+                &cfg,
                 || thread::sleep(Duration::from_nanos(1)),
                 RunLength::Duration(Duration::from_nanos(1)),
             )
-        });
+        };
         // At least some executions should have been captured
         assert!(out.n() > 0);
     }

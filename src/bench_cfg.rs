@@ -1,7 +1,7 @@
 use basic_stats::aok::AokValue;
 
 use crate::{LatencyUnit, latency};
-use std::{ops::Deref, sync::Mutex, time::Duration};
+use std::time::Duration;
 
 /// Specifies how long a benchmark should run for. Encapsulates a target number of iterations for the benchmark to run
 /// and a time duration. The benchmark run length can be set as a number of iterations, a time duration, or
@@ -84,18 +84,7 @@ pub struct BenchCfg {
     sigfig: u8,
     status_millis: u64,
     panic_on_error: bool,
-    static_ref: &'static Mutex<BenchCfg>,
 }
-
-static BENCH_CFG: Mutex<BenchCfg> = Mutex::new(BenchCfg {
-    warmup_millis: BenchCfg::DEFAULT_WARMUP_MILLIS,
-    recording_unit: BenchCfg::DEFAULT_RECORDING_UNIT,
-    reporting_unit: BenchCfg::DEFAULT_REPORTING_UNIT,
-    sigfig: BenchCfg::DEFAULT_SIGFIG,
-    status_millis: BenchCfg::DEFAULT_STATUS_MILLIS,
-    panic_on_error: BenchCfg::DEFAULT_PANIC_ON_ERROR,
-    static_ref: &BENCH_CFG,
-});
 
 impl BenchCfg {
     pub const DEFAULT_WARMUP_MILLIS: u64 = 3000;
@@ -105,10 +94,16 @@ impl BenchCfg {
     pub const DEFAULT_STATUS_MILLIS: u64 = 1000;
     pub const DEFAULT_PANIC_ON_ERROR: bool = false;
 
-    /// Returns a clone of the global benchmark configuration.
-    pub fn get() -> Self {
-        let guard = BENCH_CFG.lock().unwrap();
-        guard.deref().clone()
+    /// Creates a new instance with default attribute values.
+    pub fn default() -> Self {
+        Self {
+            warmup_millis: Self::DEFAULT_WARMUP_MILLIS,
+            recording_unit: Self::DEFAULT_RECORDING_UNIT,
+            reporting_unit: Self::DEFAULT_REPORTING_UNIT,
+            sigfig: Self::DEFAULT_SIGFIG,
+            status_millis: Self::DEFAULT_STATUS_MILLIS,
+            panic_on_error: Self::DEFAULT_PANIC_ON_ERROR,
+        }
     }
 
     /// The number of milliseconds used to "warm-up" the benchmark.
@@ -183,12 +178,6 @@ impl BenchCfg {
         self
     }
 
-    /// Commits this configuration as the global benchmark configuration.
-    pub fn set(self) {
-        let mut guard = self.static_ref.lock().unwrap();
-        *guard = self;
-    }
-
     /// Factor to convert from the recording unit to the reporting unit.
     pub fn conversion_factor(&self) -> f64 {
         self.recording_unit.conversion_factor(self.reporting_unit)
@@ -203,6 +192,12 @@ impl BenchCfg {
     pub fn status_freq(&self, execs_per_milli: f64) -> usize {
         let status_freq = self.status_millis as f64 * execs_per_milli;
         1.max(status_freq.ceil() as usize)
+    }
+}
+
+impl Default for BenchCfg {
+    fn default() -> Self {
+        Self::default()
     }
 }
 
@@ -223,12 +218,12 @@ impl<T> PanicIfNeeded for T where T: AokValue + Sized {}
 #[cfg(test)]
 #[cfg(feature = "_test_support")]
 mod test {
-    use crate::{BenchCfg, LatencyUnit, RunLength, test_support::with_safe_bench_cfg};
+    use crate::{BenchCfg, LatencyUnit, RunLength};
     use std::time::Duration;
 
     #[test]
     fn test_bench_cfg_default() {
-        let cfg = with_safe_bench_cfg(|| BenchCfg::get());
+        let cfg = BenchCfg::default();
 
         println!("cfg={cfg:?}");
         assert_eq!(cfg.warmup_millis(), BenchCfg::DEFAULT_WARMUP_MILLIS);
@@ -240,19 +235,15 @@ mod test {
 
     #[test]
     fn test_bench_cfg_builder_method_chaining() {
-        let cfg = with_safe_bench_cfg(|| {
-            let cfg = BenchCfg::get();
-            cfg.with_recording_unit(LatencyUnit::Micro)
-                .with_warmup_millis(100)
-                .with_reporting_unit(LatencyUnit::Milli)
-                .with_sigfig(5)
-                .with_status_millis(200)
-                .with_panic_on_error(true)
-                .set();
-            BenchCfg::get()
-        });
-
+        let cfg = BenchCfg::default()
+            .with_recording_unit(LatencyUnit::Micro)
+            .with_warmup_millis(100)
+            .with_reporting_unit(LatencyUnit::Milli)
+            .with_sigfig(5)
+            .with_status_millis(200)
+            .with_panic_on_error(true);
         println!("cfg={cfg:?}");
+
         assert_eq!(cfg.warmup_millis(), 100);
         assert_eq!(cfg.recording_unit(), LatencyUnit::Micro);
         assert_eq!(cfg.reporting_unit(), LatencyUnit::Milli);
@@ -360,7 +351,7 @@ mod test {
 
     #[test]
     fn test_bench_cfg_status_freq() {
-        let cfg = with_safe_bench_cfg(|| BenchCfg::get());
+        let cfg = BenchCfg::default();
         println!("cfg={cfg:?}");
 
         // 1000ms interval, 500 execs/milli => 500_000 status freq
@@ -378,7 +369,7 @@ mod test {
 
     #[test]
     fn test_bench_cfg_executions_per_milli() {
-        let cfg = with_safe_bench_cfg(|| BenchCfg::get());
+        let cfg = BenchCfg::default();
         // Using a no-op closure, the calibration should return a reasonable positive value
         let epms = cfg.execs_per_milli(|| {});
         assert!(epms.is_finite());

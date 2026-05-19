@@ -381,7 +381,7 @@ mod test {
     use super::*;
     use crate::test_support::{
         HI_STDEV_LN, LO_STDEV_LN, lognormal_moments_ln, lognormal_moments_ln_jittered,
-        lognormal_out, lognormal_out_jittered, with_safe_bench_cfg,
+        lognormal_out, lognormal_out_jittered,
     };
     use crate::{BenchCfg, LatencyUnit};
     use basic_stats::{approx_eq, core::AcceptedHyp};
@@ -402,19 +402,17 @@ mod test {
 
     #[test]
     fn test_comp_new_panics_on_reporting_unit_mismatch() {
-        let result = with_safe_bench_cfg(|| {
+        let result = {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let cfg1 = BenchCfg::get();
-                cfg1.with_reporting_unit(LatencyUnit::Nano).set();
-                let out1 = lognormal_out(8., *LO_STDEV_LN, 5);
+                let cfg1 = BenchCfg::default().with_reporting_unit(LatencyUnit::Nano);
+                let out1 = lognormal_out(&cfg1, 8., *LO_STDEV_LN, 5);
 
-                let cfg2 = BenchCfg::get();
-                cfg2.with_reporting_unit(LatencyUnit::Micro).set();
-                let out2 = lognormal_out(8., *LO_STDEV_LN, 5);
+                let cfg2 = cfg1.with_reporting_unit(LatencyUnit::Micro);
+                let out2 = lognormal_out(&&cfg2, 8., *LO_STDEV_LN, 5);
 
                 Comp::new(&out1, &out2);
             }))
-        });
+        };
 
         assert!(
             result.is_err(),
@@ -424,6 +422,8 @@ mod test {
 
     #[test]
     fn test_comp() {
+        let cfg = BenchCfg::default();
+
         let k = 80;
         let n_jitter = 7; // should be coprime with 2*k
 
@@ -431,19 +431,15 @@ mod test {
         let sigma_hi = *HI_STDEV_LN;
 
         let mu_a = 8.;
-        let out_a = with_safe_bench_cfg(|| lognormal_out(mu_a, sigma_lo, k));
+        let out_a = lognormal_out(&cfg, mu_a, sigma_lo, k);
         let moments_ln_a = lognormal_moments_ln(mu_a, sigma_lo, k);
-        let out_aj = with_safe_bench_cfg(|| {
-            lognormal_out_jittered(mu_a, sigma_hi, k, n_jitter, JITTER_EPSILON)
-        });
+        let out_aj = lognormal_out_jittered(&cfg, mu_a, sigma_hi, k, n_jitter, JITTER_EPSILON);
         let moments_ln_aj =
             lognormal_moments_ln_jittered(mu_a, sigma_hi, k, n_jitter, JITTER_EPSILON);
 
         let median_ratio_a_b: f64 = 1.01;
         let mu_b = mu_a - median_ratio_a_b.ln();
-        let out_bj = with_safe_bench_cfg(|| {
-            lognormal_out_jittered(mu_b, sigma_hi, k, n_jitter, JITTER_EPSILON)
-        });
+        let out_bj = lognormal_out_jittered(&cfg, mu_b, sigma_hi, k, n_jitter, JITTER_EPSILON);
         let moments_ln_bj =
             lognormal_moments_ln_jittered(mu_b, sigma_hi, k, n_jitter, JITTER_EPSILON);
 

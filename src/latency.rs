@@ -122,9 +122,7 @@ pub fn executions_per_milli(budget_millis: u64, mut f: impl FnMut()) -> f64 {
 /// cargo test -r --package bench_utils --lib --all-features -- latency::test --nocapture
 mod test {
     use super::*;
-    use crate::{
-        BenchCfg, bench_support::validate_latency_overhead, test_support::with_safe_bench_cfg,
-    };
+    use crate::{BenchCfg, bench_support::validate_latency_overhead};
     use basic_stats::{approx_eq, rel_approx_eq};
 
     // SEE ALSO: tests for `fake_work` and `busy_work`.
@@ -147,17 +145,16 @@ mod test {
             solo_median_100,
             group_median_20,
             group_median_100,
-        } = with_safe_bench_cfg(|| {
-            let cfg = BenchCfg::get();
-            cfg.with_warmup_millis(50).set();
+        } = {
+            let cfg = BenchCfg::default().with_warmup_millis(50);
 
             let bench_duration = Duration::from_millis(50);
             let target_latency = Duration::from_micros(50);
 
             let (solo_median_20, group_median_20) =
-                validate_latency_overhead(bench_duration, target_latency, 20, EPSILON);
+                validate_latency_overhead(&cfg, bench_duration, target_latency, 20, EPSILON);
             let (solo_median_100, group_median_100) =
-                validate_latency_overhead(bench_duration, target_latency, 100, EPSILON);
+                validate_latency_overhead(&cfg, bench_duration, target_latency, 100, EPSILON);
 
             Medians {
                 solo_median_20,
@@ -165,7 +162,7 @@ mod test {
                 group_median_20,
                 group_median_100,
             }
-        });
+        };
 
         println!("elapsed time: {} millis", start.elapsed().as_millis());
 

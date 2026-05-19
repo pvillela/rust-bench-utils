@@ -6,16 +6,15 @@ fn main() {
     const EPSILON: f64 = 0.1;
 
     let start = Instant::now();
-    let cfg = BenchCfg::get();
-    cfg.with_warmup_millis(500).set();
+    let cfg = BenchCfg::default().with_warmup_millis(500);
 
     let bench_time = Duration::from_millis(500);
     let target_latency = Duration::from_micros(100);
 
     let (solo_median_20, group_median_20) =
-        validate_latency_overhead(bench_time, target_latency, 20, EPSILON);
+        validate_latency_overhead(&cfg, bench_time, target_latency, 20, EPSILON);
     let (solo_median_100, group_median_100) =
-        validate_latency_overhead(bench_time, target_latency, 100, EPSILON);
+        validate_latency_overhead(&cfg, bench_time, target_latency, 100, EPSILON);
 
     println!("elapsed time: {} millis", start.elapsed().as_millis());
 

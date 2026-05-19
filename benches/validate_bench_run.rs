@@ -10,7 +10,7 @@ fn sleep_fn(target_latency: Duration) {
 }
 
 fn run_bench(name: &'static str, target_latency: Duration, check: bool) {
-    let reporting_unit = BenchCfg::get().reporting_unit();
+    let reporting_unit = BenchCfg::default().reporting_unit();
     let target_median = reporting_unit.latency_as_f64(target_latency);
     let exec_count = (reporting_unit.latency_as_f64(BENCH_TIME) / target_median) as usize;
     let out = bench_run_with_status(
