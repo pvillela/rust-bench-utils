@@ -1,7 +1,7 @@
 //! Validates that the overhead associated with the collection of latency on each target function execution
 //! is acceptable.
 
-use crate::{BenchCfg, BusyWork, RunLength, bench_run_with_status_and_cfg};
+use crate::{BenchCfg, BusyWork, RunLength, bench_run_with_status_arg_cfg};
 use basic_stats::dev_utils::ApproxEq;
 use std::time::Duration;
 
@@ -35,7 +35,7 @@ pub fn validate_latency_overhead(
     println!();
 
     let out_solo =
-        bench_run_with_status_and_cfg(cfg, &solo_f, RunLength::Count(exec_count_solo), |_| {
+        bench_run_with_status_arg_cfg(cfg, &solo_f, RunLength::Count(exec_count_solo), |_| {
             println!("running solo_f: {name}");
         });
     println!("{:?}", out_solo.summary());
@@ -47,7 +47,7 @@ pub fn validate_latency_overhead(
     println!();
 
     let out_group =
-        bench_run_with_status_and_cfg(cfg, group_f, RunLength::Count(exec_count_group), |_| {
+        bench_run_with_status_arg_cfg(cfg, group_f, RunLength::Count(exec_count_group), |_| {
             println!("running group_f: {name}");
         });
     println!("{:?}", out_group.summary());

@@ -85,7 +85,7 @@ pub fn bench_run_x(
     exec_status: Option<impl FnMut(usize)>,
 ) -> BenchOut {
     let cfg = BenchCfg::default();
-    bench_run_x_with_cfg(&cfg, f, exec_run_length, warmup_status, exec_status)
+    bench_run_x_arg_cfg(&cfg, f, exec_run_length, warmup_status, exec_status)
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -104,7 +104,7 @@ pub fn bench_run_x(
 /// - `exec_status` - optionally invoked periodically during data collection. Its argument is the
 ///   current number of executions performed.
 /// - `execs_per_milli` - estimate of how many executions of `f` fit in one millisecond.
-pub fn bench_run_x_with_cfg(
+pub fn bench_run_x_arg_cfg(
     cfg: &BenchCfg,
     mut f: impl FnMut(),
     exec_run_length: RunLength,
@@ -147,7 +147,7 @@ pub fn bench_run_x_with_cfg(
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
     let cfg = BenchCfg::default();
-    bench_run_with_cfg(&cfg, f, exec_run_length)
+    bench_run_arg_cfg(&cfg, f, exec_run_length)
 }
 
 /// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
@@ -161,8 +161,8 @@ pub fn bench_run(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
 /// - `cfg` - bench configuration used to run the benchmark.
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
-pub fn bench_run_with_cfg(cfg: &BenchCfg, f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
-    bench_run_x_with_cfg(
+pub fn bench_run_arg_cfg(cfg: &BenchCfg, f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
+    bench_run_x_arg_cfg(
         cfg,
         f,
         exec_run_length,
@@ -192,7 +192,7 @@ pub fn bench_run_with_status(
     header: impl FnOnce(usize),
 ) -> BenchOut {
     let cfg = BenchCfg::default();
-    bench_run_with_status_and_cfg(&cfg, f, exec_run_length, header)
+    bench_run_with_status_arg_cfg(&cfg, f, exec_run_length, header)
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -210,7 +210,7 @@ pub fn bench_run_with_status(
 /// - `header` - is invoked once at the start of this function's execution; it can be used, for example,
 ///   to output information about the function being benchmarked to `stdout` and/or `stderr`. Its argument
 ///   is the estimated execution count.
-pub fn bench_run_with_status_and_cfg(
+pub fn bench_run_with_status_arg_cfg(
     cfg: &BenchCfg,
     mut f: impl FnMut(),
     exec_run_length: RunLength,
@@ -240,7 +240,7 @@ pub fn bench_run_with_status_and_cfg(
 
     header(exec_est_count);
 
-    let out = bench_run_x_with_cfg(
+    let out = bench_run_x_arg_cfg(
         cfg,
         f,
         exec_run_length,
@@ -252,8 +252,10 @@ pub fn bench_run_with_status_and_cfg(
 }
 
 #[doc(hidden)]
-/// Returns a status reporting function that uses an arbitrary [`Write`].
-/// Used by [`bench_run_with_status_and_cfg`] and crate `bench_diff`.
+/// Returns a status reporting function that uses an arbitrary [`Write`], but not useful unless the writer
+/// can process backspace characters ("\u{8}") properly like stdeout and stderr do.
+///
+/// Used by [`bench_run_with_status_arg_cfg`] and crate `bench_diff`, as well as for testing of status reporting.
 pub fn make_status(
     preamble: &'static str,
     millis: u64,
@@ -299,7 +301,7 @@ mod test {
         let out = {
             let cfg = minimal_cfg_snapshot();
 
-            bench_run_with_cfg(
+            bench_run_arg_cfg(
                 &cfg,
                 || thread::sleep(Duration::from_nanos(1)),
                 RunLength::Count(5),
@@ -314,7 +316,7 @@ mod test {
         let out = {
             let cfg = minimal_cfg_snapshot();
 
-            bench_run_x_with_cfg(
+            bench_run_x_arg_cfg(
                 &cfg,
                 || {},
                 RunLength::Count(10),
@@ -332,7 +334,7 @@ mod test {
             let cfg = minimal_cfg_snapshot();
 
             // Use a very short timeout that should be exceeded immediately
-            bench_run_with_cfg(
+            bench_run_arg_cfg(
                 &cfg,
                 || thread::sleep(Duration::from_nanos(1)),
                 RunLength::Duration(Duration::from_nanos(1)),
