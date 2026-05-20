@@ -212,9 +212,20 @@ pub fn bench_run_with_status(
 ///   is the estimated execution count.
 pub fn bench_run_with_status_arg_cfg(
     cfg: &BenchCfg,
+    f: impl FnMut(),
+    exec_run_length: RunLength,
+    header: impl FnOnce(usize),
+) -> BenchOut {
+    bench_run_with_status_args_cfg_writer(cfg, f, exec_run_length, header, stderr)
+}
+
+/// Used to implement [`bench_run_with_status_arg_cfg`] and to support testing.
+fn bench_run_with_status_args_cfg_writer<W: Write>(
+    cfg: &BenchCfg,
     mut f: impl FnMut(),
     exec_run_length: RunLength,
     header: impl FnOnce(usize),
+    w: fn() -> W,
 ) -> BenchOut {
     let execs_per_milli = cfg.execs_per_milli(&mut f);
 
@@ -222,7 +233,7 @@ pub fn bench_run_with_status_arg_cfg(
     let warmup_run_length = RunLength::Duration(Duration::from_millis(warmup_millis));
     let warmup_est_count = warmup_run_length.estimated_count(execs_per_milli);
 
-    let warmup_status = make_status("Warming up", warmup_millis, warmup_est_count, stderr());
+    let warmup_status = make_status("Warming up", warmup_millis, warmup_est_count, w());
 
     let exec_est_count = exec_run_length.estimated_count(execs_per_milli);
     let exec_est_millis = exec_run_length
@@ -235,7 +246,7 @@ pub fn bench_run_with_status_arg_cfg(
         "\nExecuting bench_run",
         exec_est_millis,
         exec_est_count,
-        stderr(),
+        w(),
     );
 
     header(exec_est_count);
