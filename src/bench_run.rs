@@ -216,36 +216,27 @@ pub fn bench_run_with_status_and_cfg(
     exec_run_length: RunLength,
     header: impl FnOnce(usize),
 ) -> BenchOut {
-    let status = |preamble: &'static str, millis: u64, count: usize| {
-        let mut status_len: usize = 0;
-
-        move |i: usize| {
-            if status_len == 0 {
-                eprint!("{preamble} for (approx.) {millis} millis: ");
-                stderr().flush().expect("unexpected I/O error");
-            }
-            eprint!("{}", "\u{8}".repeat(status_len));
-            let status = format!("{i} of (approx.) {count} executions.");
-            status_len = status.len();
-            eprint!("{status}");
-            stderr().flush().expect("unexpected I/O error");
-        }
-    };
-
     let execs_per_milli = cfg.execs_per_milli(&mut f);
 
     let warmup_millis = cfg.warmup_millis();
     let warmup_run_length = RunLength::Duration(Duration::from_millis(warmup_millis));
     let warmup_est_count = warmup_run_length.estimated_count(execs_per_milli);
-    let warmup_status = status("Warming up", warmup_millis, warmup_est_count);
+
+    let warmup_status = make_status("Warming up", warmup_millis, warmup_est_count, stderr());
 
     let exec_est_count = exec_run_length.estimated_count(execs_per_milli);
     let exec_est_millis = exec_run_length
         .estimated_duration(execs_per_milli)
         .as_millis() as u64;
+
     // The `\n` below is to separate warmup status from exec status. Otherwise, they get mixed up due to
     // the `eprint!("{}", "\u{8}".repeat(status_len))` line in the `status` closure.
-    let exec_status = status("\nExecuting bench_run", exec_est_millis, exec_est_count);
+    let exec_status = make_status(
+        "\nExecuting bench_run",
+        exec_est_millis,
+        exec_est_count,
+        stderr(),
+    );
 
     header(exec_est_count);
 
@@ -258,6 +249,32 @@ pub fn bench_run_with_status_and_cfg(
     );
     eprintln!();
     out
+}
+
+#[doc(hidden)]
+/// Returns a status reporting function that uses an arbitrary [`Write`].
+/// Used by [`bench_run_with_status_and_cfg`] and crate `bench_diff`.
+pub fn make_status(
+    preamble: &'static str,
+    millis: u64,
+    count: usize,
+    mut w: impl Write,
+) -> impl FnMut(usize) {
+    let mut status_len: usize = 0;
+
+    move |i: usize| {
+        if status_len == 0 {
+            write!(w, "{preamble} for (approx.) {millis} millis: ")
+                .expect("unexpected error writing to `Write` object `w`");
+            w.flush().expect("unexpected I/O error");
+        }
+        write!(w, "{}", "\u{8}".repeat(status_len))
+            .expect("unexpected error writing to `Write` object `w`");
+        let status = format!("{i} of (approx.) {count} executions.");
+        status_len = status.len();
+        write!(w, "{status}").expect("unexpected error writing to `Write` object `w`");
+        w.flush().expect("unexpected I/O error");
+    }
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 //! Validates that the overhead associated with the collection of latency on each target function execution
 //! is acceptable.
 
-use crate::{BenchCfg, BusyWork, RunLength, bench_run_with_status};
+use crate::{BenchCfg, BusyWork, RunLength, bench_run_with_status_and_cfg};
 use basic_stats::dev_utils::ApproxEq;
 use std::time::Duration;
 
@@ -35,9 +35,10 @@ pub fn validate_latency_overhead(
     println!("reporting_unit={reporting_unit:?}");
     println!();
 
-    let out_solo = bench_run_with_status(&solo_f, RunLength::Count(exec_count_solo), |_| {
-        println!("running solo_f: {name}");
-    });
+    let out_solo =
+        bench_run_with_status_and_cfg(cfg, &solo_f, RunLength::Count(exec_count_solo), |_| {
+            println!("running solo_f: {name}");
+        });
     println!("{:?}", out_solo.summary());
     println!(
         "target_median_solo={target_median_solo}, out_solo.median()={}, rel_diff={}",
@@ -46,9 +47,10 @@ pub fn validate_latency_overhead(
     );
     println!();
 
-    let out_group = bench_run_with_status(group_f, RunLength::Count(exec_count_group), |_| {
-        println!("running group_f: {name}");
-    });
+    let out_group =
+        bench_run_with_status_and_cfg(cfg, group_f, RunLength::Count(exec_count_group), |_| {
+            println!("running group_f: {name}");
+        });
     println!("{:?}", out_group.summary());
     println!(
         "target_median_group={target_median_group}, out_group.median()={}, rel_diff={}",

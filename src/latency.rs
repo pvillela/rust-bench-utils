@@ -142,7 +142,8 @@ mod test {
             group_median_20,
             group_median_100,
         } = {
-            let cfg = BenchCfg::default().with_warmup_millis(50);
+            // let cfg = BenchCfg::default().with_warmup_millis(50); // was failing with this
+            let cfg = BenchCfg::default().with_warmup_millis(3000);
 
             let bench_duration = Duration::from_millis(50);
             let target_latency = Duration::from_micros(50);
