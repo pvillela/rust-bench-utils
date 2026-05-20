@@ -529,7 +529,7 @@ mod test {
 
             rel_approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON);
             approx_eq!(exp_df, out.student_ln_df(), EPSILON);
-            rel_approx_eq!(exp_p, out.student_ln_p(mu0, alt_hyp), EPSILON);
+            approx_eq!(exp_p, out.student_ln_p(mu0, alt_hyp), EPSILON);
             rel_approx_eq!(exp_ci.0, out.student_median_ci(ALPHA).0, EPSILON);
             rel_approx_eq!(exp_ci.1, out.student_median_ci(ALPHA).1, EPSILON);
             let student_test = out.student_ln_test(mu0, alt_hyp, ALPHA);

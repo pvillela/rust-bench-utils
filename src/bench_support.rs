@@ -11,7 +11,6 @@ pub fn validate_latency_overhead(
     bench_duration: Duration,
     target_latency: Duration,
     group_size: usize,
-    epsilon: f64,
 ) -> (f64, f64) {
     let name = "Group of ".to_owned() + &group_size.to_string();
     let solo_f = BusyWork::new(target_latency).fun();
@@ -43,7 +42,7 @@ pub fn validate_latency_overhead(
     println!(
         "target_median_solo={target_median_solo}, out_solo.median()={}, rel_diff={}",
         out_solo.median(),
-        target_median_solo.abs_rel_diff(out_solo.median(), epsilon)
+        target_median_solo.abs_rel_diff(out_solo.median())
     );
     println!();
 
@@ -55,7 +54,7 @@ pub fn validate_latency_overhead(
     println!(
         "target_median_group={target_median_group}, out_group.median()={}, rel_diff={}",
         out_group.median(),
-        target_median_group.abs_rel_diff(out_group.median(), epsilon)
+        target_median_group.abs_rel_diff(out_group.median())
     );
     println!();
 
@@ -63,7 +62,7 @@ pub fn validate_latency_overhead(
         "Solo vs. grouped: group_size={group_size}, out_solo.median()*group_size={}, out_group.median()={}, rel_diff={}",
         out_solo.median() * group_size as f64,
         out_group.median(),
-        (out_solo.median() * group_size as f64).abs_rel_diff(out_group.median(), epsilon)
+        (out_solo.median() * group_size as f64).abs_rel_diff(out_group.median())
     );
     println!();
 

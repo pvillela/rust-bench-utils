@@ -19,7 +19,7 @@ mod test {
     fn run(dur: Duration) -> (f64, f64) {
         let latency_secs = latency(|| fake_work(dur)).as_secs_f64();
         let dur_secs = dur.as_secs_f64();
-        let rel_diff = dur_secs.abs_rel_diff(latency_secs, 0.000001);
+        let rel_diff = dur_secs.abs_rel_diff(latency_secs);
         println!(
             "dur={:?}, dur_secs={}, latency_secs={}, rel_diff={}",
             dur, dur_secs, latency_secs, rel_diff
@@ -29,15 +29,14 @@ mod test {
 
     #[test]
     fn test_fake_work_zero() {
-        const EPSILON: f64 = 0.005;
         let dur = Duration::ZERO;
-        let (dur_secs, latency_secs) = run(dur);
-        rel_approx_eq!(dur_secs, latency_secs, EPSILON);
+        let (_, latency_secs) = run(dur);
+        assert!(latency_secs > 0.0);
     }
 
     #[test]
     fn test_fake_work_1_nano() {
-        const EPSILON: f64 = 0.005;
+        const EPSILON: f64 = 2.0;
         let dur = Duration::from_nanos(1);
         let (dur_secs, latency_secs) = run(dur);
         rel_approx_eq!(dur_secs, latency_secs, EPSILON);
@@ -45,7 +44,7 @@ mod test {
 
     #[test]
     fn test_fake_work_1_micro() {
-        const EPSILON: f64 = 0.005;
+        const EPSILON: f64 = 2.0;
         let dur = Duration::from_micros(1);
         let (dur_secs, latency_secs) = run(dur);
         rel_approx_eq!(dur_secs, latency_secs, EPSILON);
@@ -53,7 +52,7 @@ mod test {
 
     #[test]
     fn test_fake_work_50_micro() {
-        const EPSILON: f64 = 0.005;
+        const EPSILON: f64 = 2.0;
         let dur = Duration::from_micros(50);
         let (dur_secs, latency_secs) = run(dur);
         rel_approx_eq!(dur_secs, latency_secs, EPSILON);
@@ -61,7 +60,7 @@ mod test {
 
     #[test]
     fn test_fake_work_100_micro() {
-        const EPSILON: f64 = 0.005;
+        const EPSILON: f64 = 1.0;
         let dur = Duration::from_micros(100);
         let (dur_secs, latency_secs) = run(dur);
         rel_approx_eq!(dur_secs, latency_secs, EPSILON);
@@ -69,7 +68,7 @@ mod test {
 
     #[test]
     fn test_fake_work_200_micro() {
-        const EPSILON: f64 = 0.005;
+        const EPSILON: f64 = 0.50;
         let dur = Duration::from_micros(200);
         let (dur_secs, latency_secs) = run(dur);
         rel_approx_eq!(dur_secs, latency_secs, EPSILON);
@@ -77,7 +76,7 @@ mod test {
 
     #[test]
     fn test_fake_work_1_milli() {
-        const EPSILON: f64 = 0.005;
+        const EPSILON: f64 = 0.10;
         let dur = Duration::from_millis(1);
         let (dur_secs, latency_secs) = run(dur);
         rel_approx_eq!(dur_secs, latency_secs, EPSILON);

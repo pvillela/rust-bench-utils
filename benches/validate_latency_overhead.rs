@@ -12,9 +12,9 @@ fn main() {
     let target_latency = Duration::from_micros(100);
 
     let (solo_median_20, group_median_20) =
-        validate_latency_overhead(&cfg, bench_time, target_latency, 20, EPSILON);
+        validate_latency_overhead(&cfg, bench_time, target_latency, 20);
     let (solo_median_100, group_median_100) =
-        validate_latency_overhead(&cfg, bench_time, target_latency, 100, EPSILON);
+        validate_latency_overhead(&cfg, bench_time, target_latency, 100);
 
     println!("elapsed time: {} millis", start.elapsed().as_millis());
 
