@@ -10,7 +10,7 @@ export NOCOVER="1"
 echo "***** test all except benches, all features"
 # cargo nextest run  --lib --bins --examples --tests --all-features --target-dir target/test-target
 # cargo test -r  --lib --bins --examples --tests --all-features -- --nocapture --test-threads=1
-cargo test -r  --lib --bins --examples --tests --all-features
+cargo test -r  --lib --bins --examples --tests --all-features -- --test-threads=1
 
 echo "***** test doc"
 cargo test --doc --features busy_work --target-dir target/test-target

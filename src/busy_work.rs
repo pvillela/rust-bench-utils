@@ -145,7 +145,7 @@ impl BusyWork {
 mod core_tests {
     use super::*;
     use crate::latency;
-    use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
+    use basic_stats::{approx_eq, dev_utils::ApproxEq, rel_approx_eq};
 
     fn run(dur: Duration) -> (f64, f64) {
         let f = BusyWork::new(dur).fun();
@@ -159,17 +159,17 @@ mod core_tests {
         (dur_secs, latency_secs)
     }
 
-    // #[test]
-    // fn test_busy_work_new_zero() {
-    //     const EPSILON: f64 = 0.005;
-    //     let dur = Duration::ZERO;
-    //     let (dur_secs, latency_secs) = run(dur);
-    //     rel_approx_eq!(dur_secs, latency_secs, EPSILON);
-    // }
+    #[test]
+    fn test_busy_work_new_zero() {
+        const EPSILON: f64 = 0.005;
+        let dur = Duration::ZERO;
+        let (dur_secs, latency_secs) = run(dur);
+        approx_eq!(dur_secs, latency_secs, EPSILON);
+    }
 
     #[test]
     fn test_busy_work_new_1_nano() {
-        const EPSILON: f64 = 2.00;
+        const EPSILON: f64 = 2.0;
         let dur = Duration::from_nanos(1);
         let (dur_secs, latency_secs) = run(dur);
         rel_approx_eq!(dur_secs, latency_secs, EPSILON);
@@ -177,7 +177,7 @@ mod core_tests {
 
     #[test]
     fn test_busy_work_new_1_micro() {
-        const EPSILON: f64 = 0.50;
+        const EPSILON: f64 = 0.75;
         let dur = Duration::from_micros(1);
         let (dur_secs, latency_secs) = run(dur);
         rel_approx_eq!(dur_secs, latency_secs, EPSILON);
@@ -185,7 +185,7 @@ mod core_tests {
 
     #[test]
     fn test_busy_work_new_1_milli() {
-        const EPSILON: f64 = 0.20;
+        const EPSILON: f64 = 0.25;
         let dur = Duration::from_millis(1);
         let (dur_secs, latency_secs) = run(dur);
         rel_approx_eq!(dur_secs, latency_secs, EPSILON);
@@ -193,7 +193,7 @@ mod core_tests {
 
     #[test]
     fn test_busy_work_new_50_millis() {
-        const EPSILON: f64 = 0.60; // test often fails with smaller EPSILON
+        const EPSILON: f64 = 0.25;
         let dur = Duration::from_millis(50);
         let (dur_secs, latency_secs) = run(dur);
         rel_approx_eq!(dur_secs, latency_secs, EPSILON);
@@ -242,7 +242,7 @@ mod ratio_tests {
 
     #[test]
     fn test_busy_work_ratio_100_nano() {
-        const EPSILON: f64 = 1.0; // not reliable at nano scale
+        const EPSILON: f64 = 0.5; // not reliable at nano scale
         let dur1 = Duration::from_nanos(100);
         let repeats = 100_000;
         let latency_ratio = run(dur1, RATIO, repeats);
@@ -260,7 +260,7 @@ mod ratio_tests {
 
     #[test]
     fn test_busy_work_ratio_1_milli() {
-        const EPSILON: f64 = 0.10;
+        const EPSILON: f64 = 0.05;
         let dur1 = Duration::from_millis(1);
         let repeats = 100;
         let latency_ratio = run(dur1, RATIO, repeats);

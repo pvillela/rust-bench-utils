@@ -25,8 +25,8 @@ pub fn validate_latency_overhead(
     let target_median_group = target_median_solo * group_size as f64;
     let exec_count_group =
         (reporting_unit.latency_as_f64(bench_duration) / target_median_group) as usize;
-    // Guard against integer truncation to 0 when target_median is larger than
-    // BENCH_TIME. Fall back to 1 execution so the benchmark still produces
+    // Guard against integer truncation to 0 when target_median_group is larger than
+    // bench_duration. Fall back to 1 execution so the benchmark still produces
     // meaningful data and the assertion doesn't fire on an empty sample.
     let exec_count_group = exec_count_group.max(1);
     let exec_count_solo = exec_count_group * group_size;

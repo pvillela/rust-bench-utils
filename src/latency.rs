@@ -125,7 +125,7 @@ mod test {
 
     #[test]
     fn test_latency_overhead() {
-        const EPSILON: f64 = 0.1;
+        const EPSILON: f64 = 0.05;
 
         struct Medians {
             solo_median_20: f64,
@@ -143,9 +143,9 @@ mod test {
             group_median_100,
         } = {
             // let cfg = BenchCfg::default().with_warmup_millis(50); // was failing with this
-            let cfg = BenchCfg::default().with_warmup_millis(3000);
+            let cfg = BenchCfg::default().with_warmup_millis(100);
 
-            let bench_duration = Duration::from_millis(50);
+            let bench_duration = Duration::from_millis(100);
             let target_latency = Duration::from_micros(50);
 
             let (solo_median_20, group_median_20) =

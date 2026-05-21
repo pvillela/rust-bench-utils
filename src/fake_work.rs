@@ -52,7 +52,7 @@ mod test {
 
     #[test]
     fn test_fake_work_50_micro() {
-        const EPSILON: f64 = 2.0;
+        const EPSILON: f64 = 0.75;
         let dur = Duration::from_micros(50);
         let (dur_secs, latency_secs) = run(dur);
         rel_approx_eq!(dur_secs, latency_secs, EPSILON);
@@ -60,7 +60,7 @@ mod test {
 
     #[test]
     fn test_fake_work_100_micro() {
-        const EPSILON: f64 = 1.0;
+        const EPSILON: f64 = 0.75;
         let dur = Duration::from_micros(100);
         let (dur_secs, latency_secs) = run(dur);
         rel_approx_eq!(dur_secs, latency_secs, EPSILON);
@@ -68,7 +68,7 @@ mod test {
 
     #[test]
     fn test_fake_work_200_micro() {
-        const EPSILON: f64 = 0.50;
+        const EPSILON: f64 = 0.30;
         let dur = Duration::from_micros(200);
         let (dur_secs, latency_secs) = run(dur);
         rel_approx_eq!(dur_secs, latency_secs, EPSILON);
@@ -84,7 +84,7 @@ mod test {
 
     #[test]
     fn test_fake_work_50_millis() {
-        const EPSILON: f64 = 0.05;
+        const EPSILON: f64 = 0.01;
         let dur = Duration::from_millis(50);
         let (dur_secs, latency_secs) = run(dur);
         rel_approx_eq!(dur_secs, latency_secs, EPSILON);
