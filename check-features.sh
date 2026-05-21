@@ -13,6 +13,9 @@ cargo check --lib --tests --features busy_work
 echo "***** --features _bench_diff"
 cargo check --lib --tests --features _bench_diff
 
+echo "*****  --features _test_support"
+cargo check --lib --tests --features _test_support
+
 ## All targets and features
 
 echo "***** --all-targets --all-features"
@@ -24,6 +27,9 @@ cargo check --all-targets --all-features
 
 echo "***** --no-default-features --features _bench_diff"
 cargo check --lib --tests --no-default-features --features _bench_diff
+
+echo "***** --no-default-features --features _test_support"
+cargo check --lib --tests --no-default-features --features _test_support
 
 ### Benches
 

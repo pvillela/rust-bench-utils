@@ -1,6 +1,6 @@
 use crate::{BenchCfg, BenchOut};
 use basic_stats::{core::SampleMoments, normal::normal_detm_samp};
-use std::sync::LazyLock;
+use std::{io::Write, sync::LazyLock};
 
 pub static LO_STDEV_LN: LazyLock<f64> = LazyLock::new(|| 1.2_f64.ln() / 2.);
 pub static HI_STDEV_LN: LazyLock<f64> = LazyLock::new(|| 2.4_f64.ln() / 2.);
@@ -85,4 +85,49 @@ pub fn lognormal_moments_ln_jittered(
 
 pub fn lognormal_moments_ln(mu: f64, sigma: f64, k: u64) -> SampleMoments {
     lognormal_moments_ln_jittered(mu, sigma, k, 3, 0.)
+}
+
+/// Writer backed by a [`Vec<u8>`] that can process backspace characters ("\u{8}") properly like stdeout and stderr do.
+///
+/// Used for testing of status reporting by this crate and `bench_diff`.
+pub struct StringWriter {
+    buf: Vec<u8>,
+}
+
+impl Write for StringWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        for byte in buf {
+            if *byte == 8 {
+                // backspace character
+
+                let res = self
+                    .buf
+                    .pop()
+                    .ok_or_else(|| {
+                        std::io::Error::other("backspace being writen into empty `StringWriter`")
+                    })
+                    .map(|b| b as usize);
+                if res.is_err() {
+                    return res;
+                }
+            } else {
+                self.buf.push(*byte);
+            }
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl StringWriter {
+    pub fn new() -> Self {
+        Self { buf: Vec::new() }
+    }
+
+    pub fn as_str(&self) -> Result<&str, std::str::Utf8Error> {
+        std::str::from_utf8(&self.buf)
+    }
 }

@@ -264,7 +264,7 @@ fn bench_run_with_status_args_cfg_writer<W: Write>(
 
 #[doc(hidden)]
 /// Returns a status reporting function that uses an arbitrary [`Write`], but not useful unless the writer
-/// can process backspace characters ("\u{8}") properly like stdeout and stderr do.
+/// can process backspace characters ("\u{8}") properly like stdeout and stderr do. See `test_support` module
 ///
 /// Used by [`bench_run_with_status_arg_cfg`] and crate `bench_diff`, as well as for testing of status reporting.
 pub fn make_status(

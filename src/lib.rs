@@ -28,5 +28,5 @@ pub mod stats_types {
 #[cfg(feature = "_bench")]
 pub mod bench_support;
 
-#[cfg(test)]
+#[cfg(feature = "_test_support")]
 pub mod test_support;
