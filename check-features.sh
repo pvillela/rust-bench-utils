@@ -2,7 +2,7 @@
 
 set -e  # Stop script immediately on any error
 
-### With default features: Externally exposed feature combinations
+### With default features
 
 echo "***** (default feature)"
 cargo check --lib --tests
@@ -10,28 +10,33 @@ cargo check --lib --tests
 echo "***** --features busy_work"
 cargo check --lib --tests --features busy_work
 
+echo "*****  --features _bench"
+cargo check --lib --tests --features _bench
+
 echo "***** --features _bench_diff"
 cargo check --lib --tests --features _bench_diff
 
-echo "*****  --features _test_support"
-cargo check --lib --tests --features _test_support
+echo "*****  --features _experimental"
+cargo check --lib --tests --features _experimental
+
+echo "*****  --features _test"
+cargo check --lib --tests --features _test
+
+echo "*****  --features _experimental,_test"
+cargo check --lib --tests --features _experimental,_test
 
 ## All targets and features
 
-echo "***** --all-targets --all-features --features _bench (see Cargo.toml [denylist])"
-cargo check --all-targets --all-features --features _bench
+cargo check --all-targets --all-features
 
-### Without default features: Externally exposed feature combinations
+### Without default features
 
-# Can't run publicly without default features.
+# Can't run any code without default features.
 
-echo "***** --no-default-features --features _bench_diff"
-cargo check --lib --tests --no-default-features --features _bench_diff
-
-echo "***** --no-default-features --features _test_support"
-cargo check --lib --tests --no-default-features --features _test_support
+# Any `cargo check --lib --tests --no-default-features --features <whatever>` fails because there are ungated 
+# modules that depend on the dependencies brought in by "default".
 
 ### Benches
 
-echo "***** --features _bench"
-cargo check --lib --tests --benches --features _bench
+echo "***** benches"
+cargo check --benches --features _bench

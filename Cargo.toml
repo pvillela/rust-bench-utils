@@ -20,10 +20,7 @@ exclude = ["CHANGELOG.md", "*.sh", ".gitignore", "examples", "bin"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-basic_stats = { path = "../basic-stats", default-features = false, features = [
-    "normal",
-    "aok",
-], optional = true }
+basic_stats = { path = "../basic-stats", default-features = false, optional = true }
 criterion = { version = "0.8.2", optional = true }
 hdrhistogram = "7.5"
 regex = { version = "1.12.3", optional = true }
@@ -35,16 +32,20 @@ statrs = "0.18"
 [features]
 
 ## Public
-default = ["dep:basic_stats"] # should always be enabled for public use
+default = [
+    "basic_stats/normal",
+    "basic_stats/aok",
+] # should always be enabled for public use
 busy_work = ["dep:sha2"]
 
+## Helpers
+__null = ["dep:basic_stats"]
+
 ## Internal
-_all_non_test = [
-    "default",
-    "busy_work",
-    "_experimental",
-    "_bench_diff",
-] # MUST UPDATE WHENEVER OTHER FEATURES CHANGE
+
+# MUST UPDATE THIS WHENEVER OTHER FEATURES CHANGE
+_ALL_NON_TEST = ["default", "busy_work", "_experimental", "_bench_diff"]
+
 _bench = [
     "_test_support",
     "busy_work",
