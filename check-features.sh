@@ -18,8 +18,8 @@ cargo check --lib --tests --features _test_support
 
 ## All targets and features
 
-echo "***** --all-targets --all-features"
-cargo check --all-targets --all-features
+echo "***** --all-targets --all-features --features _bench (see Cargo.toml [denylist])"
+cargo check --all-targets --all-features --features _bench
 
 ### Without default features: Externally exposed feature combinations
 

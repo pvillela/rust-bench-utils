@@ -39,15 +39,22 @@ default = ["dep:basic_stats"] # should always be enabled for public use
 busy_work = ["dep:sha2"]
 
 ## Internal
+_all_non_test = [
+    "default",
+    "busy_work",
+    "_experimental",
+    "_bench_diff",
+] # MUST UPDATE WHENEVER OTHER FEATURES CHANGE
 _bench = [
     "_test_support",
     "busy_work",
     "dep:criterion",
 ] # used by some benches and some tests
+_test = ["_test_support"] # used only by tests
 _test_support = [
     "basic_stats/_dev_utils",
     "dep:regex",
-] # utilities used for testing or benchmarking
+] # used only for gating non-test items
 _experimental = [
     "basic_stats/wilcoxon",
 ] # functionality developed but not intended for clients

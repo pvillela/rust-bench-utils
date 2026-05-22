@@ -376,7 +376,7 @@ impl<'a> Comp<'a> {
 
 #[cfg(test)]
 #[cfg(feature = "_experimental")]
-#[cfg(feature = "_test_support")]
+#[cfg(feature = "_test")]
 mod test {
     use super::*;
     use crate::test_support::{
@@ -474,15 +474,6 @@ mod test {
             let comp = Comp::new(o1, o2);
             let f1_out = comp.out_f1();
             let f2_out = comp.out_f2();
-
-            // print!("o1: ");
-            // o1.print();
-            // print!("f1_out: ");
-            // f1_out.print();
-            // print!("o2: ");
-            // o2.print();
-            // print!("f2_out: ");
-            // f2_out.print();
 
             assert!(are_eq_bench_out(o1, f1_out));
             assert!(are_eq_bench_out(o2, f2_out));

@@ -291,7 +291,58 @@ pub fn make_status(
 }
 
 #[cfg(test)]
-#[cfg(feature = "_test_support")]
+#[cfg(feature = "_bench")]
+#[cfg(feature = "busy_work")]
+mod validate {
+    use crate::{BenchCfg, BusyWork, RunLength, bench_run_with_status_arg_cfg};
+    use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
+    use std::time::Duration;
+
+    const BENCH_TIME: Duration = Duration::from_millis(500);
+
+    fn run_bench(warmup_millis: u64, target_latency: Duration, epsilon: f64) {
+        let name = format!("sleep_{}_micros", target_latency.as_micros());
+
+        let reporting_unit = BenchCfg::default().reporting_unit();
+        let target_median = reporting_unit.latency_as_f64(target_latency);
+        let exec_count = (reporting_unit.latency_as_f64(BENCH_TIME) / target_median) as usize;
+
+        let cfg = BenchCfg::default().with_warmup_millis(warmup_millis);
+        let out = bench_run_with_status_arg_cfg(
+            &cfg,
+            BusyWork::new(target_latency).fun(),
+            RunLength::Count(exec_count),
+            |_| {
+                println!("validate_bench_run: {name}");
+            },
+        );
+
+        println!(
+            "target_median={target_median}, out.median()={}, rel_diff={}",
+            out.median(),
+            target_median.abs_rel_diff(out.median())
+        );
+        println!("{:?}", out.summary());
+        println!();
+
+        rel_approx_eq!(target_median, out.median(), epsilon);
+    }
+
+    #[test]
+    fn test_millis() {
+        const EPSILON: f64 = 0.05;
+        run_bench(1200, Duration::from_millis(60), EPSILON);
+    }
+
+    #[test]
+    fn test_micros() {
+        const EPSILON: f64 = 0.05;
+        run_bench(100, Duration::from_micros(60), EPSILON);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "_test")]
 /// Crappy tests created by Claude Code, improved a bit by me.
 mod test {
     use super::*;

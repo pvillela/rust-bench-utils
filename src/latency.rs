@@ -113,7 +113,6 @@ pub fn executions_per_milli(budget_millis: u64, mut f: impl FnMut()) -> f64 {
 }
 
 #[cfg(test)]
-#[cfg(feature = "_test_support")]
 #[cfg(feature = "_bench")]
 /// cargo test -r --package bench_utils --lib --all-features -- latency::test --nocapture
 mod test {

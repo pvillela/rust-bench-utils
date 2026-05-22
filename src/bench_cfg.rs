@@ -216,7 +216,7 @@ pub trait PanicIfNeeded: AokValue + Sized {
 impl<T> PanicIfNeeded for T where T: AokValue + Sized {}
 
 #[cfg(test)]
-#[cfg(feature = "_test_support")]
+#[cfg(feature = "_test")]
 mod test {
     use crate::{BenchCfg, LatencyUnit, RunLength};
     use std::time::Duration;
