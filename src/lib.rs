@@ -15,6 +15,8 @@ pub use summary_stats::*;
 mod bench_run;
 pub use bench_run::*;
 
+pub mod multi;
+
 #[cfg(feature = "busy_work")]
 mod busy_work;
 #[cfg(feature = "busy_work")]
