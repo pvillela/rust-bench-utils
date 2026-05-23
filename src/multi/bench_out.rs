@@ -2,7 +2,11 @@
 
 use crate::{BenchCfg, LatencyUnit, SummaryStats, summary_stats};
 use basic_stats::core::{AltHyp, Ci, HypTestResult, PositionWrtCi};
-use std::{array, fmt::Debug, ops::Index};
+use std::{
+    array,
+    fmt::Debug,
+    ops::{Deref, Index},
+};
 
 /// Contains the data resulting from benchmarking a closure.
 ///
@@ -25,6 +29,14 @@ impl<const K: usize> Index<usize> for BenchOut<K> {
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.arr[index]
+    }
+}
+
+impl Deref for BenchOut<1> {
+    type Target = crate::BenchOut;
+
+    fn deref(&self) -> &Self::Target {
+        &self.arr[0]
     }
 }
 
@@ -457,5 +469,18 @@ mod test {
                 assert_eq!(exp_accepted_hyp, student_test.accepted());
             }
         }
+    }
+
+    #[test]
+    fn test_deref() {
+        let cfg = &BenchCfg::default()
+            .with_recording_unit(LatencyUnit::Nano)
+            .with_reporting_unit(LatencyUnit::Micro);
+        let mut out1 = BenchOut::<1>::new(cfg);
+
+        out1.capture_data([5]);
+        out1.capture_data([7]);
+
+        assert_eq!(out1.mean(), 0.006);
     }
 }
