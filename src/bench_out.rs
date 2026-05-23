@@ -35,7 +35,7 @@ pub struct BenchOut {
 
 impl BenchOut {
     #[doc(hidden)]
-    /// Creates a new empty instance with given `recording_unit`, `reporting_unit`, and `sigfig`.
+    /// Creates a new empty instance based on `cfg`.
     pub fn new(cfg: &BenchCfg) -> Self {
         let hist = new_timing(20 * 1000 * 1000, cfg.sigfig());
         let sum = 0.;
@@ -58,7 +58,7 @@ impl BenchOut {
     }
 
     /// Factor to convert from `recording_unit` to `reporting_unit`.
-    pub(crate) fn converson_factor(&self) -> f64 {
+    pub(crate) fn conversion_factor(&self) -> f64 {
         self.recording_unit.conversion_factor(self.reporting_unit)
     }
 
@@ -133,7 +133,7 @@ impl BenchOut {
         sample_mean(self.n(), self.sum)
             .aok()
             .panic_if_needed(self.panic_on_error(), "number of observations is zero")
-            * self.converson_factor()
+            * self.conversion_factor()
     }
 
     /// Sample standard deviation of latencies.
@@ -144,7 +144,7 @@ impl BenchOut {
         sample_stdev(self.n(), self.sum, self.sum2)
             .aok()
             .panic_if_needed(self.panic_on_error(), "number of observations is zero")
-            * self.converson_factor()
+            * self.conversion_factor()
     }
 
     /// Sample median of latencies.
@@ -160,7 +160,7 @@ impl BenchOut {
         sample_mean(self.n_ln, self.sum_ln)
             .aok()
             .panic_if_needed(self.panic_on_error(), "number of observations is zero")
-            + self.converson_factor().ln()
+            + self.conversion_factor().ln()
     }
 
     /// Sample standard deviation of the natural logarithms of latencies.
@@ -190,7 +190,7 @@ impl BenchOut {
     /// - `self.stdev_ln() == 0`.
     pub fn student_ln_t(&self, ln_mu0: f64) -> f64 {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        let ln_mu0_rec = ln_mu0 - self.converson_factor().ln();
+        let ln_mu0_rec = ln_mu0 - self.conversion_factor().ln();
         student_1samp_t(&moments, ln_mu0_rec).aok().panic_if_needed(
             self.panic_on_error(),
             "`number of observations <= 1` or `self.stdev_ln() == 0`",
@@ -223,7 +223,7 @@ impl BenchOut {
     /// - `self.stdev_ln()` == 0.
     pub fn student_ln_p(&self, ln_mu0: f64, alt_hyp: AltHyp) -> f64 {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        let ln_mu0_rec = ln_mu0 - self.converson_factor().ln();
+        let ln_mu0_rec = ln_mu0 - self.conversion_factor().ln();
         student_1samp_p(&moments, ln_mu0_rec, alt_hyp)
             .aok()
             .panic_if_needed(
@@ -251,8 +251,8 @@ impl BenchOut {
             "`number of observations <= 1` or `alpha` not in open interval `(0, 1)`",
         );
         Ci(
-            ci_rec.0 + self.converson_factor().ln(),
-            ci_rec.1 + self.converson_factor().ln(),
+            ci_rec.0 + self.conversion_factor().ln(),
+            ci_rec.1 + self.conversion_factor().ln(),
         )
     }
 
@@ -313,7 +313,7 @@ impl BenchOut {
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_ln_test(&self, ln_mu0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        let ln_mu0_rec = ln_mu0 - self.converson_factor().ln();
+        let ln_mu0_rec = ln_mu0 - self.conversion_factor().ln();
         student_1samp_test(&moments, ln_mu0_rec, alt_hyp, alpha).aok()
     }
 

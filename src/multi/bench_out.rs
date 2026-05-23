@@ -1,15 +1,8 @@
 //! Module defining the key data structure produced by [`crate::bench_run`].
 
-use std::fmt::Debug;
-
-use crate::{
-    BenchCfg, LatencyUnit, PanicIfNeeded, SummaryStats, Timing, new_timing, summary_stats,
-};
-use basic_stats::{
-    aok::Aok,
-    core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean, sample_stdev},
-    normal::{student_1samp_ci, student_1samp_p, student_1samp_t, student_1samp_test},
-};
+use crate::{BenchCfg, LatencyUnit, SummaryStats, summary_stats};
+use basic_stats::core::{AltHyp, Ci, HypTestResult, PositionWrtCi};
+use std::{array, fmt::Debug, ops::Index};
 
 /// Contains the data resulting from benchmarking a closure.
 ///
@@ -21,160 +14,125 @@ use basic_stats::{
 /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
 /// This assumption is widely supported by performance analysis theory and empirical data.
 /// Thus, the `*_ln_*` methods are useful for the analysis of median latencies.
-pub struct BenchOut {
-    pub(crate) recording_unit: LatencyUnit,
-    pub(crate) reporting_unit: LatencyUnit,
-    pub(crate) hist: Timing,
-    pub(crate) sum: f64,
-    pub(crate) sum2: f64,
-    pub(crate) n_ln: u64,
-    pub(crate) sum_ln: f64,
-    pub(crate) sum2_ln: f64,
-    panic_on_error: bool,
+#[derive(Debug)]
+pub struct BenchOut<const K: usize> {
+    pub(crate) arity: usize,
+    pub(crate) arr: [crate::BenchOut; K],
 }
 
-impl BenchOut {
-    #[doc(hidden)]
-    /// Creates a new empty instance with given `recording_unit`, `reporting_unit`, and `sigfig`.
-    pub fn new(cfg: &BenchCfg) -> Self {
-        let hist = new_timing(20 * 1000 * 1000, cfg.sigfig());
-        let sum = 0.;
-        let sum2 = 0.;
-        let n_ln = 0;
-        let sum_ln = 0.;
-        let sum2_ln = 0.;
+impl<const K: usize> Index<usize> for BenchOut<K> {
+    type Output = crate::BenchOut;
 
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.arr[index]
+    }
+}
+
+impl<const K: usize> BenchOut<K> {
+    #[doc(hidden)]
+    pub fn new(cfg: &BenchCfg) -> Self {
         Self {
-            recording_unit: cfg.recording_unit(),
-            reporting_unit: cfg.reporting_unit(),
-            hist,
-            sum,
-            sum2,
-            n_ln,
-            sum_ln,
-            sum2_ln,
-            panic_on_error: cfg.panic_on_error(),
+            arity: K,
+            arr: array::from_fn(|_| crate::BenchOut::new(cfg)),
         }
     }
 
-    /// Factor to convert from `recording_unit` to `reporting_unit`.
-    pub(crate) fn converson_factor(&self) -> f64 {
-        self.recording_unit.conversion_factor(self.reporting_unit)
+    pub fn arity(&self) -> usize {
+        self.arity
+    }
+
+    pub(crate) fn first(&self) -> &crate::BenchOut {
+        &self.arr[0]
     }
 
     #[doc(hidden)]
     /// Creates a new empty instance.
     pub fn reset(&mut self) {
-        self.hist.reset();
-        self.sum = 0.;
-        self.sum2 = 0.;
-        self.n_ln = 0;
-        self.sum_ln = 0.;
-        self.sum2_ln = 0.
+        for b in &mut self.arr {
+            b.reset();
+        }
     }
 
     #[doc(hidden)]
-    /// Updates `self` with an elapsed time observation for the function.
-    pub fn capture_data(&mut self, elapsed: u64) {
-        self.hist
-            .record(elapsed)
-            .expect("can't happen: histogram is auto-resizable");
-
-        self.sum += elapsed as f64;
-        self.sum2 += elapsed.pow(2) as f64;
-
-        if elapsed > 0 {
-            let ln = (elapsed as f64).ln();
-            self.n_ln += 1;
-            self.sum_ln += ln;
-            self.sum2_ln += ln.powi(2);
+    /// Updates `self` with an elapsed time observation for the functions.
+    pub fn capture_data(&mut self, elapsed: [u64; K]) {
+        for (i, b) in &mut self.arr.iter_mut().enumerate() {
+            b.capture_data(elapsed[i]);
         }
     }
 
     /// Latency unit used in data collection.
     pub fn recording_unit(&self) -> LatencyUnit {
-        self.recording_unit
+        self.first().recording_unit()
     }
 
     /// Latency unit used for reporting benchmark results.
     pub fn reporting_unit(&self) -> LatencyUnit {
-        self.reporting_unit
+        self.first().reporting_unit()
     }
 
     /// The value of [`BenchCfg::panic_on_error`] at the time `self` was constructed.
     pub fn panic_on_error(&self) -> bool {
-        self.panic_on_error
+        self.first().panic_on_error()
     }
 
     /// Number of observations (sample size) for a function, as an integer.
     #[inline(always)]
     pub fn n(&self) -> u64 {
-        self.hist.len()
+        self.first().n()
     }
 
     /// Number of observations (sample size) for a function, as a floating point number.
     #[inline(always)]
     pub fn nf(&self) -> f64 {
-        self.hist.len() as f64
+        self.first().nf()
     }
 
     /// Summary descriptive statistics.
     ///
     /// Includes sample size, mean, standard deviation, median, several percentiles, min, and max.
-    pub fn summary(&self) -> SummaryStats {
-        // summary_stats(self)
-        todo!()
+    pub fn summaries(&self) -> [SummaryStats; K] {
+        array::from_fn(|k| summary_stats(&self.arr[k]))
     }
 
-    /// Sample mean of latencies.
+    /// Sample means of latencies.
     ///
     /// # Panics
     /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
-    pub fn mean(&self) -> f64 {
-        sample_mean(self.n(), self.sum)
-            .aok()
-            .panic_if_needed(self.panic_on_error(), "number of observations is zero")
-            * self.converson_factor()
+    pub fn means(&self) -> [f64; K] {
+        array::from_fn(|k| self.arr[k].mean())
     }
 
-    /// Sample standard deviation of latencies.
+    /// Sample standard deviations of latencies.
     ///
     /// # Panics
     /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
-    pub fn stdev(&self) -> f64 {
-        sample_stdev(self.n(), self.sum, self.sum2)
-            .aok()
-            .panic_if_needed(self.panic_on_error(), "number of observations is zero")
-            * self.converson_factor()
+    pub fn stdevs(&self) -> [f64; K] {
+        array::from_fn(|k| self.arr[k].stdev())
     }
 
-    /// Sample median of latencies.
-    pub fn median(&self) -> f64 {
-        self.summary().median
+    /// Sample medians of latencies.
+    pub fn medians(&self) -> [f64; K] {
+        array::from_fn(|k| self.arr[k].median())
     }
 
-    /// Sample mean of the natural logarithms of latencies.
+    /// Sample means of the natural logarithms of latencies.
     ///
     /// # Panics
     /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
-    pub fn mean_ln(&self) -> f64 {
-        sample_mean(self.n_ln, self.sum_ln)
-            .aok()
-            .panic_if_needed(self.panic_on_error(), "number of observations is zero")
-            + self.converson_factor().ln()
+    pub fn mean_lns(&self) -> [f64; K] {
+        array::from_fn(|k| self.arr[k].mean_ln())
     }
 
-    /// Sample standard deviation of the natural logarithms of latencies.
+    /// Sample standard deviations of the natural logarithms of latencies.
     ///
     /// # Panics
     /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
-    pub fn stdev_ln(&self) -> f64 {
-        sample_stdev(self.n_ln, self.sum_ln, self.sum2_ln)
-            .aok()
-            .panic_if_needed(self.panic_on_error(), "number of observations is zero")
+    pub fn stdev_lns(&self) -> [f64; K] {
+        array::from_fn(|k| self.arr[k].stdev_ln())
     }
 
-    /// Student's one-sample t statistic for
+    /// Student's one-sample t statistics for
     /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm), or equivalently,
     /// the equality of `median(latency(f))` and `exp(ln_mu0)`.
     ///
@@ -189,25 +147,20 @@ impl BenchOut {
     /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
     /// - `number of observations <= 1`.
     /// - `self.stdev_ln() == 0`.
-    pub fn student_ln_t(&self, ln_mu0: f64) -> f64 {
-        let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        let ln_mu0_rec = ln_mu0 - self.converson_factor().ln();
-        student_1samp_t(&moments, ln_mu0_rec).aok().panic_if_needed(
-            self.panic_on_error(),
-            "`number of observations <= 1` or `self.stdev_ln() == 0`",
-        )
+    pub fn student_ln_ts(&self, ln_mu0: f64) -> [f64; K] {
+        array::from_fn(|k| self.arr[k].student_ln_t(ln_mu0))
     }
 
-    /// Degrees of freedom for Student's t statistic for `mean(ln(latency(f)))` (where `ln` is the natural logarithm).
+    /// Degrees of freedom for Student's t statistics for `mean(ln(latency(f)))` (where `ln` is the natural logarithm).
     ///
     /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
     /// Thus, this statistics equivalently pertains to `ln(median(latency(f)))`.
-    pub fn student_ln_df(&self) -> f64 {
-        self.n_ln as f64 - 1.
+    pub fn student_ln_dfs(&self) -> [f64; K] {
+        array::from_fn(|k| self.arr[k].student_ln_df())
     }
 
-    /// p-value of Student's one-sample t-test for
+    /// p-values of Student's one-sample t-tests for
     /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm), or equivalently,
     /// the equality of `median(latency(f))` and `exp(ln_mu0)`.
     ///
@@ -222,18 +175,11 @@ impl BenchOut {
     /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
     /// - Sample size <= 1.
     /// - `self.stdev_ln()` == 0.
-    pub fn student_ln_p(&self, ln_mu0: f64, alt_hyp: AltHyp) -> f64 {
-        let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        let ln_mu0_rec = ln_mu0 - self.converson_factor().ln();
-        student_1samp_p(&moments, ln_mu0_rec, alt_hyp)
-            .aok()
-            .panic_if_needed(
-                self.panic_on_error(),
-                "`number of observations <= 1` or `self.stdev_ln() == 0`",
-            )
+    pub fn student_ln_ps(&self, ln_mu0: f64, alt_hyp: AltHyp) -> [f64; K] {
+        array::from_fn(|k| self.arr[k].student_ln_p(ln_mu0, alt_hyp))
     }
 
-    /// Student's one-sample confidence interval for
+    /// Student's one-sample confidence intervals for
     /// `mean(ln(latency(f)))` (where `ln` is the natural logarithm).
     /// with confidence level `(1 - alpha)`.
     ///
@@ -245,18 +191,27 @@ impl BenchOut {
     /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
     /// - `Sample size <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_ln_ci(&self, alpha: f64) -> Ci {
-        let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        let ci_rec = student_1samp_ci(&moments, alpha).aok().panic_if_needed(
-            self.panic_on_error(),
-            "`number of observations <= 1` or `alpha` not in open interval `(0, 1)`",
-        );
-        Ci(
-            ci_rec.0 + self.converson_factor().ln(),
-            ci_rec.1 + self.converson_factor().ln(),
-        )
+    pub fn student_ln_cis(&self, alpha: f64) -> [Ci; K] {
+        array::from_fn(|k| self.arr[k].student_ln_ci(alpha))
     }
 
+    /// Student's one-sample confidence intervals for
+    /// `median(latency(f))`,
+    /// with confidence level `(1 - alpha)`.
+    ///
+    /// Assumes that `latency(f)` is approximately log-normal.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// - `Sample size <= 1`.
+    /// - `alpha` not in open interval `(0, 1)`.
+    pub fn student_median_cis(&self, alpha: f64) -> [Ci; K] {
+        array::from_fn(|k| self.arr[k].student_median_ci(alpha))
+    }
+
+    /// Positions of `value` with respect to
     /// Student's one-sample confidence interval for
     /// `median(latency(f))`,
     /// with confidence level `(1 - alpha)`.
@@ -269,32 +224,15 @@ impl BenchOut {
     /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
     /// - `Sample size <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_median_ci(&self, alpha: f64) -> Ci {
-        let Ci(log_low, log_high) = self.student_ln_ci(alpha);
-        let low = log_low.exp();
-        let high = log_high.exp();
-        Ci(low, high)
+    pub fn student_value_position_wrt_median_cis(
+        &self,
+        value: f64,
+        alpha: f64,
+    ) -> [PositionWrtCi; K] {
+        array::from_fn(|k| self.arr[k].student_value_position_wrt_median_ci(value, alpha))
     }
 
-    /// Position of `value` with respect to
-    /// Student's one-sample confidence interval for
-    /// `median(latency(f))`,
-    /// with confidence level `(1 - alpha)`.
-    ///
-    /// Assumes that `latency(f)` is approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
-    /// - `Sample size <= 1`.
-    /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_value_position_wrt_median_ci(&self, value: f64, alpha: f64) -> PositionWrtCi {
-        let ci = self.student_median_ci(alpha);
-        ci.position_of(value)
-    }
-
-    /// Student's one-sample test of the hypothesis that
+    /// Student's one-sample tests of the hypotheses that
     /// `mean(ln(latency(f))) == ln_mu0` (where `ln` is the natural logarithm), or equivalently,
     /// `median(latency(f)) == exp(ln_mu0)`.
     ///
@@ -312,67 +250,8 @@ impl BenchOut {
     /// - `Sample size <= 1`.
     /// - `self.stdev_ln()` == 0.
     /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_ln_test(&self, ln_mu0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
-        let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        let ln_mu0_rec = ln_mu0 - self.converson_factor().ln();
-        student_1samp_test(&moments, ln_mu0_rec, alt_hyp, alpha).aok()
-    }
-
-    #[cfg(feature = "_bench_diff")]
-    #[inline(always)]
-    /// Reference to the raw HDR histogram. Requires feature `_bench_diff`.
-    pub fn hist(&self) -> &Timing {
-        &self.hist
-    }
-
-    #[cfg(feature = "_bench_diff")]
-    #[inline(always)]
-    /// Raw sum of recorded latencies. Requires feature `_bench_diff`.
-    pub fn sum(&self) -> f64 {
-        self.sum
-    }
-
-    #[cfg(feature = "_bench_diff")]
-    #[inline(always)]
-    /// Raw sum of squares of recorded latencies. Requires feature `_bench_diff`.
-    pub fn sum2(&self) -> f64 {
-        self.sum2
-    }
-
-    #[cfg(feature = "_bench_diff")]
-    #[inline(always)]
-    /// Sample size for log-latencies. Requires feature `_bench_diff`.
-    pub fn n_ln(&self) -> u64 {
-        self.n_ln
-    }
-
-    #[cfg(feature = "_bench_diff")]
-    #[inline(always)]
-    /// Raw sum of natural logarithms of latencies. Requires feature `_bench_diff`.
-    pub fn sum_ln(&self) -> f64 {
-        self.sum_ln
-    }
-
-    #[cfg(feature = "_bench_diff")]
-    #[inline(always)]
-    /// Raw sum of squares of natural logarithms of latencies. Requires feature `_bench_diff`.
-    pub fn sum2_ln(&self) -> f64 {
-        self.sum2_ln
-    }
-}
-
-impl Debug for BenchOut {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("BenchOut {{ recording_unit={:?}, reporting_unit={:?}, n={}, sum={}, sum2={}, n_ln={}, sum_ln={}, sum2_ln={}, summary={:?} }}",
-            self.recording_unit,
-            self.reporting_unit,
-            self.n(),
-            self.sum,
-            self.sum2,
-            self.n_ln,
-            self.sum_ln,
-            self.sum2_ln,
-            self.summary()))
+    pub fn student_ln_tests(&self, ln_mu0: f64, alt_hyp: AltHyp, alpha: f64) -> [HypTestResult; K] {
+        array::from_fn(|k| self.arr[k].student_ln_test(ln_mu0, alt_hyp, alpha))
     }
 }
 
@@ -386,8 +265,10 @@ mod test {
     };
     use basic_stats::{
         approx_eq,
-        core::{AcceptedHyp, PositionWrtCi},
-        normal::{normal_detm_samp, student_1samp_df, student_1samp_p},
+        core::{AcceptedHyp, PositionWrtCi, SampleMoments},
+        normal::{
+            normal_detm_samp, student_1samp_ci, student_1samp_df, student_1samp_p, student_1samp_t,
+        },
         rel_approx_eq,
     };
     use statrs::distribution::{ContinuousCDF, Normal};
@@ -406,9 +287,8 @@ mod test {
         println!("conv_factor={conv_factor}");
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
-        let lognormal_samp = lognormal_samp(rec_mu, sigma, k);
-        let mut out = BenchOut::new(&BenchCfg::default());
-        out.collect_data(lognormal_samp);
+        let mut out = BenchOut::<2>::new(&BenchCfg::default());
+        out.collect_data(array::from_fn(|_| lognormal_samp(rec_mu, sigma, k)));
 
         assert_eq!(out.recording_unit(), LatencyUnit::Nano);
         assert_eq!(out.reporting_unit(), LatencyUnit::Micro);
@@ -416,6 +296,7 @@ mod test {
         assert_eq!(out.nf(), out.n() as f64);
 
         let normal = Normal::new(mu, sigma).unwrap();
+
         let exp_mean_ln = mu;
         let exp_stdev_ln = sigma;
         let exp_mean = (mu + 0.5 * sigma.powi(2)).exp();
@@ -430,39 +311,75 @@ mod test {
         let exp_p95 = normal.inverse_cdf(0.95).exp();
         let exp_p99 = normal.inverse_cdf(0.99).exp();
 
-        let summary = out.summary();
-        println!("exp_mean={}, summary.mean={}", exp_mean, summary.mean);
-        println!("exp_stdev={}, summary.stdev={}", exp_stdev, summary.stdev);
-        println!("exp_p1={}, summary.p1={}", exp_p1, summary.p1);
-        println!("exp_p5={}, summary.p5={}", exp_p5, summary.p5);
-        println!("exp_p10={}, summary.p10={}", exp_p10, summary.p10);
-        println!("exp_p25={}, summary.p25={}", exp_p25, summary.p25);
+        let summaries = out.summaries();
+
+        println!("exp_mean={}, out.means={:?}", exp_mean, out.means());
+        println!("exp_stdev={}, out.stdevs={:?}", exp_stdev, out.stdevs());
         println!(
-            "exp_median={}, summary.median={}",
-            exp_median, summary.median
+            "exp_p1={}, summaries.p1={:?}",
+            exp_p1,
+            summaries.iter().map(|s| s.p1)
         );
-        println!("exp_p75={}, summary.p75={}", exp_p75, summary.p75);
-        println!("exp_p90={}, summary.p90={}", exp_p90, summary.p90);
-        println!("exp_p95={}, summary.p95={}", exp_p95, summary.p95);
-        println!("exp_p99={}, summary.p99={}", exp_p99, summary.p99);
+        println!(
+            "exp_p5={}, summaries.p5={:?}",
+            exp_p5,
+            summaries.iter().map(|s| s.p5)
+        );
+        println!(
+            "exp_p10={}, summaries.p10={:?}",
+            exp_p10,
+            summaries.iter().map(|s| s.p10)
+        );
+        println!(
+            "exp_p25={}, summaries.p25={:?}",
+            exp_p25,
+            summaries.iter().map(|s| s.p25)
+        );
+        println!(
+            "exp_median={}, summaries.median={:?}",
+            exp_median,
+            summaries.iter().map(|s| s.median)
+        );
+        println!(
+            "exp_p75={}, summaries.p75={:?}",
+            exp_p75,
+            summaries.iter().map(|s| s.p75)
+        );
+        println!(
+            "exp_p90={}, summaries.p90={:?}",
+            exp_p90,
+            summaries.iter().map(|s| s.p90)
+        );
+        println!(
+            "exp_p95={}, summaries.p95={:?}",
+            exp_p95,
+            summaries.iter().map(|s| s.p95)
+        );
+        println!(
+            "exp_p99={}, summaries.p99={:?}",
+            exp_p99,
+            summaries.iter().map(|s| s.p99)
+        );
 
-        rel_approx_eq!(exp_mean, out.mean(), EPSILON);
-        rel_approx_eq!(exp_stdev, out.stdev(), EPSILON);
-        rel_approx_eq!(exp_median, out.median(), EPSILON);
-        approx_eq!(exp_mean_ln, out.mean_ln(), EPSILON);
-        approx_eq!(exp_stdev_ln, out.stdev_ln(), EPSILON);
+        for k in 0..out.arity() {
+            rel_approx_eq!(exp_mean, out[k].mean(), EPSILON);
+            rel_approx_eq!(exp_stdev, out[k].stdev(), EPSILON);
+            rel_approx_eq!(exp_median, out[k].median(), EPSILON);
+            approx_eq!(exp_mean_ln, out[k].mean_ln(), EPSILON);
+            approx_eq!(exp_stdev_ln, out[k].stdev_ln(), EPSILON);
 
-        rel_approx_eq!(exp_mean, summary.mean, EPSILON);
-        rel_approx_eq!(exp_stdev, summary.stdev, EPSILON);
-        rel_approx_eq!(exp_p1, summary.p1, EPSILON);
-        rel_approx_eq!(exp_p5, summary.p5, EPSILON);
-        rel_approx_eq!(exp_p10, summary.p10, EPSILON);
-        rel_approx_eq!(exp_p25, summary.p25, EPSILON);
-        rel_approx_eq!(exp_median, summary.median, EPSILON);
-        rel_approx_eq!(exp_p75, summary.p75, EPSILON);
-        rel_approx_eq!(exp_p90, summary.p90, EPSILON);
-        rel_approx_eq!(exp_p95, summary.p95, EPSILON);
-        rel_approx_eq!(exp_p99, summary.p99, EPSILON);
+            rel_approx_eq!(exp_mean, summaries[k].mean, EPSILON);
+            rel_approx_eq!(exp_stdev, summaries[k].stdev, EPSILON);
+            rel_approx_eq!(exp_p1, summaries[k].p1, EPSILON);
+            rel_approx_eq!(exp_p5, summaries[k].p5, EPSILON);
+            rel_approx_eq!(exp_p10, summaries[k].p10, EPSILON);
+            rel_approx_eq!(exp_p25, summaries[k].p25, EPSILON);
+            rel_approx_eq!(exp_median, summaries[k].median, EPSILON);
+            rel_approx_eq!(exp_p75, summaries[k].p75, EPSILON);
+            rel_approx_eq!(exp_p90, summaries[k].p90, EPSILON);
+            rel_approx_eq!(exp_p95, summaries[k].p95, EPSILON);
+            rel_approx_eq!(exp_p99, summaries[k].p99, EPSILON);
+        }
     }
 
     #[test]
@@ -477,9 +394,8 @@ mod test {
         println!("conv_factor={conv_factor}");
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
-        let lognormal_samp = lognormal_samp(rec_mu, sigma, k);
-        let mut out = BenchOut::new(&BenchCfg::default());
-        out.collect_data(lognormal_samp);
+        let mut out = BenchOut::<2>::new(&BenchCfg::default());
+        out.collect_data(array::from_fn(|_| lognormal_samp(rec_mu, sigma, k)));
 
         let normal_samp = normal_detm_samp(mu, sigma, k).unwrap();
         let moments_ln = SampleMoments::from_iterator(normal_samp);
@@ -491,8 +407,8 @@ mod test {
 
         // The true median (exp(mu)) should lie inside the CI
         let true_median = mu.exp();
-        let position = out.student_value_position_wrt_median_ci(true_median, ALPHA);
-        assert_eq!(position, PositionWrtCi::In);
+        let positions = out.student_value_position_wrt_median_cis(true_median, ALPHA);
+        assert_eq!(positions, array::from_fn(|_| PositionWrtCi::In));
 
         {
             let ratio_medians: f64 = 1.0;
@@ -506,14 +422,16 @@ mod test {
             let exp_ln_ci = student_1samp_ci(&moments_ln, ALPHA).unwrap();
             let exp_ci = Ci(exp_ln_ci.0.exp(), exp_ln_ci.1.exp());
 
-            approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON);
-            approx_eq!(exp_df, out.student_ln_df(), EPSILON);
-            rel_approx_eq!(exp_p, out.student_ln_p(mu0, alt_hyp), EPSILON);
-            rel_approx_eq!(exp_ci.0, out.student_median_ci(ALPHA).0, EPSILON);
-            rel_approx_eq!(exp_ci.1, out.student_median_ci(ALPHA).1, EPSILON);
-            let student_test = out.student_ln_test(mu0, alt_hyp, ALPHA);
-            println!("out.student_test={student_test:?}");
-            assert_eq!(exp_accepted_hyp, student_test.accepted());
+            for k in 0..out.arity() {
+                approx_eq!(exp_t, out[k].student_ln_t(mu0), EPSILON);
+                approx_eq!(exp_df, out[k].student_ln_df(), EPSILON);
+                rel_approx_eq!(exp_p, out[k].student_ln_p(mu0, alt_hyp), EPSILON);
+                rel_approx_eq!(exp_ci.0, out[k].student_median_ci(ALPHA).0, EPSILON);
+                rel_approx_eq!(exp_ci.1, out[k].student_median_ci(ALPHA).1, EPSILON);
+                let student_test = out[k].student_ln_test(mu0, alt_hyp, ALPHA);
+                println!("out[k].student_test={student_test:?}");
+                assert_eq!(exp_accepted_hyp, student_test.accepted());
+            }
         }
 
         {
@@ -528,14 +446,16 @@ mod test {
             let exp_ln_ci = student_1samp_ci(&moments_ln, ALPHA).unwrap();
             let exp_ci = Ci(exp_ln_ci.0.exp(), exp_ln_ci.1.exp());
 
-            rel_approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON);
-            approx_eq!(exp_df, out.student_ln_df(), EPSILON);
-            approx_eq!(exp_p, out.student_ln_p(mu0, alt_hyp), EPSILON);
-            rel_approx_eq!(exp_ci.0, out.student_median_ci(ALPHA).0, EPSILON);
-            rel_approx_eq!(exp_ci.1, out.student_median_ci(ALPHA).1, EPSILON);
-            let student_test = out.student_ln_test(mu0, alt_hyp, ALPHA);
-            println!("out.student_test={student_test:?}");
-            assert_eq!(exp_accepted_hyp, student_test.accepted());
+            for k in 0..out.arity() {
+                rel_approx_eq!(exp_t, out[k].student_ln_t(mu0), EPSILON);
+                approx_eq!(exp_df, out[k].student_ln_df(), EPSILON);
+                approx_eq!(exp_p, out[k].student_ln_p(mu0, alt_hyp), EPSILON);
+                rel_approx_eq!(exp_ci.0, out[k].student_median_ci(ALPHA).0, EPSILON);
+                rel_approx_eq!(exp_ci.1, out[k].student_median_ci(ALPHA).1, EPSILON);
+                let student_test = out[k].student_ln_test(mu0, alt_hyp, ALPHA);
+                println!("out.student_test={student_test:?}");
+                assert_eq!(exp_accepted_hyp, student_test.accepted());
+            }
         }
     }
 }
