@@ -1,67 +1,7 @@
 //! Implements functions to collect latency statistics for a closure.
 
-use crate::{BenchCfg, BenchOut, RunLength, latency};
-use std::{
-    io::{Write, stderr},
-    time::{Duration, Instant},
-};
-
-type BenchState = BenchOut;
-
-impl BenchState {
-    /// Executes `f` repeatedly and captures latencies.
-    /// `exec_status` is invoked once every `status_freq` invocations of `f`.
-    fn execute<W: Write>(
-        &mut self,
-        w: &mut W,
-        mut f: impl FnMut(),
-        run_length: RunLength,
-        status_freq: usize,
-        // Used in control of the exit from the iteration loop when both `status_freq` and `exec_count` are too high
-        // compared to `run_length`.
-        est_count_from_dur: usize,
-        mut exec_status: Option<impl FnMut(usize, &mut W)>,
-    ) {
-        assert!(status_freq > 0, "status_freq must be > 0");
-
-        let (exec_count, run_time) = run_length.get_exec_count_and_duration();
-        assert!(exec_count > 0, "exec_count must be > 0");
-
-        let unit = self.recording_unit();
-        let mut est_remaining_iters = est_count_from_dur;
-        let start = Instant::now();
-
-        for i in 1..=exec_count {
-            let latency = unit.latency_as_u64(latency(&mut f));
-            self.capture_data(latency);
-            if est_remaining_iters > 0 {
-                est_remaining_iters -= 1;
-            }
-
-            if i % status_freq == 0 || i == exec_count || est_remaining_iters == 0 {
-                let elapsed = start.elapsed();
-                let finished = i == exec_count || elapsed >= run_time;
-
-                if i % status_freq == 0 || finished {
-                    if let Some(ref mut exec_status) = exec_status {
-                        exec_status(i, w);
-                    }
-                }
-
-                if finished {
-                    break;
-                }
-
-                if est_remaining_iters == 0 {
-                    let remaining_time = run_time - elapsed;
-                    let avg_time_per_iter = elapsed / i as u32;
-                    est_remaining_iters =
-                        remaining_time.div_duration_f64(avg_time_per_iter).ceil() as usize;
-                }
-            }
-        }
-    }
-}
+use crate::{BenchCfg, BenchOut, RunLength, multi};
+use std::io::Write;
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
 /// *optionally* outputs information about the benchmark and its execution status.
@@ -85,8 +25,7 @@ pub fn bench_run_x(
     warmup_status: Option<impl FnMut(usize)>,
     exec_status: Option<impl FnMut(usize)>,
 ) -> BenchOut {
-    let cfg = BenchCfg::default();
-    bench_run_x_arg_cfg(&cfg, f, exec_run_length, warmup_status, exec_status)
+    multi::bench_run_x(&mut [f; 1], exec_run_length, warmup_status, exec_status).into()
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -112,50 +51,34 @@ pub fn bench_run_x_arg_cfg(
     warmup_status: Option<impl FnMut(usize)>,
     exec_status: Option<impl FnMut(usize)>,
 ) -> BenchOut {
-    let mut w = NullWrite;
-    let warmup_status = warmup_status.map(|mut s| move |i, _w: &mut NullWrite| s(i));
-    let exec_status = exec_status.map(|mut s| move |i, _w: &mut NullWrite| s(i));
-    bench_run_x_args_cfg_writer(cfg, &mut w, f, exec_run_length, warmup_status, exec_status)
+    multi::bench_run_x_arg_cfg(
+        cfg,
+        &mut [f; 1],
+        exec_run_length,
+        warmup_status,
+        exec_status,
+    )
+    .into()
 }
 
 /// Used to implement [`bench_run_x_arg_cfg`] and to support testing.
 pub fn bench_run_x_args_cfg_writer<W: Write>(
     cfg: &BenchCfg,
     w: &mut W,
-    mut f: impl FnMut(),
+    f: impl FnMut(),
     exec_run_length: RunLength,
     warmup_status: Option<impl FnMut(usize, &mut W)>,
     exec_status: Option<impl FnMut(usize, &mut W)>,
 ) -> BenchOut {
-    let mut state = BenchOut::new(cfg);
-    let execs_per_milli = cfg.execs_per_milli(&mut f);
-    let status_freq = cfg.status_freq(execs_per_milli);
-
-    let warmup_run_length = RunLength::Duration(Duration::from_millis(cfg.warmup_millis()));
-    let warmup_est_count = warmup_run_length.estimated_count(execs_per_milli);
-    let exec_est_count = exec_run_length.estimated_count(execs_per_milli);
-
-    // Warm-up.
-    state.execute(
+    multi::bench_run_x_args_cfg_writer(
+        cfg,
         w,
-        &mut f,
-        warmup_run_length,
-        status_freq,
-        warmup_est_count,
-        warmup_status,
-    );
-    state.reset();
-
-    state.execute(
-        w,
-        f,
+        &mut [f; 1],
         exec_run_length,
-        status_freq,
-        exec_est_count,
+        warmup_status,
         exec_status,
-    );
-
-    state
+    )
+    .into()
 }
 
 /// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
@@ -170,8 +93,7 @@ pub fn bench_run_x_args_cfg_writer<W: Write>(
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
-    let cfg = BenchCfg::default();
-    bench_run_arg_cfg(&cfg, f, exec_run_length)
+    multi::bench_run(&mut [f; 1], exec_run_length).into()
 }
 
 /// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
@@ -186,13 +108,7 @@ pub fn bench_run(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_arg_cfg(cfg: &BenchCfg, f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
-    bench_run_x_arg_cfg(
-        cfg,
-        f,
-        exec_run_length,
-        None::<fn(usize)>,
-        None::<fn(usize)>,
-    )
+    multi::bench_run_arg_cfg(cfg, &mut [f; 1], exec_run_length).into()
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -208,8 +124,7 @@ pub fn bench_run_arg_cfg(cfg: &BenchCfg, f: impl FnMut(), exec_run_length: RunLe
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_with_status(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
-    let cfg = BenchCfg::default();
-    bench_run_with_status_arg_cfg(&cfg, f, exec_run_length)
+    multi::bench_run_with_status(&mut [f; 1], exec_run_length).into()
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -229,44 +144,7 @@ pub fn bench_run_with_status_arg_cfg(
     f: impl FnMut(),
     exec_run_length: RunLength,
 ) -> BenchOut {
-    let mut w = stderr();
-    bench_run_with_status_args_cfg_writer(cfg, &mut w, f, exec_run_length)
-}
-
-/// Used to implement [`bench_run_with_status_arg_cfg`] and to support testing.
-fn bench_run_with_status_args_cfg_writer<W: Write>(
-    cfg: &BenchCfg,
-    w: &mut W,
-    mut f: impl FnMut(),
-    exec_run_length: RunLength,
-) -> BenchOut {
-    let execs_per_milli = cfg.execs_per_milli(&mut f);
-
-    let warmup_millis = cfg.warmup_millis();
-    let warmup_run_length = RunLength::Duration(Duration::from_millis(warmup_millis));
-    let warmup_est_count = warmup_run_length.estimated_count(execs_per_milli);
-
-    let warmup_status = make_status("Warming up", warmup_millis, warmup_est_count);
-
-    let exec_est_count = exec_run_length.estimated_count(execs_per_milli);
-    let exec_est_millis = exec_run_length
-        .estimated_duration(execs_per_milli)
-        .as_millis() as u64;
-
-    // The `\n` below is to separate warmup status from exec status. Otherwise, they get mixed up due to
-    // the `eprint!("{}", "\u{8}".repeat(status_len))` line in the `status` closure.
-    let exec_status = make_status("\nExecuting bench_run", exec_est_millis, exec_est_count);
-
-    let out = bench_run_x_args_cfg_writer(
-        cfg,
-        w,
-        f,
-        exec_run_length,
-        Some(warmup_status),
-        Some(exec_status),
-    );
-
-    out
+    multi::bench_run_with_status_arg_cfg(cfg, &mut [f; 1], exec_run_length).into()
 }
 
 #[doc(hidden)]
@@ -393,7 +271,9 @@ mod status {
 
         let execs_per_milli = cfg.execs_per_milli(&f);
 
-        let out = bench_run_with_status_args_cfg_writer(&cfg, &mut w, f, exec_run_length);
+        let out =
+            multi::bench_run_with_status_args_cfg_writer(&cfg, &mut w, &mut [f], exec_run_length)
+                .flatten();
 
         let status_str = w.as_str().expect("StringWriter doesn't contain string");
         println!("** {status_str}");

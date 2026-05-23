@@ -1,6 +1,6 @@
 //! Module defining the key data structure produced by [`crate::bench_run`].
 
-use crate::{BenchCfg, LatencyUnit, SummaryStats, summary_stats};
+use crate::{BenchCfg, Comp, LatencyUnit, SummaryStats, summary_stats};
 use basic_stats::core::{AltHyp, Ci, HypTestResult, PositionWrtCi};
 use std::{
     array,
@@ -37,6 +37,27 @@ impl Deref for BenchOut<1> {
 
     fn deref(&self) -> &Self::Target {
         &self.arr[0]
+    }
+}
+
+impl From<crate::BenchOut> for BenchOut<1> {
+    fn from(value: crate::BenchOut) -> Self {
+        Self {
+            arity: 1,
+            arr: [value],
+        }
+    }
+}
+
+impl BenchOut<1> {
+    pub fn flatten(self) -> crate::BenchOut {
+        self.into()
+    }
+}
+
+impl BenchOut<2> {
+    pub fn comp(&self) -> Comp {
+        Comp(&self.arr[0], &self.arr[1])
     }
 }
 

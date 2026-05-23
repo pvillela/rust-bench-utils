@@ -24,7 +24,7 @@ use basic_stats::wilcoxon::RankSum;
 /// This assumption is widely supported by performance analysis theory and empirical data.
 /// Thus, the `*_ln_*` methods are useful for the analysis of differences of natural logarithms of median latencies,
 /// or equivalently, the ratio of median latencies.
-pub struct Comp<'a>(&'a BenchOut, &'a BenchOut);
+pub struct Comp<'a>(pub(crate) &'a BenchOut, pub(crate) &'a BenchOut);
 
 impl<'a> Comp<'a> {
     /// # Panics

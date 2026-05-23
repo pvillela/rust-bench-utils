@@ -246,7 +246,7 @@ pub fn bench_run_with_status_arg_cfg<const K: usize>(
 }
 
 /// Used to implement [`bench_run_with_status_arg_cfg`] and to support testing.
-fn bench_run_with_status_args_cfg_writer<const K: usize, W: Write>(
+pub(crate) fn bench_run_with_status_args_cfg_writer<const K: usize, W: Write>(
     cfg: &BenchCfg,
     w: &mut W,
     fs: &mut [impl FnMut(); K],

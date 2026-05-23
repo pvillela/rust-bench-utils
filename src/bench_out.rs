@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 
 use crate::{
-    BenchCfg, LatencyUnit, PanicIfNeeded, SummaryStats, Timing, new_timing, summary_stats,
+    BenchCfg, LatencyUnit, PanicIfNeeded, SummaryStats, Timing, multi, new_timing, summary_stats,
 };
 use basic_stats::{
     aok::Aok,
@@ -372,6 +372,14 @@ impl Debug for BenchOut {
             self.sum_ln,
             self.sum2_ln,
             self.summary()))
+    }
+}
+
+impl From<multi::BenchOut<1>> for BenchOut {
+    fn from(value: multi::BenchOut<1>) -> Self {
+        // Destructure the struct and unpack the single-element array
+        let multi::BenchOut { arity: _, arr: [b] } = value;
+        b
     }
 }
 
