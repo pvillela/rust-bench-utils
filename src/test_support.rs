@@ -99,7 +99,6 @@ impl Write for StringWriter {
         for byte in buf {
             if *byte == 8 {
                 // backspace character
-
                 let res = self
                     .buf
                     .pop()
@@ -114,6 +113,8 @@ impl Write for StringWriter {
                 self.buf.push(*byte);
             }
         }
+
+        // self.buf.write_all(buf).unwrap();
         Ok(buf.len())
     }
 

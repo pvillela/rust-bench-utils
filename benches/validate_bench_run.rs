@@ -14,13 +14,11 @@ fn run_bench(name: &'static str, warmup_millis: u64, target_latency: Duration, c
     let target_median = reporting_unit.latency_as_f64(target_latency);
     let exec_count = (reporting_unit.latency_as_f64(BENCH_TIME) / target_median) as usize;
     let cfg = BenchCfg::default().with_warmup_millis(warmup_millis);
+    println!("validate_bench_run: {name}");
     let out = bench_run_with_status_arg_cfg(
         &cfg,
         || sleep_fn(target_latency),
         RunLength::Count(exec_count),
-        |_| {
-            println!("validate_bench_run: {name}");
-        },
     );
     println!(
         "target_median={target_median}, out.median()={}, rel_diff={}",
