@@ -43,7 +43,7 @@ impl<'a> Comp<'a> {
         Self(f1_out, f2_out)
     }
 
-    /// The value of [`BenchCfg::panic_on_error`] at the time `self` was constructed.
+    /// The value of [`BenchCfg::panic_on_error`](crate::BenchCfg::panic_on_error) at the time `self` was constructed.
     pub fn panic_on_error(&self) -> bool {
         self.out_f1().panic_on_error()
     }

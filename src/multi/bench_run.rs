@@ -97,7 +97,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     let exec_est_count = exec_run_length.estimated_count(execs_per_milli);
 
     // Warm-up.
-    let mut warmup_status = S::curry(s.warmup_status(), warmup_est_dur, warmup_est_count);
+    let mut warmup_status = S::part_apply(s.warmup_status(), warmup_est_dur, warmup_est_count);
     state.execute(
         fs,
         warmup_run_length,
@@ -109,7 +109,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     drop(warmup_status);
 
     // Execute.
-    let mut exec_status = S::curry(s.exec_status(), exec_est_dur, exec_est_count);
+    let mut exec_status = S::part_apply(s.exec_status(), exec_est_dur, exec_est_count);
     state.execute(
         fs,
         exec_run_length,

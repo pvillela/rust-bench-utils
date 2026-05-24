@@ -30,7 +30,7 @@ impl BusyWork {
     ///
     /// # Arguments
     ///
-    /// `target_latency` - the target latency of [`Self::closure`].
+    /// `target_latency` - the target latency of the closure returned by [`Self::fun`].
     /// `calibration_budget` - limits the duration of the iterative process.
     pub fn from_latency_and_budget(target_latency: Duration, calibration_budget: Duration) -> Self {
         let effort = Self::effort_from_latency_and_budget(target_latency, calibration_budget);
@@ -59,7 +59,7 @@ impl BusyWork {
         Self::from_effort(effort)
     }
 
-    /// The number of work iterations performed by [`Self::closure`].
+    /// The number of work iterations performed by the closure returned by [`Self::fun`].
     pub fn effort(&self) -> u32 {
         self.effort
     }

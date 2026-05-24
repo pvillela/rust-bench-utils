@@ -1,14 +1,37 @@
 use std::{io::Write, time::Duration};
 
+/// Provides optional status-reporting closures for warm-up and execution phases.
+///
+/// Implementors return either `Some(closure)` to report progress or `None` to skip reporting.
+/// The returned closures receive the estimated duration, the estimated total execution count,
+/// and the current iteration index.
 pub trait Status<'a> {
+    /// Returns an optional status closure for the warm-up phase.
+    ///
+    /// The closure receives `(est_dur, est_count, i)` where:
+    /// - `est_dur` is the estimated warm-up duration.
+    /// - `est_count` is the estimated number of warm-up iterations.
+    /// - `i` is the current warm-up iteration.
     fn warmup_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
     where
         'a: 'b;
+
+    /// Returns an optional status closure for the execution phase.
+    ///
+    /// The closure receives `(est_dur, est_count, i)` where:
+    /// - `est_dur` is the estimated execution duration.
+    /// - `est_count` is the estimated number of execution iterations.
+    /// - `i` is the current execution iteration.
     fn exec_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
     where
         'a: 'b;
 
-    fn curry(
+    /// Partially applies `(est_dur, est_count, i)` to a status closure,
+    /// yielding an `FnMut(usize)` closure
+    ///
+    /// The returned closure only receives the iteration index `i`; the estimated duration
+    /// and count are captured at construction time.
+    fn part_apply(
         status: Option<impl FnMut(Duration, usize, usize)>,
         est_dur: Duration,
         est_count: usize,
@@ -35,13 +58,28 @@ impl<'a> Status<'a> for NoStatus {
     }
 }
 
+/// Default implementation of [`Status`] that writes status messages to a [`Write`] target.
+///
+/// Warm-up and execution progress are reported as inline status lines with backspace
+/// characters ("\\u{8}") so that the cursor position is updated in-place on terminals
+/// and stderr-like writers.
 pub struct DefaultStatus<'a, W: Write> {
+    /// Writer to which status output is sent.
     pub w: &'a mut W,
+    /// Preamble string printed before warm-up progress.
     pub warmup_preamble: String,
+    /// Preamble string printed before execution progress.
     pub exec_preamble: String,
 }
 
 impl<'a, W: Write> DefaultStatus<'a, W> {
+    /// Creates a new `DefaultStatus` that writes status messages to `w`.
+    ///
+    /// # Arguments
+    ///
+    /// - `w` - the writer (typically stderr or a `StringWriter` from `test_support` for testing).
+    /// - `warmup_preamble` - text printed before warm-up progress (e.g. `"Warming up"`).
+    /// - `exec_preamble` - text printed before execution progress (e.g. `"Executing bench_run"`).
     pub fn new(w: &'a mut W, warmup_preamble: String, exec_preamble: String) -> Self {
         Self {
             w,

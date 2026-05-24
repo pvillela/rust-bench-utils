@@ -1,4 +1,5 @@
-//! Module defining the key data structure produced by [`crate::bench_run`].
+//! Module defining the key data structure produced by the [`multi::bench_run`](super::bench_run)`*`
+//! benchmarking functions.
 
 use crate::{BenchCfg, Comp, LatencyUnit, SummaryStats, summary_stats};
 use basic_stats::core::{AltHyp, Ci, HypTestResult, PositionWrtCi};
@@ -9,11 +10,13 @@ use std::{
     time::Duration,
 };
 
-/// Contains the data resulting from benchmarking a closure.
+/// Contains the data resulting from benchmarking a group of closures.
 ///
-/// It is returned by the core benchmarking functions in this library.
-/// Its methods provide descriptive and inferential statistics about the latency sample of the
-/// benchmarked closure.
+/// This struct holds an array of [`crate::BenchOut`] objects which is returned
+/// by the [`multi::bench_run`](super::bench_run)`*` functions.
+///
+/// Its methods provide descriptive and inferential statistics about the latency samples of the
+/// benchmarked closures.
 ///
 /// The `*_ln_*` methods provide statistics for `mean(ln(latency(f)))`, where `ln` is the natural logarithm.
 /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
@@ -51,13 +54,15 @@ impl From<crate::BenchOut> for BenchOut<1> {
 }
 
 impl BenchOut<1> {
+    /// Unwraps the single-element array and returns the contained [`BenchOut`](crate::BenchOut).
     pub fn flatten(self) -> crate::BenchOut {
         self.into()
     }
 }
 
 impl BenchOut<2> {
-    pub fn comp(&self) -> Comp {
+    /// Returns a [`Comp`] comparing the two benchmark outputs.
+    pub fn comp(&self) -> Comp<'_> {
         Comp(&self.arr[0], &self.arr[1])
     }
 }
@@ -71,6 +76,15 @@ impl<const K: usize> BenchOut<K> {
         }
     }
 
+    /// Creates a [`BenchOut<K>`] from an iterator of `[Duration; K]` arrays.
+    ///
+    /// Each item in the iterator must be an array of `K` [`Duration`] values — one per closure.
+    /// The durations are recorded into the corresponding inner [`BenchOut`](crate::BenchOut).
+    ///
+    /// # Arguments
+    ///
+    /// - `cfg` - benchmark configuration.
+    /// - `src` - source of per-closure elapsed-time measurements.
     pub fn from_iter(cfg: &BenchCfg, src: impl Iterator<Item = [Duration; K]>) -> Self {
         let mut out = Self::new(cfg);
 
@@ -82,10 +96,12 @@ impl<const K: usize> BenchOut<K> {
         out
     }
 
+    /// Prints the debug representation of `self` to stdout.
     pub fn print(&self) {
         println!("{self:?}");
     }
 
+    /// Returns the number of benchmarked closures (`K`).
     pub fn arity(&self) -> usize {
         self.arity
     }

@@ -22,11 +22,17 @@ cargo nextest run --lib --features _test_support,busy_work --target-dir target/t
 
 This crate has complex feature gating with several tiers:
 
-- **Public features**: `default` (= `_bench_run` + `__core`), `busy_work` (gates `sha2`-based CPU work), `criterion` (gates criterion bench harness)
-- **Helper features**: `__core` enables `basic_stats/normal` and `basic_stats/aok`. `__null` enables `basic_stats` crate. `__stats_opt` enables `basic_stats/wilcoxon`.
-- **Internal features**: `_bench_run` (enables `bench_run` module), `_test_support` (enables approx_eq macros + regex), `_test_support` (Wilcoxon + AOK + regex, for friend crates). `_bench_diff` bundles what the `bench_diff` sibling crate needs.
+- **Public features**: `default` (= `basic_stats/normal` + `basic_stats/aok`), `busy_work` (gates `sha2`-based CPU work)
+- **Helper features**: `__null` enables the `basic_stats` dependency
+- **Internal features**:
+  - `_test_support` (= `basic_stats/_dev_utils` + `dep:regex`) — test-only utilities for this crate and friend crates
+  - `_bench` (= `_test_support` + `busy_work` + `dep:criterion`) — used by some benches and some tests
+  - `_test` (= `_test_support`) — used only by tests
+  - `_experimental` (= `basic_stats/wilcoxon`) — functionality developed but not intended for public clients
+  - `_bench_diff` (= `_experimental`) — bundles what the sibling `bench_diff` crate needs
+  - `_ALL_NON_TEST` — union of all non-test features, used by build scripts
 
-Most tests require `_test_support` + `_bench_run`. The feature `_bench_diff` is for use by the sibling `bench_diff` crate.
+Most tests require `_test_support`. The feature `_bench_diff` is for use by the sibling `bench_diff` crate.
 
 ## Architecture
 
@@ -34,26 +40,33 @@ Most tests require `_test_support` + `_bench_run`. The feature `_bench_diff` is 
 
 **Core data flow**: `bench_run(f, n)` → warm-up → execute `f` `n` times → record each latency in an HDR histogram → produce `BenchOut` with descriptive + inferential (Student's t on log-latencies) statistics.
 
+The library supports benchmarking multiple functions simultaneously via const-generic `K`-arity: `BenchOut<K>` holds `K` `BenchOut` instances and `bench_run` accepts `[impl FnMut(); K]`.
+
 ### Key modules
 
 | Module | Purpose |
 |--------|---------|
-| `latency` | `latency(f)` function (wall-clock via `Instant`) and `LatencyUnit` enum (Milli/Micro/Nano) |
-| `bench_cfg` | Global `BenchCfg` behind a `Mutex` — warmup millis, recording/reporting units, sigfig. Configured via builder pattern and `set()`. |
-| `bench_out` | `BenchOut` — the result of benchmarking. Holds an HDR histogram + raw sums/sum² for latencies and ln(latencies). Methods compute mean, stdev, median, Student's t-test/CIs on log-latencies (assumes log-normal distribution). |
-| `bench_run` | `bench_run`, `bench_run_with_status`, `bench_run_x`. Warm-up then execute, populating `BenchOut`. |
-| `comp` | `Comp` compares two `BenchOut`s. Welch's t-test/CIs on difference of ln-means (i.e., ratio of medians). Wilcoxon rank sum behind `_test_support`. |
+| `latency` | `latency(f)` function (wall-clock via `Instant`) and `LatencyUnit` enum (Milli/Micro/Nano). Also `executions_per_milli` for calibration. |
+| `bench_cfg` | `BenchCfg` struct (warmup millis, recording/reporting units, sigfig, status interval, panic_on_error). Configured via builder pattern. Also `RunLength` enum (Count, Duration, CountWithTimeout). |
+| `bench_out` | `BenchOut` — the result of benchmarking a single function. Holds an HDR histogram + raw sums/sum² for latencies and ln(latencies). Methods compute mean, stdev, median, Student's t-test/CIs on log-latencies (assumes log-normal distribution). |
+| `bench_run` | `bench_run`, `bench_run_x`, `bench_run_with_status`, and `*_arg_cfg` variants. Thin wrappers that delegate to `multi::bench_run*` with `K=1`. |
+| `multi` | Const-generic K-arity benchmarking: `multi::BenchOut<K>` (wraps `[BenchOut; K]`, derefs to `BenchOut` when `K=1`), `multi::bench_run`, `multi::bench_run_x`, etc. Also provides `multi::BenchOut::from_iter` for constructing from duration iterators. |
+| `comp` | `Comp` compares two `BenchOut`s. Welch's t-test/CIs on difference of ln-means (i.e., ratio of medians). Wilcoxon rank sum behind `_experimental` feature. |
+| `status` | `Status` trait for benchmarking progress callbacks. `NoStatus` (no-op) and `DefaultStatus<W: Write>` (prints warmup/exec progress with backspace-overwriting). |
 | `summary_stats` | `SummaryStats` struct (mean, stdev, percentiles p1 through p99, min, max). Type alias `Timing = Histogram<u64>`. |
-| `fake_work` | `fake_work(Duration)` — sleeps. For validating benchmarking frameworks. |
-| `busy_work` | `busy_work(u32)` — SHA-256 hashing loop. Feature-gated. Calibration functions available. |
-| `test_support` | Lognormal sample generators for tests. Gated behind `#[cfg(test)]` + `_bench_run`. |
+| `fake_work` | `fake_work(Duration)` — thread sleep. For validating benchmarking frameworks. |
+| `busy_work` | `busy_work(u32)` — SHA-256 hashing loop. Feature-gated behind `busy_work`. Calibration functions available. |
+| `test_support` | Lognormal sample generators and `StringWriter`. Gated behind `_test_support` feature. Used by this crate's tests and friend crates. |
+| `bench_support` | `validate_latency_overhead` for verifying that latency measurement overhead is acceptable. Gated behind `_bench` feature. |
 
 ### Key design patterns
 
 - **Stats delegation**: Inferential statistics (t-tests, CIs) are delegated to the sibling `basic_stats` crate. All results are unwrapped via `.aok()` (an extension trait from `basic_stats` that panics on error with a message).
 - **Log-normal assumption**: Latency distributions are treated as approximately log-normal. Statistics on `ln(latency)` are central to the API (Student's t on one sample, Welch's t for two-sample comparison).
 - **HDR histogram**: Latencies are recorded into a resizable `hdrhistogram::Histogram<u64>`, which provides quantile/percentile queries.
-- **Feature-gated API surface**: Some `BenchOut` fields and `Comp` methods are only available with specific features (`_bench_diff`, `_test_support`, `_bench_run`).
+- **Const-generic K-arity**: `bench_run` functions accept `[impl FnMut(); K]` and produce `BenchOut<K>`, allowing simultaneous benchmarking of `K` functions with interleaved execution to reduce time-dependent noise.
+- **Feature-gated API surface**: Some `Comp` methods are gated behind `_experimental` (Wilcoxon). `test_support` is gated behind `_test_support`. `bench_support` is gated behind `_bench`.
+- **`stats_types` re-exports**: `pub mod stats_types` re-exports `AcceptedHyp`, `AltHyp`, `Ci`, `HypTestResult`, `PositionWrtCi` from `basic_stats::core` for convenience.
 
 ### Sibling crates
 
@@ -62,7 +75,6 @@ Most tests require `_test_support` + `_bench_run`. The feature `_bench_diff` is 
 
 ### Tests
 
-Tests in this crate that call the `latency::latency` function or call `Duration::elapsed()` to compute letencies should be executed with `cargo test -r` because latency measurements can be highly unreliable when the code is not compiled with release optimization.
+Tests in this crate that call the `latency::latency` function or call `Duration::elapsed()` to compute latencies should be executed with `cargo test -r` because latency measurements can be highly unreliable when the code is not compiled with release optimization.
 
-To test the entire crate, use should primarily use @test.sh script.
-
+To test the entire crate, use the `./test.sh` script.

@@ -87,11 +87,17 @@ pub struct BenchCfg {
 }
 
 impl BenchCfg {
+    /// Default warm-up duration in milliseconds.
     pub const DEFAULT_WARMUP_MILLIS: u64 = 3000;
+    /// Default unit for recording latencies.
     pub const DEFAULT_RECORDING_UNIT: LatencyUnit = LatencyUnit::Nano;
+    /// Default unit for reporting latencies.
     pub const DEFAULT_REPORTING_UNIT: LatencyUnit = LatencyUnit::Micro;
+    /// Default number of significant decimal digits for the HDR histogram.
     pub const DEFAULT_SIGFIG: u8 = 3;
+    /// Default status reporting interval in milliseconds.
     pub const DEFAULT_STATUS_MILLIS: u64 = 1000;
+    /// Default error behavior: do not panic on error, return NaN/tainted values instead.
     pub const DEFAULT_PANIC_ON_ERROR: bool = false;
 
     /// Creates a new instance with default attribute values.
