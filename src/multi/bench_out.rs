@@ -332,7 +332,7 @@ mod test {
         k: u64,
     ) -> impl Iterator<Item = [Duration; 2]> {
         lognormal_samp(rec_mu, sigma, k).map(|x| {
-            let y = cfg.recording_unit().latency_from_f64(x);
+            let y = cfg.recording_unit().latency_from_u64(x);
             [y, y]
         })
     }

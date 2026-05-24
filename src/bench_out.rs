@@ -424,7 +424,7 @@ mod test {
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
         let lognormal_samp =
-            lognormal_samp(rec_mu, sigma, k).map(|x| cfg.recording_unit().latency_from_f64(x));
+            lognormal_samp(rec_mu, sigma, k).map(|x| cfg.recording_unit().latency_from_u64(x));
         let out = BenchOut::from_iter(&cfg, lognormal_samp);
 
         assert_eq!(out.recording_unit(), LatencyUnit::Nano);
@@ -496,7 +496,7 @@ mod test {
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
         let lognormal_samp =
-            lognormal_samp(rec_mu, sigma, k).map(|x| cfg.recording_unit().latency_from_f64(x));
+            lognormal_samp(rec_mu, sigma, k).map(|x| cfg.recording_unit().latency_from_u64(x));
         let out = BenchOut::from_iter(&cfg, lognormal_samp);
 
         let normal_samp = normal_detm_samp(mu, sigma, k).unwrap();

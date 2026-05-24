@@ -18,15 +18,15 @@ pub fn lognormal_samp_jittered(
     k: u64,
     n_jitter: i64,
     jitter_epsilon: f64,
-) -> impl Iterator<Item = f64> {
+) -> impl Iterator<Item = u64> {
     let normal_samp = normal_detm_samp(mu, sigma, k).unwrap();
     normal_samp
         .enumerate()
         .map(move |(i, v)| jitter(v, i as i64, n_jitter, jitter_epsilon))
-        .map(|x| x.exp())
+        .map(|x| x.exp() as u64)
 }
 
-pub fn lognormal_samp(mu: f64, sigma: f64, k: u64) -> impl Iterator<Item = f64> {
+pub fn lognormal_samp(mu: f64, sigma: f64, k: u64) -> impl Iterator<Item = u64> {
     lognormal_samp_jittered(mu, sigma, k, 3, 0.)
 }
 
@@ -39,7 +39,7 @@ pub fn lognormal_out_jittered(
     jitter_epsilon: f64,
 ) -> BenchOut {
     let lognormal_samp = lognormal_samp_jittered(mu, sigma, k, n_jitter, jitter_epsilon)
-        .map(|d| cfg.recording_unit().latency_from_f64(d));
+        .map(|d| cfg.recording_unit().latency_from_u64(d));
     let out = BenchOut::from_iter(&cfg, lognormal_samp);
     out
 }
@@ -55,8 +55,8 @@ pub fn lognormal_moments_ln_jittered(
     n_jitter: i64,
     jitter_epsilon: f64,
 ) -> SampleMoments {
-    let dataset =
-        lognormal_samp_jittered(mu, sigma, k, n_jitter, jitter_epsilon).map(|v| (v.max(1.0)).ln());
+    let dataset = lognormal_samp_jittered(mu, sigma, k, n_jitter, jitter_epsilon)
+        .map(|v| (v.max(1) as f64).ln());
     SampleMoments::from_iterator(dataset)
 }
 
