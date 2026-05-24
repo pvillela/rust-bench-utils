@@ -1,9 +1,9 @@
 //! Implements functions to collect latency statistics for a closure.
 
-use crate::{BenchCfg, RunLength, latency, multi::BenchOut};
+use crate::{BenchCfg, DefaultStatus, NoStatus, RunLength, Status, latency, multi::BenchOut};
 use std::{
     array,
-    io::{Stderr, Write, stderr},
+    io::stderr,
     time::{Duration, Instant},
 };
 
@@ -20,7 +20,7 @@ impl<const K: usize> BenchState<K> {
         // Used in control of the exit from the iteration loop when both `status_freq` and `exec_count` are too high
         // compared to `run_length` duration.
         est_count: usize,
-        mut status_rept: Option<impl FnMut(usize)>,
+        status: &mut Option<impl FnMut(usize)>,
     ) {
         assert!(status_freq > 0, "status_freq must be > 0");
 
@@ -44,7 +44,7 @@ impl<const K: usize> BenchState<K> {
                 let finished = i == exec_count || elapsed >= run_time;
 
                 if i % status_freq == 0 || finished {
-                    if let Some(ref mut exec_status) = status_rept {
+                    if let Some(exec_status) = status {
                         exec_status(i);
                     }
                 }
@@ -66,32 +66,6 @@ impl<const K: usize> BenchState<K> {
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
 /// *optionally* outputs information about the benchmark and its execution status.
-/// Runs with the default [`BenchCfg`].
-///
-/// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
-/// `warmup_millis` milliseconds.
-///
-/// Arguments:
-/// - `f` - benchmark target.
-/// - `warmup_millis` - duration (in milliseconds) of warm-up execution.
-/// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
-/// - `warmup_status` - optionally invoked periodically during warm-up. Its argument is the current
-///   warm-up execution iteration.
-/// - `exec_status` - optionally invoked periodically during data collection. Its argument is the
-///   current number of executions performed.
-/// - `execs_per_milli` - estimate of how many executions of `f` fit in one millisecond.
-pub fn bench_run_x<const K: usize, F: FnMut(usize)>(
-    fs: &mut [impl FnMut(); K],
-    exec_run_length: RunLength,
-    warmup_status_fn: impl Fn(usize, Duration, usize) -> Option<F>,
-    exec_status_fn: impl Fn(usize, Duration, usize) -> Option<F>,
-) -> BenchOut<K> {
-    let cfg = BenchCfg::default();
-    bench_run_x_arg_cfg(&cfg, fs, exec_run_length, warmup_status_fn, exec_status_fn)
-}
-
-/// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
-/// *optionally* outputs information about the benchmark and its execution status.
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
 /// `warmup_millis` milliseconds.
@@ -106,12 +80,11 @@ pub fn bench_run_x<const K: usize, F: FnMut(usize)>(
 /// - `exec_status` - optionally invoked periodically during data collection. Its argument is the
 ///   current number of executions performed.
 /// - `execs_per_milli` - estimate of how many executions of `f` fit in one millisecond.
-pub fn bench_run_x_args_cfg_writer<const K: usize, W: Write>(
-    cfg: &BenchCfg,w: &mut W,
+pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
+    cfg: &BenchCfg,
     fs: &mut [impl FnMut(); K],
     exec_run_length: RunLength,
-    warmup_status: Option<impl Fn(&mut W, Duration, usize, usize)>,
-    exec_status: Option<impl Fn(&mut W, Duration, usize, usize)>,
+    s: &mut S,
 ) -> BenchOut<K> {
     let mut state = BenchOut::new(cfg);
     let execs_per_milli = cfg.execs_per_milli(|| fs.iter_mut().for_each(|f| f()));
@@ -123,25 +96,26 @@ pub fn bench_run_x_args_cfg_writer<const K: usize, W: Write>(
     let exec_est_dur = exec_run_length.estimated_duration(execs_per_milli);
     let exec_est_count = exec_run_length.estimated_count(execs_per_milli);
 
-    let warmup_status = |w|warmup_status.map(|s|move |i|s(w,warmup_est_dur, warmup_est_count, i));
-    let exec_status =|w| exec_status.map(|s|move |i|s(w,exec_est_dur, exec_est_count, i));
-
     // Warm-up.
+    let mut warmup_status = S::curry(s.warmup_status(), warmup_est_dur, warmup_est_count);
     state.execute(
         fs,
         warmup_run_length,
         status_freq,
         warmup_est_count,
-        warmup_status,
+        &mut warmup_status,
     );
     state.reset();
+    drop(warmup_status);
 
+    // Execute.
+    let mut exec_status = S::curry(s.exec_status(), exec_est_dur, exec_est_count);
     state.execute(
         fs,
         exec_run_length,
         status_freq,
         exec_est_count,
-        exec_status,
+        &mut exec_status,
     );
 
     state
@@ -182,13 +156,7 @@ pub fn bench_run_arg_cfg<const K: usize>(
     fs: &mut [impl FnMut(); K],
     exec_run_length: RunLength,
 ) -> BenchOut<K> {
-    bench_run_x_arg_cfg(
-        cfg,
-        fs,
-        exec_run_length,
-        None::<fn( _, _, _)>,
-         None::<fn( _, _, _)>,
-    )
+    bench_run_x(cfg, fs, exec_run_length, &mut NoStatus)
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -230,126 +198,16 @@ pub fn bench_run_with_status_arg_cfg<const K: usize>(
 ) -> BenchOut<K> {
     let mut w = stderr();
 
-    let warmup_status = make_status(&mut w,"Warming up".to_owned());
     // The `\n` below is to separate warmup status from exec status. Otherwise, they get mixed up due to
     // the `eprint!("{}", "\u{8}".repeat(status_len))` line in the `status` closure.
-    let exec_status = make_status(&mut w,"\nExecuting bench_run".to_owned());
-
-    bench_run_with_status_args_cfg_writer(cfg, &mut w, fs, exec_run_length)
-}
-
-/// Used to implement [`bench_run_with_status_arg_cfg`] and to support testing.
-pub(crate) fn bench_run_with_status_args_cfg_writer<const K: usize, W: Write>(
-    cfg: &BenchCfg,
-    w: &mut W,
-    fs: &mut [impl FnMut(); K],
-    exec_run_length: RunLength,
-) -> BenchOut<K> {
-    let execs_per_milli = cfg.execs_per_milli(|| fs.iter_mut().for_each(|f| f()));
-
-    let warmup_millis = cfg.warmup_millis();
-    let warmup_run_length = RunLength::Duration(Duration::from_millis(warmup_millis));
-    let warmup_est_count = warmup_run_length.estimated_count(execs_per_milli);
-
-    let warmup_status = make_status("Warming up", warmup_millis, warmup_est_count);
-
-    let exec_est_count = exec_run_length.estimated_count(execs_per_milli);
-    let exec_est_millis = exec_run_length
-        .estimated_duration(execs_per_milli)
-        .as_millis() as u64;
-
-    // The `\n` below is to separate warmup status from exec status. Otherwise, they get mixed up due to
-    // the `eprint!("{}", "\u{8}".repeat(status_len))` line in the `status` closure.
-    let exec_status = make_status("\nExecuting bench_run", exec_est_millis, exec_est_count);
-
-    let out = bench_run_x_args_cfg_writer(
-        cfg,
-        w,
-        fs,
-        exec_run_length,
-        Some(warmup_status),
-        Some(exec_status),
+    let mut s = DefaultStatus::new(
+        &mut w,
+        "Warming up".to_owned(),
+        "\nExecuting bench_run".to_owned(),
     );
 
-    out
+    bench_run_x(cfg, fs, exec_run_length, &mut s)
 }
-
-#[doc(hidden)]
-pub struct NullWrite;
-
-impl Write for NullWrite {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-pub trait StatusReportMaker {
-    fn make(&mut self)-> impl FnMut(usize)
-}
-
-pub struct DefaultStatusReportMaker<'a, W: Write> {
-    pub preamble: String,
-    pub warmup_est_count: usize,
-    pub exec_est_dur: Duration,
-    pub exec_est_count: usize,
-    pub w: &'a mut W,
-}
-
-impl<'a, W: Write> StatusReportMaker for DefaultStatusReportMaker<'a, W> {
-    fn make(&mut self) -> impl FnMut(usize) {
-        let mut status_len: usize = 0;
-
-        move |i: usize| {
-            if status_len == 0 {
-                write!(
-                    self.w,
-                    "{} for (approx.) {} millis: ",
-                    self.preamble.clone(),
-                    self.exec_est_dur.as_millis()
-                )
-                .expect("unexpected error writing to `Write` object `w`");
-                self.w.flush().expect("unexpected I/O error");
-            }
-            write!(self.w, "{}", "\u{8}".repeat(status_len))
-                .expect("unexpected error writing to `Write` object `w`");
-            let status = format!("{} of (approx.) {} executions.", i, self.exec_est_count);
-            status_len = status.len();
-            write!(self.w, "{status}").expect("unexpected error writing to `Write` object `w`");
-            self.w.flush().expect("unexpected I/O error");
-        }
-    }
-}
-
- pub   fn make_status<'a, W: Write>(     
-     w: &'a mut W,
-    preamble: String,
-) -> impl FnMut(  Duration, usize, usize) {
-        let mut status_len: usize = 0;
-
-        move |est_dur: Duration, est_count: usize, i: usize | {
-            if status_len == 0 {
-                write!(
-                    w,
-                    "{} for (approx.) {} millis: ",
-                    preamble.clone(),
-                    est_dur.as_millis()
-                )
-                .expect("unexpected error writing to `Write` object `w`");
-                w.flush().expect("unexpected I/O error");
-            }
-            write!(w, "{}", "\u{8}".repeat(status_len))
-                .expect("unexpected error writing to `Write` object `w`");
-            let status = format!("{} of (approx.) {} executions.", i, est_count);
-            status_len = status.len();
-            write!(w, "{status}").expect("unexpected error writing to `Write` object `w`");
-            w.flush().expect("unexpected I/O error");
-        }
-    }
-
 
 #[cfg(test)]
 #[cfg(feature = "_bench")]
@@ -406,7 +264,7 @@ mod validate {
 // cargo test --package bench_utils --lib --all-features -- multi::bench_run::status --nocapture
 mod status {
     use super::*;
-    use crate::{BusyWork, LatencyUnit, RunLength, test_support::StringWriter};
+    use crate::{BusyWork, DefaultStatus, LatencyUnit, RunLength, test_support::StringWriter};
     use basic_stats::rel_approx_eq;
     use regex::Regex;
     use std::time::Duration;
@@ -431,11 +289,16 @@ mod status {
             .with_reporting_unit(LatencyUnit::Micro);
 
         let mut w = StringWriter::new();
+        let mut status = DefaultStatus::new(
+            &mut w,
+            "Warming up".to_owned(),
+            "\nExecuting bench_run".to_owned(),
+        );
         let fs = &mut array::from_fn::<_, 2, _>(|_| BusyWork::new(target_latency / 2).fun());
 
         let execs_per_milli = cfg.execs_per_milli(|| fs.iter_mut().for_each(|f| f()));
 
-        let out = bench_run_with_status_args_cfg_writer(&cfg, &mut w, fs, exec_run_length);
+        let out = bench_run_x(&cfg, fs, exec_run_length, &mut status);
 
         let status_str = w.as_str().expect("StringWriter doesn't contain string");
         println!("** {status_str}");
@@ -646,27 +509,9 @@ mod simple_tests {
     #[test]
     fn test_bench_run_with_count() {
         let cfg = quick_cfg();
-        let out = bench_run_arg_cfg(
-            &cfg,
-            &mut [|| thread::sleep(Duration::from_nanos(1))],
-            RunLength::Count(5),
-        );
+        let out = bench_run_arg_cfg(&cfg, &mut [|| ()], RunLength::Count(5));
         // With 5 count and no timeout, we should have exactly 5 iterations
         assert_eq!(out.n(), 5);
-    }
-
-    #[test]
-    fn test_bench_run_x() {
-        let cfg = quick_cfg();
-        let out = bench_run_x_arg_cfg(
-            &cfg,
-            &mut [|| {}],
-            RunLength::Count(10),
-            None::<fn(usize)>,
-            None::<fn(usize)>,
-        );
-
-        assert_eq!(out.n(), 10);
     }
 
     #[test]
