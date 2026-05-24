@@ -6,6 +6,7 @@ use std::{
     array,
     fmt::Debug,
     ops::{Deref, Index},
+    time::Duration,
 };
 
 /// Contains the data resulting from benchmarking a closure.
@@ -70,6 +71,21 @@ impl<const K: usize> BenchOut<K> {
         }
     }
 
+    pub fn from_iter(cfg: &BenchCfg, src: impl Iterator<Item = [Duration; K]>) -> Self {
+        let mut out = Self::new(cfg);
+
+        for lat_arr in src {
+            for (b, d) in out.arr.iter_mut().zip(lat_arr.iter()) {
+                b.capture_data(*d);
+            }
+        }
+        out
+    }
+
+    pub fn print(&self) {
+        println!("{self:?}");
+    }
+
     pub fn arity(&self) -> usize {
         self.arity
     }
@@ -87,10 +103,11 @@ impl<const K: usize> BenchOut<K> {
     }
 
     #[doc(hidden)]
+    // TODO: remove
     /// Updates `self` with an elapsed time observation for the functions.
-    pub fn capture_data(&mut self, elapsed: [u64; K]) {
+    pub fn capture_data(&mut self, latencies: [Duration; K]) {
         for (i, b) in &mut self.arr.iter_mut().enumerate() {
-            b.capture_data(elapsed[i]);
+            b.capture_data(latencies[i]);
         }
     }
 
@@ -308,6 +325,18 @@ mod test {
 
     const ALPHA: f64 = 0.05;
 
+    fn lognormal_samp2(
+        cfg: &BenchCfg,
+        rec_mu: f64,
+        sigma: f64,
+        k: u64,
+    ) -> impl Iterator<Item = [Duration; 2]> {
+        lognormal_samp(rec_mu, sigma, k).map(|x| {
+            let y = cfg.recording_unit().latency_from_f64(x);
+            [y, y]
+        })
+    }
+
     #[test]
     fn test_bench_out_descriptive_stats() {
         const EPSILON: f64 = 0.001;
@@ -316,12 +345,12 @@ mod test {
         let sigma = *LO_STDEV_LN;
         let k = 100;
 
-        let conv_factor = BenchCfg::default().conversion_factor();
+        let cfg = BenchCfg::default();
+        let conv_factor = cfg.conversion_factor();
         println!("conv_factor={conv_factor}");
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
-        let mut out = BenchOut::<2>::new(&BenchCfg::default());
-        out.collect_data(array::from_fn(|_| lognormal_samp(rec_mu, sigma, k)));
+        let out = BenchOut::<2>::from_iter(&cfg, lognormal_samp2(&cfg, rec_mu, sigma, k));
 
         assert_eq!(out.recording_unit(), LatencyUnit::Nano);
         assert_eq!(out.reporting_unit(), LatencyUnit::Micro);
@@ -423,12 +452,12 @@ mod test {
         let sigma = *LO_STDEV_LN;
         let k = 100;
 
-        let conv_factor = BenchCfg::default().conversion_factor();
+        let cfg = BenchCfg::default();
+        let conv_factor = cfg.conversion_factor();
         println!("conv_factor={conv_factor}");
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
-        let mut out = BenchOut::<2>::new(&BenchCfg::default());
-        out.collect_data(array::from_fn(|_| lognormal_samp(rec_mu, sigma, k)));
+        let out = BenchOut::<2>::from_iter(&cfg, lognormal_samp2(&cfg, rec_mu, sigma, k));
 
         let normal_samp = normal_detm_samp(mu, sigma, k).unwrap();
         let moments_ln = SampleMoments::from_iterator(normal_samp);
@@ -497,11 +526,11 @@ mod test {
         let cfg = &BenchCfg::default()
             .with_recording_unit(LatencyUnit::Nano)
             .with_reporting_unit(LatencyUnit::Micro);
-        let mut out1 = BenchOut::<1>::new(cfg);
+        let out1 = BenchOut::<1>::from_iter(
+            cfg,
+            [[Duration::from_millis(5)], [Duration::from_millis(7)]].into_iter(),
+        );
 
-        out1.capture_data([5]);
-        out1.capture_data([7]);
-
-        assert_eq!(out1.mean(), 0.006);
+        assert_eq!(out1.mean(), 6000.0);
     }
 }

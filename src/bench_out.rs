@@ -1,6 +1,6 @@
 //! Module defining the key data structure produced by [`crate::bench_run`].
 
-use std::fmt::Debug;
+use std::{fmt::Debug, time::Duration};
 
 use crate::{
     BenchCfg, LatencyUnit, PanicIfNeeded, SummaryStats, Timing, multi, new_timing, summary_stats,
@@ -57,6 +57,14 @@ impl BenchOut {
         }
     }
 
+    pub fn from_iter(cfg: &BenchCfg, src: impl Iterator<Item = Duration>) -> Self {
+        let mut out = Self::new(cfg);
+        for item in src {
+            out.capture_data(item);
+        }
+        out
+    }
+
     /// Factor to convert from `recording_unit` to `reporting_unit`.
     pub(crate) fn conversion_factor(&self) -> f64 {
         self.recording_unit.conversion_factor(self.reporting_unit)
@@ -73,9 +81,10 @@ impl BenchOut {
         self.sum2_ln = 0.
     }
 
-    #[doc(hidden)]
+    #[inline(always)]
     /// Updates `self` with an elapsed time observation for the function.
-    pub fn capture_data(&mut self, elapsed: u64) {
+    pub(crate) fn capture_data(&mut self, latency: Duration) {
+        let elapsed = self.recording_unit.latency_as_u64(latency);
         self.hist
             .record(elapsed)
             .expect("can't happen: histogram is auto-resizable");
@@ -409,13 +418,14 @@ mod test {
         let sigma = *LO_STDEV_LN;
         let k = 100;
 
-        let conv_factor = BenchCfg::default().conversion_factor();
+        let cfg = BenchCfg::default();
+        let conv_factor = cfg.conversion_factor();
         println!("conv_factor={conv_factor}");
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
-        let lognormal_samp = lognormal_samp(rec_mu, sigma, k);
-        let mut out = BenchOut::new(&BenchCfg::default());
-        out.collect_data(lognormal_samp);
+        let lognormal_samp =
+            lognormal_samp(rec_mu, sigma, k).map(|x| cfg.recording_unit().latency_from_f64(x));
+        let out = BenchOut::from_iter(&cfg, lognormal_samp);
 
         assert_eq!(out.recording_unit(), LatencyUnit::Nano);
         assert_eq!(out.reporting_unit(), LatencyUnit::Micro);
@@ -480,13 +490,14 @@ mod test {
         let sigma = *LO_STDEV_LN;
         let k = 100;
 
-        let conv_factor = BenchCfg::default().conversion_factor();
+        let cfg = BenchCfg::default();
+        let conv_factor = cfg.conversion_factor();
         println!("conv_factor={conv_factor}");
         let rec_mu = mu - conv_factor.ln(); // in ln of nanoseconds
 
-        let lognormal_samp = lognormal_samp(rec_mu, sigma, k);
-        let mut out = BenchOut::new(&BenchCfg::default());
-        out.collect_data(lognormal_samp);
+        let lognormal_samp =
+            lognormal_samp(rec_mu, sigma, k).map(|x| cfg.recording_unit().latency_from_f64(x));
+        let out = BenchOut::from_iter(&cfg, lognormal_samp);
 
         let normal_samp = normal_detm_samp(mu, sigma, k).unwrap();
         let moments_ln = SampleMoments::from_iterator(normal_samp);

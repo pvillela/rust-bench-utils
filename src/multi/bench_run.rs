@@ -28,12 +28,11 @@ impl<const K: usize> BenchState<K> {
         let (exec_count, run_time) = run_length.get_exec_count_and_duration();
         assert!(exec_count > 0, "exec_count must be > 0");
 
-        let unit = self.recording_unit();
         let mut est_remaining_iters = est_count_from_dur;
         let start = Instant::now();
 
         for i in 1..=exec_count {
-            let latencies = array::from_fn(|k| unit.latency_as_u64(latency(&mut fs[k])));
+            let latencies = array::from_fn(|k| latency(&mut fs[k]));
 
             self.capture_data(latencies);
             if est_remaining_iters > 0 {
