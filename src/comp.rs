@@ -421,6 +421,7 @@ mod test {
     }
 
     #[test]
+    // cargo test --package bench_utils --lib --all-features -- comp::test::test_comp --exact --nocapture --include-ignored
     fn test_comp() {
         let cfg = BenchCfg::default();
 
