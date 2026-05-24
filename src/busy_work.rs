@@ -3,7 +3,8 @@ use sha2::{Digest, Sha256};
 use std::{hint::black_box, time::Duration};
 
 #[derive(Clone, Copy)]
-/// Produces a closure which does a significant amount of computation to support validation of benchmarking frameworks.
+/// Produces a closure which does a significant amount of computation, useful as a synthetic workload to support
+/// the validation of benchmarking frameworks.
 /// Gated by feature **"busy_work"**.
 ///
 /// The closure executes a work function whose latency is controlled by the `effort` value encapsulated in this struct.
@@ -74,7 +75,8 @@ impl BusyWork {
     }
 
     #[inline(always)]
-    /// Does a significant amount of computation and its latency is controlled by `effort`.
+    /// Does a significant amount of computation, based on SHA-256 (using the 'sha2' crate).
+    /// Its latency is controlled by `effort`.
     pub fn work(effort: u32) {
         let effort = black_box(effort);
         let seed = black_box(0_u64);

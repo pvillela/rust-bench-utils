@@ -1,5 +1,5 @@
-//! Module defining the key data structure produced by the [`multi::bench_run`](super::bench_run)`*`
-//! benchmarking functions.
+//! Module defining the key data structure produced by the [`multi::bench_run`](super::bench_run) and
+//! related benchmarking functions.
 
 use crate::{BenchCfg, Comp, LatencyUnit, SummaryStats, summary_stats};
 use basic_stats::core::{AltHyp, Ci, HypTestResult, PositionWrtCi};
@@ -13,7 +13,7 @@ use std::{
 /// Contains the data resulting from benchmarking a group of closures.
 ///
 /// This struct holds an array of [`crate::BenchOut`] objects which is returned
-/// by the [`multi::bench_run`](super::bench_run)`*` functions.
+/// by [`multi::bench_run`](super::bench_run) and related benchmarking functions
 ///
 /// Its methods provide descriptive and inferential statistics about the latency samples of the
 /// benchmarked closures.

@@ -1,5 +1,8 @@
-//! Validates that the overhead associated with the collection of latency on each target function execution
-//! is acceptable.
+//! Validates that the latency-measurement overhead per function execution is acceptable.
+//! Gated by feature **"_bench"**.
+//!
+//! The function [`validate_latency_overhead`]
+//! compares solo vs. grouped execution latencies to detect overhead from the measurement harness.
 
 use crate::{BenchCfg, BusyWork, RunLength, bench_run_with_status_arg_cfg};
 use basic_stats::dev_utils::ApproxEq;

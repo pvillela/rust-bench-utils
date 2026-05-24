@@ -337,42 +337,42 @@ impl BenchOut {
 
     #[cfg(feature = "_bench_diff")]
     #[inline(always)]
-    /// Reference to the raw HDR histogram. Requires feature `_bench_diff`.
+    /// Reference to the raw HDR histogram. Gated by feature **"_bench_diff"**.
     pub fn hist(&self) -> &Timing {
         &self.hist
     }
 
     #[cfg(feature = "_bench_diff")]
     #[inline(always)]
-    /// Raw sum of recorded latencies. Requires feature `_bench_diff`.
+    /// Raw sum of recorded latencies. Gated by feature **"_bench_diff"**.
     pub fn sum(&self) -> f64 {
         self.sum
     }
 
     #[cfg(feature = "_bench_diff")]
     #[inline(always)]
-    /// Raw sum of squares of recorded latencies. Requires feature `_bench_diff`.
+    /// Raw sum of squares of recorded latencies. Gated by feature **"_bench_diff"**.
     pub fn sum2(&self) -> f64 {
         self.sum2
     }
 
     #[cfg(feature = "_bench_diff")]
     #[inline(always)]
-    /// Sample size for log-latencies. Requires feature `_bench_diff`.
+    /// Sample size for log-latencies. Gated by feature **"_bench_diff"**.
     pub fn n_ln(&self) -> u64 {
         self.n_ln
     }
 
     #[cfg(feature = "_bench_diff")]
     #[inline(always)]
-    /// Raw sum of natural logarithms of latencies. Requires feature `_bench_diff`.
+    /// Raw sum of natural logarithms of latencies. Gated by feature **"_bench_diff"**.
     pub fn sum_ln(&self) -> f64 {
         self.sum_ln
     }
 
     #[cfg(feature = "_bench_diff")]
     #[inline(always)]
-    /// Raw sum of squares of natural logarithms of latencies. Requires feature `_bench_diff`.
+    /// Raw sum of squares of natural logarithms of latencies. Gated by feature **"_bench_diff"**.
     pub fn sum2_ln(&self) -> f64 {
         self.sum2_ln
     }

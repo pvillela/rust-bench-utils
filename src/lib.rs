@@ -1,3 +1,62 @@
+//! Utilities for measuring latency and synthesizing workloads.
+//!
+//! # Overview
+//!
+//! `bench_utils` provides building blocks for latency benchmarking in Rust:
+//!
+//! - Measure the wall-clock latency of any closure with [`latency`].
+//! - Run a full benchmark — warm-up, execute, collect statistics — with [`bench_run`].
+//! - Configure warm-up duration, time units, and reporting via [`BenchCfg`].
+//! - Benchmark multiple closures, interleaving their execution, with
+//!   the [`multi`] module, which reduces the impact of time-dependent noise when comparing
+//!   latencies between functions.
+//! - Compare two benchmark results with [`Comp`], which provides Welch's t-tests
+//!   and confidence intervals on the ratio of medians.
+//!
+//! # Quick start
+//!
+//! ```rust,no_run
+//! use bench_utils::{bench_run, BenchCfg, RunLength};
+//!
+//! // Benchmark a no-op closure for 1000 iterations with default configuration.
+//! let out = bench_run(|| {}, RunLength::Count(1000));
+//! println!("median: {} µs", out.median());
+//! ```
+//!
+//! With a custom configuration and two closures benchmarked together:
+//!
+//! ```rust,no_run
+//! use bench_utils::{bench_run, BenchCfg, RunLength, LatencyUnit};
+//! use std::time::Duration;
+//!
+//! let cfg = BenchCfg::default()
+//!     .with_warmup_millis(500)
+//!     .with_reporting_unit(LatencyUnit::Nano);
+//!
+//! let out = bench_utils::bench_run_arg_cfg(
+//!     &cfg,
+//!     || std::thread::sleep(Duration::from_micros(10)),
+//!     RunLength::Duration(Duration::from_secs(1)),
+//! );
+//! println!("n = {}, median = {} ns", out.n(), out.median());
+//! ```
+//!
+//! # Feature flags
+//!
+//! | Feature | Purpose |
+//! |---------|---------|
+//! | `default` | For access to all of the library's benchmarking functions and typed.
+//! | `busy_work` | Enables synthetic loads using SHA-256-based CPU work via [`BusyWork`] (requires `sha2` crate) |
+//!
+//! # Log-normal assumption
+//!
+//! The inferential statistics in this crate (Student's t, Welch's t) are computed
+//! on `ln(latency)` rather than raw latency. This reflects the widely-supported
+//! assumption that latency distributions are approximately log-normal. Under this
+//! assumption `mean(ln(latency)) == ln(median(latency))`, so confidence intervals
+//! and hypothesis tests on log-latencies translate directly to statements about
+//! median latencies.
+
 mod bench_cfg;
 mod bench_out;
 mod comp;
@@ -17,12 +76,6 @@ pub use summary_stats::*;
 mod bench_run;
 pub use bench_run::*;
 
-/// Benchmark multiple closures together, executing each of them in every
-/// benchmarking iteration.
-///
-/// The benchmarking functions in this module
-/// produce a single [`BenchOut<K>`](crate::multi::BenchOut) that holds one
-/// [`BenchOut`] per closure.
 pub mod multi;
 
 #[cfg(feature = "busy_work")]
@@ -35,16 +88,11 @@ pub mod stats_types {
     pub use basic_stats::core::{AcceptedHyp, AltHyp, Ci, HypTestResult, PositionWrtCi};
 }
 
-/// Validates that the latency-measurement overhead per function execution is acceptable.
-///
-/// The function [`validate_latency_overhead`](crate::bench_support::validate_latency_overhead)
-/// compares solo vs. grouped execution latencies to detect overhead from the measurement harness.
-/// Requires feature `_bench`.
 #[cfg(feature = "_bench")]
 pub mod bench_support;
 
 /// Lognormal sample generators, a [`StringWriter`](crate::test_support::StringWriter) for testing status output,
 /// and constants for low/high log-standard-deviation.
-/// Requires feature `_test_support`.
+/// Gated by feature **"_test_support"**.
 #[cfg(feature = "_test_support")]
 pub mod test_support;

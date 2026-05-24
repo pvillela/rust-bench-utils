@@ -312,7 +312,7 @@ impl<'a> Comp<'a> {
     #[cfg(feature = "_experimental")]
     /// Wilcoxon rank sum *W* statistic for `latency(f1)` and `latency(f2)`.
     ///
-    /// Requires feature `_experimental`.
+    /// Gated by feature **"_experimental"**.
     pub fn wilcoxon_rank_sum_w(&self) -> f64 {
         self.rank_sum().w()
     }
@@ -320,7 +320,7 @@ impl<'a> Comp<'a> {
     #[cfg(feature = "_experimental")]
     /// Wilcoxon rank sum normal approximation *z* value for `latency(f1)` and `latency(f2)`.
     ///
-    /// Requires feature `_experimental`.
+    /// Gated by feature **"_experimental"**.
     ///
     /// # Panics
     ///
@@ -337,7 +337,7 @@ impl<'a> Comp<'a> {
     #[cfg(feature = "_experimental")]
     /// Wilcoxon rank sum normal approximation *p* value for `latency(f1)` and `latency(f2)`.
     ///
-    /// Requires feature `_experimental`.
+    /// Gated by feature **"_experimental"**.
     ///
     /// # Panics
     ///
@@ -355,7 +355,7 @@ impl<'a> Comp<'a> {
     /// Wilcoxon rank sum test for `latency(f1)` and `latency(f2)`,
     /// with alternative hypothesis `alt_hyp` and confidence level `(1 - alpha)`.
     ///
-    /// Requires feature `_experimental`.
+    /// Gated by feature **"_experimental"**.
     ///
     /// # Panics
     ///

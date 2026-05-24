@@ -73,9 +73,6 @@ impl RunLength {
 /// - `panic_on_error`: if set to `true`, library functions that don't return a [`Result`] should panic upon
 ///   encountering an error condition; when set to `false`, instead of panicking, functions should return a
 ///   tainted value, i.e., `NaN` or a data structure that has `NaN` in one or more fields.
-///
-/// Stored in a `static Mutex`, and accessed via function `get_bench_cfg` (which not a method),
-/// modified through builder methods, and committed with the `set` method.
 #[derive(Debug, Clone)]
 pub struct BenchCfg {
     warmup_millis: u64,
