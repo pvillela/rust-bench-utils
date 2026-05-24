@@ -26,19 +26,23 @@
 //! With a custom configuration and two closures benchmarked together:
 //!
 //! ```rust,no_run
-//! use bench_utils::{bench_run, BenchCfg, RunLength, LatencyUnit};
+//! use bench_utils::{BenchCfg, RunLength, LatencyUnit};
+//! use bench_utils::multi::bench_run_arg_cfg;
 //! use std::time::Duration;
 //!
 //! let cfg = BenchCfg::default()
 //!     .with_warmup_millis(500)
 //!     .with_reporting_unit(LatencyUnit::Nano);
 //!
-//! let out = bench_utils::bench_run_arg_cfg(
+//! let f1 = || std::thread::sleep(Duration::from_micros(10));
+//! let f2 = || std::thread::sleep(Duration::from_micros(20));
+//!
+//! let out = bench_run_arg_cfg(
 //!     &cfg,
-//!     || std::thread::sleep(Duration::from_micros(10)),
+//!     &mut [f1, f2],
 //!     RunLength::Duration(Duration::from_secs(1)),
 //! );
-//! println!("n = {}, median = {} ns", out.n(), out.median());
+//! println!("n = {}, medians = {:?} ns", out.n(), out.medians());
 //! ```
 //!
 //! # Feature flags
