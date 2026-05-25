@@ -1,6 +1,6 @@
 use crate::{BenchCfg, BenchOut};
-use basic_stats::{core::SampleMoments, normal::normal_detm_samp};
-use std::{io::Write, sync::LazyLock};
+use basic_stats::{core::SampleMoments, dev_utils::ApproxEq, normal::normal_detm_samp};
+use std::{io::Write, sync::LazyLock, time::Duration};
 
 /// Low log-standard-deviation value for test sample generation.
 ///
@@ -183,3 +183,46 @@ impl StringWriter {
         std::str::from_utf8(&self.buf)
     }
 }
+
+pub trait AbsRelDiffDur {
+    fn abs_rel_diff(self, other: Duration) -> f64;
+}
+
+impl AbsRelDiffDur for Duration {
+    fn abs_rel_diff(self, other: Duration) -> f64 {
+        self.as_secs_f64().abs_rel_diff(other.as_secs_f64())
+    }
+}
+
+#[macro_use]
+mod macros {
+    /// Asserts that two durations are approximately equal within `epsilon` relative to their magnitudes.
+    #[macro_export]
+    macro_rules! rel_approx_eq_dur {
+        ($a:expr, $b:expr, $epsilon:expr $(,)?) => {
+            let rel_diff = $crate::test_support::AbsRelDiffDur::abs_rel_diff($a, $b);
+            if !basic_stats::dev_utils::ApproxEq::rel_approx_eq($a.as_secs_f64(), $b.as_secs_f64(), $epsilon) {
+                panic!(
+                    "assertion for relative approximate equality failed: left={:?}, right={:?}, rel_diff={}, epsilon={})",
+                    $a, $b, rel_diff, $epsilon
+                );
+            }
+        };
+    }
+}
+
+// mod macros {
+//     /// Asserts that two durations are approximately equal within `epsilon` relative to their magnitudes.
+//     #[macro_export]
+//     macro_rules! rel_approx_eq_dur {
+//         ($a:expr, $b:expr, $epsilon:expr $(,)?) => {
+//             let rel_diff = basic_stats::dev_utils::ApproxEq::abs_rel_diff($a.as_secs_f64(), $b.as_secs_f64());
+//             if !basic_stats::dev_utils::ApproxEq::rel_approx_eq($a.as_secs_f64(), $b.as_secs_f64(), $epsilon) {
+//                 panic!(
+//                     "assertion for relative approximate equality failed: left={:?}, right={:?}, rel_diff={}, epsilon={})",
+//                     $a, $b, rel_diff, $epsilon
+//                 );
+//             }
+//         };
+//     }
+// }
