@@ -104,8 +104,8 @@ pub fn executions_per_milli(budget_millis: u64, mut f: impl FnMut()) -> f64 {
 /// cargo test -r --package bench_utils --lib --all-features -- latency::test --nocapture
 mod test {
     use super::*;
-    use crate::{BenchCfg, bench_support::validate_latency_overhead};
-    use basic_stats::{approx_eq, rel_approx_eq};
+    use crate::{BenchCfg, bench_support::validate_latency_overhead, rel_approx_eq_dur};
+    use basic_stats::approx_eq;
 
     // SEE ALSO: tests for `fake_work` and `busy_work`.
 
@@ -149,16 +149,8 @@ mod test {
 
         println!("elapsed time: {} millis", start.elapsed().as_millis());
 
-        rel_approx_eq!(
-            solo_median_20.as_nanos() as f64 * 20.,
-            group_median_20.as_nanos() as f64,
-            EPSILON
-        );
-        rel_approx_eq!(
-            solo_median_100.as_nanos() as f64 * 100.,
-            group_median_100.as_nanos() as f64,
-            EPSILON
-        );
+        rel_approx_eq_dur!(solo_median_20 * 20, group_median_20, EPSILON);
+        rel_approx_eq_dur!(solo_median_100 * 100, group_median_100, EPSILON);
     }
 
     #[test]

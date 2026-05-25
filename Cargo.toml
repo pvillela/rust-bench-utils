@@ -77,15 +77,19 @@ harness = false
 [[bench]]
 name = "validate_bench_run"
 harness = false
+required-features = ["_bench"]
 
 [[bench]]
 name = "validate_busy_work"
 harness = false
+required-features = ["_bench"]
 
 [[bench]]
 name = "validate_fake_work"
 harness = false
+required-features = ["_test_support"]
 
 [[bench]]
 name = "validate_latency_overhead"
 harness = false
+required-features = ["_bench"]

@@ -404,6 +404,7 @@ mod test {
         normal::{normal_detm_samp, student_1samp_df, student_1samp_p},
         rel_approx_eq,
     };
+    use crate::rel_approx_eq_dur;
     use statrs::distribution::{ContinuousCDF, Normal};
 
     const ALPHA: f64 = 0.05;
@@ -455,23 +456,23 @@ mod test {
         println!("exp_p95={exp_p95}, summary.p95={:?}", summary.p95);
         println!("exp_p99={exp_p99}, summary.p99={:?}", summary.p99);
 
-        rel_approx_eq!(exp_mean, out.mean().as_nanos() as f64, EPSILON);
-        rel_approx_eq!(exp_stdev, out.stdev().as_nanos() as f64, EPSILON);
-        rel_approx_eq!(exp_median, out.median().as_nanos() as f64, EPSILON);
+        rel_approx_eq_dur!(Duration::from_nanos(exp_mean as u64), out.mean(), EPSILON);
+        rel_approx_eq_dur!(Duration::from_nanos(exp_stdev as u64), out.stdev(), EPSILON);
+        rel_approx_eq_dur!(Duration::from_nanos(exp_median as u64), out.median(), EPSILON);
         approx_eq!(exp_mean_ln, out.mean_ln(), EPSILON);
         approx_eq!(exp_stdev_ln, out.stdev_ln(), EPSILON);
 
-        rel_approx_eq!(exp_mean, summary.mean.as_nanos() as f64, EPSILON);
-        rel_approx_eq!(exp_stdev, summary.stdev.as_nanos() as f64, EPSILON);
-        rel_approx_eq!(exp_p1, summary.p1.as_nanos() as f64, EPSILON);
-        rel_approx_eq!(exp_p5, summary.p5.as_nanos() as f64, EPSILON);
-        rel_approx_eq!(exp_p10, summary.p10.as_nanos() as f64, EPSILON);
-        rel_approx_eq!(exp_p25, summary.p25.as_nanos() as f64, EPSILON);
-        rel_approx_eq!(exp_median, summary.median.as_nanos() as f64, EPSILON);
-        rel_approx_eq!(exp_p75, summary.p75.as_nanos() as f64, EPSILON);
-        rel_approx_eq!(exp_p90, summary.p90.as_nanos() as f64, EPSILON);
-        rel_approx_eq!(exp_p95, summary.p95.as_nanos() as f64, EPSILON);
-        rel_approx_eq!(exp_p99, summary.p99.as_nanos() as f64, EPSILON);
+        rel_approx_eq_dur!(Duration::from_nanos(exp_mean as u64), summary.mean, EPSILON);
+        rel_approx_eq_dur!(Duration::from_nanos(exp_stdev as u64), summary.stdev, EPSILON);
+        rel_approx_eq_dur!(Duration::from_nanos(exp_p1 as u64), summary.p1, EPSILON);
+        rel_approx_eq_dur!(Duration::from_nanos(exp_p5 as u64), summary.p5, EPSILON);
+        rel_approx_eq_dur!(Duration::from_nanos(exp_p10 as u64), summary.p10, EPSILON);
+        rel_approx_eq_dur!(Duration::from_nanos(exp_p25 as u64), summary.p25, EPSILON);
+        rel_approx_eq_dur!(Duration::from_nanos(exp_median as u64), summary.median, EPSILON);
+        rel_approx_eq_dur!(Duration::from_nanos(exp_p75 as u64), summary.p75, EPSILON);
+        rel_approx_eq_dur!(Duration::from_nanos(exp_p90 as u64), summary.p90, EPSILON);
+        rel_approx_eq_dur!(Duration::from_nanos(exp_p95 as u64), summary.p95, EPSILON);
+        rel_approx_eq_dur!(Duration::from_nanos(exp_p99 as u64), summary.p99, EPSILON);
     }
 
     #[test]
@@ -517,8 +518,8 @@ mod test {
             approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON);
             approx_eq!(exp_df, out.student_ln_df(), EPSILON);
             rel_approx_eq!(exp_p, out.student_ln_p(mu0, alt_hyp), EPSILON);
-            rel_approx_eq!(exp_ci_ns_low, out.student_median_ci(ALPHA).0.as_nanos() as f64, EPSILON);
-            rel_approx_eq!(exp_ci_ns_high, out.student_median_ci(ALPHA).1.as_nanos() as f64, EPSILON);
+            rel_approx_eq_dur!(Duration::from_nanos(exp_ci_ns_low as u64), out.student_median_ci(ALPHA).0, EPSILON);
+            rel_approx_eq_dur!(Duration::from_nanos(exp_ci_ns_high as u64), out.student_median_ci(ALPHA).1, EPSILON);
             let student_test = out.student_ln_test(mu0, alt_hyp, ALPHA);
             println!("out.student_test={student_test:?}");
             assert_eq!(exp_accepted_hyp, student_test.accepted());
@@ -540,8 +541,8 @@ mod test {
             rel_approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON);
             approx_eq!(exp_df, out.student_ln_df(), EPSILON);
             approx_eq!(exp_p, out.student_ln_p(mu0, alt_hyp), EPSILON);
-            rel_approx_eq!(exp_ci_ns_low, out.student_median_ci(ALPHA).0.as_nanos() as f64, EPSILON);
-            rel_approx_eq!(exp_ci_ns_high, out.student_median_ci(ALPHA).1.as_nanos() as f64, EPSILON);
+            rel_approx_eq_dur!(Duration::from_nanos(exp_ci_ns_low as u64), out.student_median_ci(ALPHA).0, EPSILON);
+            rel_approx_eq_dur!(Duration::from_nanos(exp_ci_ns_high as u64), out.student_median_ci(ALPHA).1, EPSILON);
             let student_test = out.student_ln_test(mu0, alt_hyp, ALPHA);
             println!("out.student_test={student_test:?}");
             assert_eq!(exp_accepted_hyp, student_test.accepted());

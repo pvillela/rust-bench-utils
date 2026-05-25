@@ -1,5 +1,7 @@
-use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
-use bench_utils::{BenchCfg, bench_support::validate_latency_overhead};
+use bench_utils::{
+    BenchCfg, bench_support::validate_latency_overhead, rel_approx_eq_dur,
+    test_support::AbsRelDiffDur,
+};
 use std::time::{Duration, Instant};
 
 fn main() {
@@ -18,24 +20,19 @@ fn main() {
 
     println!("elapsed time: {} millis", start.elapsed().as_millis());
 
-    let solo_20 = solo_median_20.as_nanos() as f64;
-    let group_20 = group_median_20.as_nanos() as f64;
-    let solo_100 = solo_median_100.as_nanos() as f64;
-    let group_100 = group_median_100.as_nanos() as f64;
-
     println!(
-        "solo_median_20 * 20.0 = {}, group_median_20 = {}, abs_rel_diff = {}",
-        solo_20 * 20.0,
-        group_20,
-        (solo_20 * 20.0).abs_rel_diff(group_20)
+        "solo_median_20 * 20 = {:?}, group_median_20 = {:?}, abs_rel_diff = {}",
+        solo_median_20 * 20,
+        group_median_20,
+        (solo_median_20 * 20).abs_rel_diff(group_median_20)
     );
     println!(
-        "solo_median_100 * 100.0 = {}, group_median_100 = {}, abs_rel_diff = {}",
-        solo_100 * 100.0,
-        group_100,
-        (solo_100 * 100.0).abs_rel_diff(group_100)
+        "solo_median_100 * 100 = {:?}, group_median_100 = {:?}, abs_rel_diff = {}",
+        solo_median_100 * 100,
+        group_median_100,
+        (solo_median_100 * 100).abs_rel_diff(group_median_100)
     );
 
-    rel_approx_eq!(solo_20 * 20., group_20, EPSILON);
-    rel_approx_eq!(solo_100 * 100., group_100, EPSILON);
+    rel_approx_eq_dur!(solo_median_20 * 20, group_median_20, EPSILON);
+    rel_approx_eq_dur!(solo_median_100 * 100, group_median_100, EPSILON);
 }
