@@ -6,7 +6,7 @@
 //!
 //! - Measure the wall-clock latency of any closure with [`latency`].
 //! - Run a full benchmark — warm-up, execute, collect statistics — with [`bench_run`].
-//! - Configure warm-up duration, time units, and reporting via [`BenchCfg`].
+//! - Configure warm-up duration, time units, and error behavior via [`BenchCfg`].
 //! - Benchmark multiple closures, interleaving their execution, with
 //!   the [`multi`] module, which reduces the impact of time-dependent noise when comparing
 //!   latencies between functions.
@@ -20,29 +20,28 @@
 //!
 //! // Benchmark a no-op closure for 1000 iterations with default configuration.
 //! let out = bench_run(|| {}, RunLength::Count(1000));
-//! println!("median: {} µs", out.median());
+//! println!("median: {:?}", out.median());
 //! ```
 //!
 //! With a custom configuration and two closures benchmarked together:
 //!
 //! ```rust,no_run
-//! use bench_utils::{BenchCfg, RunLength, LatencyUnit};
+//! use bench_utils::{BenchCfg, RunLength};
 //! use bench_utils::multi::bench_run_arg_cfg;
 //! use std::time::Duration;
 //!
 //! let cfg = BenchCfg::default()
-//!     .with_warmup_millis(500)
-//!     .with_reporting_unit(LatencyUnit::Nano);
+//!     .with_warmup_millis(500);
 //!
-//! let f1 = || std::thread::sleep(Duration::from_micros(10));
-//! let f2 = || std::thread::sleep(Duration::from_micros(20));
+//! let f1: fn() = || std::thread::sleep(Duration::from_micros(10));
+//! let f2: fn() = || std::thread::sleep(Duration::from_micros(20));
 //!
 //! let out = bench_run_arg_cfg(
 //!     &cfg,
 //!     &mut [f1, f2],
 //!     RunLength::Duration(Duration::from_secs(1)),
 //! );
-//! println!("n = {}, medians = {:?} ns", out.n(), out.medians());
+//! println!("n = {}, medians = {:?}", out.n(), out.medians());
 //! ```
 //!
 //! # Feature flags

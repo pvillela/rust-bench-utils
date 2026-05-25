@@ -137,9 +137,9 @@ mod validate {
     fn run_bench(warmup_millis: u64, target_latency: Duration, epsilon: f64) {
         let name = format!("sleep_{}_micros", target_latency.as_micros());
 
-        let reporting_unit = BenchCfg::default().reporting_unit();
-        let target_median = reporting_unit.latency_as_f64(target_latency);
-        let exec_count = (reporting_unit.latency_as_f64(BENCH_TIME) / target_median) as usize;
+        let recording_unit = BenchCfg::default().recording_unit();
+        let target_median = recording_unit.latency_as_f64(target_latency);
+        let exec_count = (recording_unit.latency_as_f64(BENCH_TIME) / target_median) as usize;
 
         println!("validate_bench_run: {name}");
 
@@ -150,15 +150,15 @@ mod validate {
             RunLength::Count(exec_count),
         );
 
+        let out_median_ns = out.median().as_nanos() as f64;
         println!(
-            "target_median={target_median}, out.median()={}, rel_diff={}",
-            out.median(),
-            target_median.abs_rel_diff(out.median())
+            "target_median={target_median}, out.median()={out_median_ns}, rel_diff={}",
+            target_median.abs_rel_diff(out_median_ns)
         );
         println!("{:?}", out.summary());
         println!();
 
-        rel_approx_eq!(target_median, out.median(), epsilon);
+        rel_approx_eq!(target_median, out_median_ns, epsilon);
     }
 
     #[test]
@@ -200,8 +200,7 @@ mod status {
         let cfg = BenchCfg::default()
             .with_warmup_millis(warmup_millis)
             .with_status_millis(status_millis)
-            .with_recording_unit(LatencyUnit::Nano)
-            .with_reporting_unit(LatencyUnit::Micro);
+            .with_recording_unit(LatencyUnit::Nano);
 
         let mut w = StringWriter::new();
         let mut status = DefaultStatus::new(
@@ -418,7 +417,6 @@ mod simple_tests {
             .with_warmup_millis(0)
             .with_status_millis(1)
             .with_recording_unit(LatencyUnit::Nano)
-            .with_reporting_unit(LatencyUnit::Nano)
     }
 
     #[test]
