@@ -51,6 +51,7 @@ _bench = [
     "busy_work",
     "dep:criterion",
 ] # used by some benches and some tests
+_bench_long_test = ["_bench"] # used for tests that take a long time
 _test = ["_test_support"] # used only by tests
 _test_support = [
     "basic_stats/_dev_utils",

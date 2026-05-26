@@ -126,7 +126,7 @@ pub fn latency_src_executions_per_milli(
 }
 
 #[cfg(test)]
-#[cfg(feature = "_bench")]
+#[cfg(feature = "_bench_long_test")]
 /// cargo test -r --package bench_utils --lib --all-features -- latency::test --nocapture
 mod test {
     use super::*;

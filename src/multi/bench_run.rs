@@ -217,8 +217,7 @@ pub fn bench_run_with_status_arg_cfg<const K: usize>(
 }
 
 #[cfg(test)]
-#[cfg(feature = "_bench")]
-#[cfg(feature = "busy_work")]
+#[cfg(feature = "_bench_long_test")]
 mod validate {
     use crate::{
         BenchCfg, BusyWork, RunLength, bench_run_with_status_arg_cfg, rel_approx_eq_dur,
