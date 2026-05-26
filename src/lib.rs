@@ -27,7 +27,7 @@
 //!
 //! ```rust,no_run
 //! use bench_utils::{BenchCfg, RunLength};
-//! use bench_utils::multi::bench_run_arg_cfg;
+//! use bench_utils::multi::{bench_run_arg_cfg, LatencySrc2};
 //! use std::time::Duration;
 //!
 //! let cfg = BenchCfg::default()
@@ -38,7 +38,7 @@
 //!
 //! let out = bench_run_arg_cfg(
 //!     &cfg,
-//!     &mut [f1, f2],
+//!     &mut LatencySrc2(f1, f2),
 //!     RunLength::Duration(Duration::from_secs(1)),
 //! );
 //! println!("n = {}, medians = {:?}", out.n(), out.medians());

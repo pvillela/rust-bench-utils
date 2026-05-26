@@ -2,7 +2,7 @@
 
 use crate::{
     BenchCfg, BenchOut, RunLength,
-    multi::{self},
+    multi::{self, LatencySrc1},
     status::Status,
 };
 
@@ -28,7 +28,7 @@ pub fn bench_run_x<'a, S: Status<'a>>(
     exec_run_length: RunLength,
     s: &mut S,
 ) -> BenchOut {
-    multi::bench_run_x(cfg, &mut [f; 1], exec_run_length, s).into()
+    multi::bench_run_x(cfg, &mut LatencySrc1(f), exec_run_length, s).into()
 }
 
 /// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
@@ -43,7 +43,7 @@ pub fn bench_run_x<'a, S: Status<'a>>(
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
-    multi::bench_run(&mut [f; 1], exec_run_length).into()
+    multi::bench_run(&mut LatencySrc1(f), exec_run_length).into()
 }
 
 /// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
@@ -58,7 +58,7 @@ pub fn bench_run(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_arg_cfg(cfg: &BenchCfg, f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
-    multi::bench_run_arg_cfg(cfg, &mut [f; 1], exec_run_length).into()
+    multi::bench_run_arg_cfg(cfg, &mut LatencySrc1(f), exec_run_length).into()
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -74,7 +74,7 @@ pub fn bench_run_arg_cfg(cfg: &BenchCfg, f: impl FnMut(), exec_run_length: RunLe
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_with_status(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
-    multi::bench_run_with_status(&mut [f; 1], exec_run_length).into()
+    multi::bench_run_with_status(&mut LatencySrc1(f), exec_run_length).into()
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -94,7 +94,7 @@ pub fn bench_run_with_status_arg_cfg(
     f: impl FnMut(),
     exec_run_length: RunLength,
 ) -> BenchOut {
-    multi::bench_run_with_status_arg_cfg(cfg, &mut [f; 1], exec_run_length).into()
+    multi::bench_run_with_status_arg_cfg(cfg, &mut LatencySrc1(f), exec_run_length).into()
 }
 
 #[cfg(test)]

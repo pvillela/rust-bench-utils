@@ -1,12 +1,11 @@
 //! Implements functions to collect latency statistics for a closure.
 
 use crate::{
-    BenchCfg, RunLength, latency,
+    BenchCfg, RunLength,
     multi::BenchOut,
     status::{DefaultStatus, NoStatus, Status},
 };
 use std::{
-    array,
     io::stderr,
     time::{Duration, Instant},
 };
@@ -14,11 +13,11 @@ use std::{
 type BenchState<const K: usize> = BenchOut<K>;
 
 impl<const K: usize> BenchState<K> {
-    /// Executes `f` repeatedly and captures latencies.
-    /// `exec_status` is invoked once every `status_freq` invocations of `f`.
+    /// Executes target closures repeatedly and captures latencies.
+    /// `exec_status` is invoked once for every `status_freq` invocations of the closures.
     fn execute(
         &mut self,
-        fs: &mut [impl FnMut(); K],
+        latency_src: &mut impl Iterator<Item = [Duration; K]>,
         run_length: RunLength,
         status_freq: usize,
         // Used in control of the exit from the iteration loop when both `status_freq` and `exec_count` are too high
@@ -35,17 +34,21 @@ impl<const K: usize> BenchState<K> {
         let start = Instant::now();
 
         for i in 1..=exec_count {
-            let latencies = array::from_fn(|k| latency(&mut fs[k]));
-
-            self.capture_data(latencies);
+            let iter_finished = if let Some(latencies) = latency_src.next() {
+                self.capture_data(latencies);
+                false
+            } else {
+                true
+            };
 
             if est_remaining_iters > 0 {
                 est_remaining_iters -= 1;
             }
 
-            if i % status_freq == 0 || i == exec_count || est_remaining_iters == 0 {
+            if i % status_freq == 0 || i == exec_count || est_remaining_iters == 0 || iter_finished
+            {
                 let elapsed = start.elapsed();
-                let finished = i == exec_count || elapsed >= run_time;
+                let finished = i == exec_count || elapsed >= run_time || iter_finished;
 
                 if i % status_freq == 0 || finished {
                     if let Some(exec_status) = status {
@@ -86,12 +89,12 @@ impl<const K: usize> BenchState<K> {
 /// - `execs_per_milli` - estimate of how many executions of `f` fit in one millisecond.
 pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     cfg: &BenchCfg,
-    fs: &mut [impl FnMut(); K],
+    latency_src: &mut impl Iterator<Item = [Duration; K]>,
     exec_run_length: RunLength,
     s: &mut S,
 ) -> BenchOut<K> {
     let mut state = BenchOut::new(cfg);
-    let execs_per_milli = cfg.execs_per_milli(|| fs.iter_mut().for_each(|f| f()));
+    let execs_per_milli = cfg.latency_src_execs_per_milli(latency_src);
     let status_freq = cfg.status_freq(execs_per_milli);
 
     let warmup_run_length = RunLength::Duration(Duration::from_millis(cfg.warmup_millis()));
@@ -103,7 +106,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     // Warm-up.
     let mut warmup_status = S::part_apply(s.warmup_status(), warmup_est_dur, warmup_est_count);
     state.execute(
-        fs,
+        latency_src,
         warmup_run_length,
         status_freq,
         warmup_est_count,
@@ -115,7 +118,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     // Execute.
     let mut exec_status = S::part_apply(s.exec_status(), exec_est_dur, exec_est_count);
     state.execute(
-        fs,
+        latency_src,
         exec_run_length,
         status_freq,
         exec_est_count,
@@ -137,11 +140,11 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run<const K: usize>(
-    fs: &mut [impl FnMut(); K],
+    latency_src: &mut impl Iterator<Item = [Duration; K]>,
     exec_run_length: RunLength,
 ) -> BenchOut<K> {
     let cfg = BenchCfg::default();
-    bench_run_arg_cfg(&cfg, fs, exec_run_length)
+    bench_run_arg_cfg(&cfg, latency_src, exec_run_length)
 }
 
 /// Repeatedly executes closures `fs` and collects the resulting latency data in a [`BenchOut`] object.
@@ -157,10 +160,10 @@ pub fn bench_run<const K: usize>(
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_arg_cfg<const K: usize>(
     cfg: &BenchCfg,
-    fs: &mut [impl FnMut(); K],
+    latency_src: &mut impl Iterator<Item = [Duration; K]>,
     exec_run_length: RunLength,
 ) -> BenchOut<K> {
-    bench_run_x(cfg, fs, exec_run_length, &mut NoStatus)
+    bench_run_x(cfg, latency_src, exec_run_length, &mut NoStatus)
 }
 
 /// Repeatedly executes closures `fs`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -176,11 +179,11 @@ pub fn bench_run_arg_cfg<const K: usize>(
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_with_status<const K: usize>(
-    fs: &mut [impl FnMut(); K],
+    latency_src: &mut impl Iterator<Item = [Duration; K]>,
     exec_run_length: RunLength,
 ) -> BenchOut<K> {
     let cfg = BenchCfg::default();
-    bench_run_with_status_arg_cfg(&cfg, fs, exec_run_length)
+    bench_run_with_status_arg_cfg(&cfg, latency_src, exec_run_length)
 }
 
 /// Repeatedly executes closures `fs`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -197,7 +200,7 @@ pub fn bench_run_with_status<const K: usize>(
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_with_status_arg_cfg<const K: usize>(
     cfg: &BenchCfg,
-    fs: &mut [impl FnMut(); K],
+    latency_src: &mut impl Iterator<Item = [Duration; K]>,
     exec_run_length: RunLength,
 ) -> BenchOut<K> {
     let mut w = stderr();
@@ -210,7 +213,7 @@ pub fn bench_run_with_status_arg_cfg<const K: usize>(
         "\nExecuting bench_run".to_owned(),
     );
 
-    bench_run_x(cfg, fs, exec_run_length, &mut s)
+    bench_run_x(cfg, latency_src, exec_run_length, &mut s)
 }
 
 #[cfg(test)]
@@ -268,7 +271,8 @@ mod validate {
 mod status {
     use super::*;
     use crate::{
-        BusyWork, LatencyUnit, RunLength, status::DefaultStatus, test_support::StringWriter,
+        BusyWork, LatencyUnit, RunLength, multi::LatencySrc2, status::DefaultStatus,
+        test_support::StringWriter,
     };
     use basic_stats::rel_approx_eq;
     use regex::Regex;
@@ -310,16 +314,19 @@ mod status {
             "Warming up".to_owned(),
             "\nExecuting bench_run".to_owned(),
         );
-        let fs = &mut array::from_fn::<_, 2, _>(|_| BusyWork::new(target_latency).fun());
 
-        // let execs_per_milli = cfg.execs_per_milli(|| fs.iter_mut().for_each(|f| f()));
-        let execs_per_milli = cfg.execs_per_milli(|| {
-            for f in fs.iter_mut() {
-                f();
-            }
-        });
+        let latency_delta = target_latency / 10;
+        let mut latency_src = LatencySrc2(
+            || {
+                BusyWork::new(target_latency - latency_delta).fun()();
+                BusyWork::new(latency_delta).fun()();
+            },
+            BusyWork::new(target_latency).fun(),
+        );
 
-        let out = bench_run_x(&cfg, fs, exec_run_length2, &mut status);
+        let execs_per_milli = cfg.latency_src_execs_per_milli(&mut latency_src);
+
+        let out = bench_run_x(&cfg, &mut latency_src, exec_run_length2, &mut status);
 
         let status_str = w.as_str().expect("StringWriter doesn't contain string");
         println!("** {status_str}");
@@ -515,7 +522,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 /// Tests created by Claude Code, improved a bit by me.
 mod simple_tests {
     use super::*;
-    use crate::{LatencyUnit, RunLength};
+    use crate::{LatencyUnit, RunLength, multi::LatencySrc1};
     use std::{thread, time::Duration};
 
     /// Helper to get a clean config with minimal warmup/calibration for fast tests.
@@ -529,7 +536,7 @@ mod simple_tests {
     #[test]
     fn test_bench_run_with_count() {
         let cfg = quick_cfg();
-        let out = bench_run_arg_cfg(&cfg, &mut [|| ()], RunLength::Count(5));
+        let out = bench_run_arg_cfg(&cfg, &mut LatencySrc1(|| ()), RunLength::Count(5));
         // With 5 count and no timeout, we should have exactly 5 iterations
         assert_eq!(out.n(), 5);
     }
@@ -541,7 +548,7 @@ mod simple_tests {
         // Use a very short timeout that should be exceeded immediately
         let out = bench_run_arg_cfg(
             &cfg,
-            &mut [|| thread::sleep(Duration::from_nanos(1))],
+            &mut LatencySrc1(|| thread::sleep(Duration::from_nanos(1))),
             RunLength::Duration(Duration::from_nanos(1)),
         );
         // At least some executions should have been captured
@@ -555,7 +562,7 @@ mod simple_tests {
         // Use a very short timeout that should be exceeded immediately
         let out = bench_run_arg_cfg(
             &cfg,
-            &mut [|| thread::sleep(Duration::from_nanos(1))],
+            &mut LatencySrc1(|| thread::sleep(Duration::from_nanos(1))),
             RunLength::CountWithTimeout(20, Duration::from_nanos(1)),
         );
         // At least some executions should have been captured

@@ -170,6 +170,16 @@ impl BenchCfg {
         latency::executions_per_milli(self.status_millis, f)
     }
 
+    pub fn latency_src_execs_per_milli<const K: usize>(
+        &self,
+        src: &mut impl Iterator<Item = [Duration; K]>,
+    ) -> f64 {
+        latency::latency_src_executions_per_milli(
+            self.status_millis,
+            src.map(|arr| arr.iter().sum()),
+        )
+    }
+
     /// Number of executions between status updates, derived from `execs_per_milli`.
     pub fn status_freq(&self, execs_per_milli: f64) -> usize {
         let status_freq = self.status_millis as f64 * execs_per_milli;

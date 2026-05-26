@@ -99,6 +99,32 @@ pub fn executions_per_milli(budget_millis: u64, mut f: impl FnMut()) -> f64 {
     unreachable!("above loop must return at some point")
 }
 
+pub fn latency_src_executions_per_milli(
+    budget_millis: u64,
+    mut src: impl Iterator<Item = Duration>,
+) -> f64 {
+    let mut acc_latency = Duration::from_nanos(0);
+    let mut acc_execs: usize = 0;
+
+    for i in 1.. {
+        let iter_execs = 2usize.pow(i - 1);
+
+        let iter_latency = (&mut src).take(iter_execs).sum();
+
+        acc_latency += iter_latency;
+        acc_execs += iter_execs;
+        let budget = Duration::from_millis(budget_millis);
+
+        if iter_latency >= budget / 2 || acc_latency >= budget {
+            let iter_execs_per_milli = iter_execs as f64 / (iter_latency.as_secs_f64() * 1000.0);
+            let acc_execs_per_milli = acc_execs as f64 / (acc_latency.as_secs_f64() * 1000.0);
+            return iter_execs_per_milli.max(acc_execs_per_milli);
+        }
+    }
+
+    unreachable!("above loop must return at some point")
+}
+
 #[cfg(test)]
 #[cfg(feature = "_bench")]
 /// cargo test -r --package bench_utils --lib --all-features -- latency::test --nocapture
