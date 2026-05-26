@@ -239,6 +239,7 @@ mod validate {
             BusyWork::new(target_latency).fun(),
             RunLength::Count(exec_count),
         );
+        println!();
 
         let out_median = out.median();
         println!(

@@ -1,42 +1,76 @@
 use bench_utils::{
-    BenchCfg, RunLength, bench_run_with_status_arg_cfg, rel_approx_eq_dur,
+    BenchCfg, BusyWork, RunLength, bench_run_with_status_arg_cfg, latency, rel_approx_eq_dur,
     test_support::AbsRelDiffDur,
 };
-use std::{thread, time::Duration};
+use std::time::Duration;
 
-const EPSILON: f64 = 0.005;
-const BENCH_TIME: Duration = Duration::from_secs(3);
+fn run_bench_with_status(
+    warmup_millis: u64,
+    status_millis: u64,
+    bench_time: Duration,
+    target_latency: Duration,
+    epsilon: f64,
+) {
+    let name = format!(
+        "target_latency={target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}"
+    );
+    let exec_count = (bench_time.as_secs_f64() / target_latency.as_secs_f64()) as usize;
 
-fn sleep_fn(target_latency: Duration) {
-    thread::sleep(target_latency);
-}
-
-fn run_bench(name: &'static str, warmup_millis: u64, target_latency: Duration, check: bool) {
-    let exec_count = (BENCH_TIME.as_secs_f64() / target_latency.as_secs_f64()) as usize;
-    let cfg = BenchCfg::default().with_warmup_millis(warmup_millis);
     println!("validate_bench_run: {name}");
-    let out = bench_run_with_status_arg_cfg(
-        &cfg,
-        || sleep_fn(target_latency),
-        RunLength::Count(exec_count),
-    );
-    let out_median = out.median();
-    println!(
-        "target_median={target_latency:?}, out.median()={out_median:?}, rel_diff={}",
-        target_latency.abs_rel_diff(out_median)
-    );
-    println!("{:?}", out.summary());
+
+    let mut f = BusyWork::new(target_latency).fun();
+
+    let cfg = BenchCfg::default()
+        .with_warmup_millis(warmup_millis)
+        .with_status_millis(status_millis);
+    let out = bench_run_with_status_arg_cfg(&cfg, &mut f, RunLength::Count(exec_count));
     println!();
 
-    if check {
-        rel_approx_eq_dur!(target_latency, out_median, EPSILON);
-    }
+    let out_mean = out.mean();
+    println!(
+        "target_mean={target_latency:?}, out.mean()={out_mean:?}, rel_diff={}",
+        target_latency.abs_rel_diff(out_mean)
+    );
+
+    let raw_latency = latency(|| {
+        for _ in 0..exec_count {
+            f();
+        }
+    });
+    let raw_mean = raw_latency / exec_count as u32;
+    println!(
+        "target_mean={target_latency:?}, raw_mean()={raw_mean:?}, rel_diff={}",
+        target_latency.abs_rel_diff(raw_mean)
+    );
+
+    println!(
+        "raw_mean={out_mean:?}, out_mean()={raw_mean:?}, rel_diff={}",
+        raw_mean.abs_rel_diff(out_mean)
+    );
+
+    rel_approx_eq_dur!(raw_mean, out_mean, epsilon);
 }
 
 fn main() {
-    // sleep long enough to dominate noise
-    run_bench("sleep_60_millis", 600, Duration::from_millis(60), true);
+    {
+        const EPSILON: f64 = 0.05;
+        run_bench_with_status(
+            1000,
+            100,
+            Duration::from_millis(2000),
+            Duration::from_millis(10),
+            EPSILON,
+        );
+    }
 
-    // short sleep, very noisy
-    run_bench("sleep_60_micros", 100, Duration::from_micros(60), true);
+    {
+        const EPSILON: f64 = 0.05;
+        run_bench_with_status(
+            100,
+            10,
+            Duration::from_millis(200),
+            Duration::from_micros(50),
+            EPSILON,
+        );
+    }
 }
