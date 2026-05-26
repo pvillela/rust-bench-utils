@@ -24,16 +24,14 @@ pub fn validate_latency_overhead(
         }
     };
 
+    let target_group_latency = target_latency * group_size as u32;
     let exec_count_group =
-        (bench_duration.as_secs_f64() / target_latency.as_secs_f64() / group_size as f64) as usize;
+        (bench_duration.as_secs_f64() / target_group_latency.as_secs_f64()) as usize;
     // Guard against integer truncation to 0 when target_median_group is larger than
     // bench_duration. Fall back to 1 execution so the benchmark still produces
     // meaningful data and the assertion doesn't fire on an empty sample.
     let exec_count_group = exec_count_group.max(1);
     let exec_count_solo = exec_count_group * group_size;
-
-    println!("recording_unit={:?}", cfg.recording_unit());
-    println!();
 
     println!("running solo_f: {name}");
     let out_solo = bench_run_with_status_arg_cfg(cfg, &solo_f, RunLength::Count(exec_count_solo));
@@ -51,8 +49,8 @@ pub fn validate_latency_overhead(
     let group_median = out_group.median();
     println!(
         "target_median_group={:?}, out_group.median()={group_median:?}, rel_diff={}",
-        target_latency * group_size as u32,
-        target_latency.abs_rel_diff(group_median)
+        target_group_latency,
+        target_group_latency.abs_rel_diff(group_median)
     );
     println!();
 

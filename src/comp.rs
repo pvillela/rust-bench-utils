@@ -27,6 +27,8 @@ use basic_stats::wilcoxon::RankSum;
 pub struct Comp<'a>(pub(crate) &'a BenchOut, pub(crate) &'a BenchOut);
 
 impl<'a> Comp<'a> {
+    /// Constructs a [`Comp`] from [`BenchOut`] references.
+    ///
     /// # Panics
     /// Panics if `f1_out` and `f2_out` don't have the same `recording_unit`.
     pub fn new(f1_out: &'a BenchOut, f2_out: &'a BenchOut) -> Self {
@@ -466,16 +468,14 @@ mod test {
             assert!(are_eq_bench_out(o1, f1_out));
             assert!(are_eq_bench_out(o2, f2_out));
 
-            approx_eq!(
+            assert_eq!(
                 f1_out.median().as_secs_f64() - f2_out.median().as_secs_f64(),
-                comp.diff_medians_f1_f2(),
-                EPSILON
+                comp.diff_medians_f1_f2()
             );
             approx_eq!(ratio_medians, comp.ratio_medians_f1_f2(), EPSILON);
-            approx_eq!(
+            assert_eq!(
                 f1_out.mean().as_secs_f64() - f2_out.mean().as_secs_f64(),
-                comp.mean_diff_f1_f2(),
-                EPSILON
+                comp.mean_diff_f1_f2()
             );
             assert_eq!(
                 f1_out.mean_ln() - f2_out.mean_ln(),

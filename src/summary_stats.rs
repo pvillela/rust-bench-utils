@@ -23,9 +23,9 @@ pub fn new_timing(hist_high: u64, hist_sigfig: u8) -> Timing {
 pub struct SummaryStats {
     /// Sample size (number of observations).
     pub count: u64,
-    /// Arithmetic mean of the latency observations.
+    /// Arithmetic mean of the latencies observations.
     pub mean: Duration,
-    /// Sample standard deviation of the latency observations.
+    /// Sample standard deviation of the latencies observations.
     pub stdev: Duration,
     /// Minimum observed latency.
     pub min: Duration,
