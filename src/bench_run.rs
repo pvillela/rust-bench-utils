@@ -99,8 +99,8 @@ pub fn bench_run_with_status_arg_cfg(
 
 #[cfg(test)]
 #[cfg(feature = "_bench_long_test")]
-// cargo test -r --package bench_utils --lib --all-features -- bench_run::validate --nocapture --test-threads=1 --skip multi
-mod validate {
+// cargo test -r --package bench_utils --lib --all-features -- bench_run::validate_with_status --nocapture --test-threads=1 --skip multi
+mod validate_with_status {
     use crate::{
         BenchCfg, BusyWork, RunLength, bench_run_with_status_arg_cfg, latency, rel_approx_eq_dur,
         test_support::AbsRelDiffDur,
