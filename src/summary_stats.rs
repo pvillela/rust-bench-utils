@@ -1,4 +1,5 @@
 use hdrhistogram::Histogram;
+use std::time::Duration;
 
 use crate::BenchOut;
 
@@ -22,32 +23,32 @@ pub fn new_timing(hist_high: u64, hist_sigfig: u8) -> Timing {
 pub struct SummaryStats {
     /// Sample size (number of observations).
     pub count: u64,
-    /// Arithmetic mean of the latency observations (in the reporting unit).
-    pub mean: f64,
-    /// Sample standard deviation of the latency observations (in the reporting unit).
-    pub stdev: f64,
-    /// Minimum observed latency (in the reporting unit).
-    pub min: f64,
-    /// 1st percentile latency (in the reporting unit).
-    pub p1: f64,
-    /// 5th percentile latency (in the reporting unit).
-    pub p5: f64,
-    /// 10th percentile latency (in the reporting unit).
-    pub p10: f64,
-    /// 25th percentile latency (in the reporting unit).
-    pub p25: f64,
-    /// 50th percentile (median) latency (in the reporting unit).
-    pub median: f64,
-    /// 75th percentile latency (in the reporting unit).
-    pub p75: f64,
-    /// 90th percentile latency (in the reporting unit).
-    pub p90: f64,
-    /// 95th percentile latency (in the reporting unit).
-    pub p95: f64,
-    /// 99th percentile latency (in the reporting unit).
-    pub p99: f64,
-    /// Maximum observed latency (in the reporting unit).
-    pub max: f64,
+    /// Arithmetic mean of the latencies observations.
+    pub mean: Duration,
+    /// Sample standard deviation of the latencies observations.
+    pub stdev: Duration,
+    /// Minimum observed latency.
+    pub min: Duration,
+    /// 1st percentile latency.
+    pub p1: Duration,
+    /// 5th percentile latency.
+    pub p5: Duration,
+    /// 10th percentile latency.
+    pub p10: Duration,
+    /// 25th percentile latency.
+    pub p25: Duration,
+    /// 50th percentile (median) latency.
+    pub median: Duration,
+    /// 75th percentile latency.
+    pub p75: Duration,
+    /// 90th percentile latency.
+    pub p90: Duration,
+    /// 95th percentile latency.
+    pub p95: Duration,
+    /// 99th percentile latency.
+    pub p99: Duration,
+    /// Maximum observed latency.
+    pub max: Duration,
 }
 
 #[doc(hidden)]
@@ -58,22 +59,22 @@ pub struct SummaryStats {
 /// Panics if the current value of [`crate::BenchCfg::panic_on_error`] is `true` **and** the number of observations is zero.
 pub fn summary_stats(out: &BenchOut) -> SummaryStats {
     let hist = &out.hist;
-    let factor = out.conversion_factor();
+    let ru = out.recording_unit();
 
     SummaryStats {
         count: hist.len(),
         mean: out.mean(),
         stdev: out.stdev(),
-        min: hist.min() as f64 * factor,
-        p1: hist.value_at_quantile(0.01) as f64 * factor,
-        p5: hist.value_at_quantile(0.05) as f64 * factor,
-        p10: hist.value_at_quantile(0.10) as f64 * factor,
-        p25: hist.value_at_quantile(0.25) as f64 * factor,
-        median: hist.value_at_quantile(0.50) as f64 * factor,
-        p75: hist.value_at_quantile(0.75) as f64 * factor,
-        p90: hist.value_at_quantile(0.90) as f64 * factor,
-        p95: hist.value_at_quantile(0.95) as f64 * factor,
-        p99: hist.value_at_quantile(0.99) as f64 * factor,
-        max: hist.max() as f64 * factor,
+        min: ru.latency_from_u64(hist.min()),
+        p1: ru.latency_from_u64(hist.value_at_quantile(0.01)),
+        p5: ru.latency_from_u64(hist.value_at_quantile(0.05)),
+        p10: ru.latency_from_u64(hist.value_at_quantile(0.10)),
+        p25: ru.latency_from_u64(hist.value_at_quantile(0.25)),
+        median: ru.latency_from_u64(hist.value_at_quantile(0.50)),
+        p75: ru.latency_from_u64(hist.value_at_quantile(0.75)),
+        p90: ru.latency_from_u64(hist.value_at_quantile(0.90)),
+        p95: ru.latency_from_u64(hist.value_at_quantile(0.95)),
+        p99: ru.latency_from_u64(hist.value_at_quantile(0.99)),
+        max: ru.latency_from_u64(hist.max()),
     }
 }

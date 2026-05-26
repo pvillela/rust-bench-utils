@@ -128,18 +128,17 @@ pub fn make_status<W: Write>(
 #[cfg(feature = "_bench")]
 #[cfg(feature = "busy_work")]
 mod validate {
-    use crate::{BenchCfg, BusyWork, RunLength, bench_run_with_status_arg_cfg};
-    use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
+    use crate::{
+        BenchCfg, BusyWork, RunLength, bench_run_with_status_arg_cfg, rel_approx_eq_dur,
+        test_support::AbsRelDiffDur,
+    };
     use std::time::Duration;
 
     const BENCH_TIME: Duration = Duration::from_millis(500);
 
     fn run_bench(warmup_millis: u64, target_latency: Duration, epsilon: f64) {
         let name = format!("sleep_{}_micros", target_latency.as_micros());
-
-        let reporting_unit = BenchCfg::default().reporting_unit();
-        let target_median = reporting_unit.latency_as_f64(target_latency);
-        let exec_count = (reporting_unit.latency_as_f64(BENCH_TIME) / target_median) as usize;
+        let exec_count = (BENCH_TIME.as_secs_f64() / target_latency.as_secs_f64()) as usize;
 
         println!("validate_bench_run: {name}");
 
@@ -150,15 +149,15 @@ mod validate {
             RunLength::Count(exec_count),
         );
 
+        let out_median = out.median();
         println!(
-            "target_median={target_median}, out.median()={}, rel_diff={}",
-            out.median(),
-            target_median.abs_rel_diff(out.median())
+            "target_median={target_latency:?}, out.median()={out_median:?}, rel_diff={}",
+            target_latency.abs_rel_diff(out_median)
         );
         println!("{:?}", out.summary());
         println!();
 
-        rel_approx_eq!(target_median, out.median(), epsilon);
+        rel_approx_eq_dur!(target_latency, out_median, epsilon);
     }
 
     #[test]
@@ -200,8 +199,7 @@ mod status {
         let cfg = BenchCfg::default()
             .with_warmup_millis(warmup_millis)
             .with_status_millis(status_millis)
-            .with_recording_unit(LatencyUnit::Nano)
-            .with_reporting_unit(LatencyUnit::Micro);
+            .with_recording_unit(LatencyUnit::Nano);
 
         let mut w = StringWriter::new();
         let mut status = DefaultStatus::new(
@@ -418,7 +416,6 @@ mod simple_tests {
             .with_warmup_millis(0)
             .with_status_millis(1)
             .with_recording_unit(LatencyUnit::Nano)
-            .with_reporting_unit(LatencyUnit::Nano)
     }
 
     #[test]

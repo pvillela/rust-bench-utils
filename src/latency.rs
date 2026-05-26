@@ -20,19 +20,6 @@ pub enum LatencyUnit {
 }
 
 impl LatencyUnit {
-    const fn nano_equivalence(&self) -> f64 {
-        match self {
-            Self::Milli => 1_000_000.,
-            Self::Micro => 1_000.,
-            Self::Nano => 1.,
-        }
-    }
-
-    /// Factor for conversion from `self` to `reporting_unit`.
-    pub const fn conversion_factor(&self, reporting_unit: Self) -> f64 {
-        self.nano_equivalence() / reporting_unit.nano_equivalence()
-    }
-
     /// Converts a `latency` [`Duration`] to a `u64` value according to the unit `self`.
     #[inline(always)]
     pub fn latency_as_u64(&self, latency: Duration) -> u64 {
@@ -117,8 +104,8 @@ pub fn executions_per_milli(budget_millis: u64, mut f: impl FnMut()) -> f64 {
 /// cargo test -r --package bench_utils --lib --all-features -- latency::test --nocapture
 mod test {
     use super::*;
-    use crate::{BenchCfg, bench_support::validate_latency_overhead};
-    use basic_stats::{approx_eq, rel_approx_eq};
+    use crate::{BenchCfg, bench_support::validate_latency_overhead, rel_approx_eq_dur};
+    use basic_stats::approx_eq;
 
     // SEE ALSO: tests for `fake_work` and `busy_work`.
 
@@ -127,10 +114,10 @@ mod test {
         const EPSILON: f64 = 0.05;
 
         struct Medians {
-            solo_median_20: f64,
-            solo_median_100: f64,
-            group_median_20: f64,
-            group_median_100: f64,
+            solo_median_20: Duration,
+            solo_median_100: Duration,
+            group_median_20: Duration,
+            group_median_100: Duration,
         }
 
         let start = Instant::now();
@@ -162,62 +149,8 @@ mod test {
 
         println!("elapsed time: {} millis", start.elapsed().as_millis());
 
-        rel_approx_eq!(solo_median_20 * 20., group_median_20, EPSILON);
-        rel_approx_eq!(solo_median_100 * 100., group_median_100, EPSILON);
-    }
-
-    #[test]
-    fn test_conversion_factor() {
-        // Identity factors
-        approx_eq!(
-            1.0,
-            LatencyUnit::Milli.conversion_factor(LatencyUnit::Milli),
-            1e-15
-        );
-        approx_eq!(
-            1.0,
-            LatencyUnit::Micro.conversion_factor(LatencyUnit::Micro),
-            1e-15
-        );
-        approx_eq!(
-            1.0,
-            LatencyUnit::Nano.conversion_factor(LatencyUnit::Nano),
-            1e-15
-        );
-
-        // Convert from larger to smaller: Nano -> Micro -> Milli
-        approx_eq!(
-            0.001,
-            LatencyUnit::Nano.conversion_factor(LatencyUnit::Micro),
-            1e-15
-        );
-        approx_eq!(
-            0.000_001,
-            LatencyUnit::Nano.conversion_factor(LatencyUnit::Milli),
-            1e-15
-        );
-        approx_eq!(
-            0.001,
-            LatencyUnit::Micro.conversion_factor(LatencyUnit::Milli),
-            1e-15
-        );
-
-        // Convert from smaller to larger: Milli -> Micro -> Nano
-        approx_eq!(
-            1000.0,
-            LatencyUnit::Micro.conversion_factor(LatencyUnit::Nano),
-            1e-12
-        );
-        approx_eq!(
-            1_000_000.0,
-            LatencyUnit::Milli.conversion_factor(LatencyUnit::Nano),
-            1e-9
-        );
-        approx_eq!(
-            1000.0,
-            LatencyUnit::Milli.conversion_factor(LatencyUnit::Micro),
-            1e-12
-        );
+        rel_approx_eq_dur!(solo_median_20 * 20, group_median_20, EPSILON);
+        rel_approx_eq_dur!(solo_median_100 * 100, group_median_100, EPSILON);
     }
 
     #[test]

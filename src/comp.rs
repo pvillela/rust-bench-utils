@@ -27,18 +27,14 @@ use basic_stats::wilcoxon::RankSum;
 pub struct Comp<'a>(pub(crate) &'a BenchOut, pub(crate) &'a BenchOut);
 
 impl<'a> Comp<'a> {
+    /// Constructs a [`Comp`] from [`BenchOut`] references.
+    ///
     /// # Panics
-    /// Panics in any of the following conditions:
-    /// - `f1_out` and `f2_out` don't have the same `recording_unit`.
-    /// - `f1_out` and `f2_out` don't have the same `reporting_unit`.
+    /// Panics if `f1_out` and `f2_out` don't have the same `recording_unit`.
     pub fn new(f1_out: &'a BenchOut, f2_out: &'a BenchOut) -> Self {
         assert_eq!(
             f1_out.recording_unit, f2_out.recording_unit,
             "`f1_out.recording_unit` and `f2_out.recording_unit` must be the same",
-        );
-        assert_eq!(
-            f1_out.reporting_unit, f2_out.reporting_unit,
-            "`f1_out.reporting_unit` and `f2_out.reporting_unit` must be the same",
         );
         Self(f1_out, f2_out)
     }
@@ -58,23 +54,25 @@ impl<'a> Comp<'a> {
         self.1
     }
 
-    /// Difference between the median of `f1`'s latencies and the median of `f2`'s latencies.
+    /// Difference between the median of `f1`'s latencies and the median of `f2`'s latencies,
+    /// in seconds.
     pub fn diff_medians_f1_f2(&self) -> f64 {
-        self.0.median() - self.1.median()
+        self.0.median().as_secs_f64() - self.1.median().as_secs_f64()
     }
 
     /// Ratio of the median of `f1`'s latencies to the median of `f2`'s latencies.
     pub fn ratio_medians_f1_f2(&self) -> f64 {
-        self.0.median() / self.1.median()
+        self.0.median().as_secs_f64() / self.1.median().as_secs_f64()
     }
 
-    /// The difference between the mean of `f1`'s latencies and the mean of `f2`'s latencies.
+    /// The difference between the mean of `f1`'s latencies and the mean of `f2`'s latencies,
+    /// in seconds.
     ///
     /// # Panics
     ///
     /// Panics if `self.panic_on_error() == true` **and** `self.out_f1().n() == 0` or `self.out_f2().n() == 0`.
     pub fn mean_diff_f1_f2(&self) -> f64 {
-        self.0.mean() - self.1.mean()
+        self.0.mean().as_secs_f64() - self.1.mean().as_secs_f64()
     }
 
     /// The difference between the mean of the natural logarithms of `f1`'s latencies and
@@ -104,15 +102,6 @@ impl<'a> Comp<'a> {
     fn moments_ln_f2(&self) -> SampleMoments {
         SampleMoments::new(self.1.n_ln, self.1.sum_ln, self.1.sum2_ln)
     }
-
-    // ==============
-    // IMPORTANT NOTE
-    // ==============
-    // No need to adjust moments for recording and reporting units for the statistics below because
-    // they only depend on the difference of means and the stdevs, all of which are invariant when
-    // the conversion factor is the same for both samples. The observations and means of lns are both
-    // shifted by the same value, i.e., ln(confersion_factor), and the stdevs are not impacted by the
-    // shift of values and means.
 
     /// Welch's t statistic for the hypothesis that
     /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm), or equivalently,
@@ -401,14 +390,14 @@ mod test {
     }
 
     #[test]
-    fn test_comp_new_panics_on_reporting_unit_mismatch() {
+    fn test_comp_new_panics_on_recording_unit_mismatch() {
         let result = {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let cfg1 = BenchCfg::default().with_reporting_unit(LatencyUnit::Nano);
+                let cfg1 = BenchCfg::default().with_recording_unit(LatencyUnit::Nano);
                 let out1 = lognormal_out(&cfg1, 8., *LO_STDEV_LN, 5);
 
-                let cfg2 = cfg1.with_reporting_unit(LatencyUnit::Micro);
-                let out2 = lognormal_out(&&cfg2, 8., *LO_STDEV_LN, 5);
+                let cfg2 = cfg1.with_recording_unit(LatencyUnit::Micro);
+                let out2 = lognormal_out(&cfg2, 8., *LO_STDEV_LN, 5);
 
                 Comp::new(&out1, &out2);
             }))
@@ -416,7 +405,7 @@ mod test {
 
         assert!(
             result.is_err(),
-            "expected Comp::new to panic on reporting unit mismatch"
+            "expected Comp::new to panic on recording unit mismatch"
         );
     }
 
@@ -479,9 +468,15 @@ mod test {
             assert!(are_eq_bench_out(o1, f1_out));
             assert!(are_eq_bench_out(o2, f2_out));
 
-            assert_eq!(f1_out.median() - f2_out.median(), comp.diff_medians_f1_f2());
+            assert_eq!(
+                f1_out.median().as_secs_f64() - f2_out.median().as_secs_f64(),
+                comp.diff_medians_f1_f2()
+            );
             approx_eq!(ratio_medians, comp.ratio_medians_f1_f2(), EPSILON);
-            assert_eq!(f1_out.mean() - f2_out.mean(), comp.mean_diff_f1_f2());
+            assert_eq!(
+                f1_out.mean().as_secs_f64() - f2_out.mean().as_secs_f64(),
+                comp.mean_diff_f1_f2()
+            );
             assert_eq!(
                 f1_out.mean_ln() - f2_out.mean_ln(),
                 comp.mean_diff_ln_f1_f2()

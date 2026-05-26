@@ -65,7 +65,6 @@ impl RunLength {
 /// Encapsulates the following data:
 /// - `warmup_millis`: warm-up duration in milliseconds
 /// - `recording_unit`: time unit for latency recording
-/// - `reporting_unit`: time unit for latency reporting
 /// - `sigfig`: as data is stored in an [HDR (high dynamic range) histogram](https://docs.rs/hdrhistogram/latest/hdrhistogram/index.html),
 ///   this is the number of significant decimal digits (of `recording_unit`) to which the histogram will maintain
 ///   value resolution and separation
@@ -77,7 +76,6 @@ impl RunLength {
 pub struct BenchCfg {
     warmup_millis: u64,
     recording_unit: LatencyUnit,
-    reporting_unit: LatencyUnit,
     sigfig: u8,
     status_millis: u64,
     panic_on_error: bool,
@@ -88,8 +86,6 @@ impl BenchCfg {
     pub const DEFAULT_WARMUP_MILLIS: u64 = 3000;
     /// Default unit for recording latencies.
     pub const DEFAULT_RECORDING_UNIT: LatencyUnit = LatencyUnit::Nano;
-    /// Default unit for reporting latencies.
-    pub const DEFAULT_REPORTING_UNIT: LatencyUnit = LatencyUnit::Micro;
     /// Default number of significant decimal digits for the HDR histogram.
     pub const DEFAULT_SIGFIG: u8 = 3;
     /// Default status reporting interval in milliseconds.
@@ -102,7 +98,6 @@ impl BenchCfg {
         Self {
             warmup_millis: Self::DEFAULT_WARMUP_MILLIS,
             recording_unit: Self::DEFAULT_RECORDING_UNIT,
-            reporting_unit: Self::DEFAULT_REPORTING_UNIT,
             sigfig: Self::DEFAULT_SIGFIG,
             status_millis: Self::DEFAULT_STATUS_MILLIS,
             panic_on_error: Self::DEFAULT_PANIC_ON_ERROR,
@@ -117,11 +112,6 @@ impl BenchCfg {
     /// Unit in which latencies are recorded.
     pub fn recording_unit(&self) -> LatencyUnit {
         self.recording_unit
-    }
-
-    /// Unit in which benchmark results are reported.
-    pub fn reporting_unit(&self) -> LatencyUnit {
-        self.reporting_unit
     }
 
     /// Number of significant figures used for the HDR histogram.
@@ -155,12 +145,6 @@ impl BenchCfg {
         self
     }
 
-    /// Sets the reporting unit.
-    pub fn with_reporting_unit(mut self, reporting_unit: LatencyUnit) -> Self {
-        self.reporting_unit = reporting_unit;
-        self
-    }
-
     /// Sets the number of significant figures for the HDR histogram.
     pub fn with_sigfig(mut self, sigfig: u8) -> Self {
         self.sigfig = sigfig;
@@ -179,11 +163,6 @@ impl BenchCfg {
     pub fn with_panic_on_error(mut self, panic_on_error: bool) -> Self {
         self.panic_on_error = panic_on_error;
         self
-    }
-
-    /// Factor to convert from the recording unit to the reporting unit.
-    pub fn conversion_factor(&self) -> f64 {
-        self.recording_unit.conversion_factor(self.reporting_unit)
     }
 
     /// Estimates how many executions of `f` fit in one millisecond, for status-reporting estimates.
@@ -231,7 +210,6 @@ mod test {
         println!("cfg={cfg:?}");
         assert_eq!(cfg.warmup_millis(), BenchCfg::DEFAULT_WARMUP_MILLIS);
         assert_eq!(cfg.recording_unit(), BenchCfg::DEFAULT_RECORDING_UNIT);
-        assert_eq!(cfg.reporting_unit(), BenchCfg::DEFAULT_REPORTING_UNIT);
         assert_eq!(cfg.sigfig(), BenchCfg::DEFAULT_SIGFIG);
         assert_eq!(cfg.status_millis(), BenchCfg::DEFAULT_STATUS_MILLIS);
     }
@@ -241,7 +219,6 @@ mod test {
         let cfg = BenchCfg::default()
             .with_recording_unit(LatencyUnit::Micro)
             .with_warmup_millis(100)
-            .with_reporting_unit(LatencyUnit::Milli)
             .with_sigfig(5)
             .with_status_millis(200)
             .with_panic_on_error(true);
@@ -249,7 +226,6 @@ mod test {
 
         assert_eq!(cfg.warmup_millis(), 100);
         assert_eq!(cfg.recording_unit(), LatencyUnit::Micro);
-        assert_eq!(cfg.reporting_unit(), LatencyUnit::Milli);
         assert_eq!(cfg.sigfig(), 5);
         assert_eq!(200, cfg.status_millis);
         assert_eq!(true, cfg.panic_on_error);
