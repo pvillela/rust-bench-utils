@@ -4,16 +4,15 @@ use crate::{
     BenchCfg, BenchOut, RunLength, Status,
     multi::{self},
 };
-use std::io::Write;
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
 /// *optionally* outputs information about the benchmark and its execution status.
-/// Runs with the default [`BenchCfg`].
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
 /// `warmup_millis` milliseconds.
 ///
 /// Arguments:
+/// - `cfg` - bench configuration used to run the benchmark.
 /// - `f` - benchmark target.
 /// - `warmup_millis` - duration (in milliseconds) of warm-up execution.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
@@ -95,33 +94,6 @@ pub fn bench_run_with_status_arg_cfg(
     exec_run_length: RunLength,
 ) -> BenchOut {
     multi::bench_run_with_status_arg_cfg(cfg, &mut [f; 1], exec_run_length).into()
-}
-
-#[doc(hidden)]
-/// Returns a status reporting function that uses an arbitrary [`Write`], but not useful unless the writer
-/// can process backspace characters ("\u{8}") properly like stdeout and stderr do. See `test_support` module
-///
-/// Used by [`bench_run_with_status_arg_cfg`] and crate `bench_diff`, as well as for testing of status reporting.
-pub fn make_status<W: Write>(
-    preamble: &'static str,
-    millis: u64,
-    count: usize,
-) -> impl FnMut(usize, &mut W) {
-    let mut status_len: usize = 0;
-
-    move |i: usize, w: &mut W| {
-        if status_len == 0 {
-            write!(w, "{preamble} for (approx.) {millis} millis: ")
-                .expect("unexpected error writing to `Write` object `w`");
-            w.flush().expect("unexpected I/O error");
-        }
-        write!(w, "{}", "\u{8}".repeat(status_len))
-            .expect("unexpected error writing to `Write` object `w`");
-        let status = format!("{i} of (approx.) {count} executions.");
-        status_len = status.len();
-        write!(w, "{status}").expect("unexpected error writing to `Write` object `w`");
-        w.flush().expect("unexpected I/O error");
-    }
 }
 
 #[cfg(test)]

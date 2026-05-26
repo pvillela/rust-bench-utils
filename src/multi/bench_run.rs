@@ -64,7 +64,7 @@ impl<const K: usize> BenchState<K> {
     }
 }
 
-/// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
+/// Repeatedly executes closures `fs`, collects the resulting latency data in a [`BenchOut`] object, and
 /// *optionally* outputs information about the benchmark and its execution status.
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
@@ -121,7 +121,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     state
 }
 
-/// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
+/// Repeatedly executes closures `fs` and collects the resulting latency data in a [`BenchOut`] object.
 /// Runs with the default [`BenchCfg`].
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
@@ -140,7 +140,7 @@ pub fn bench_run<const K: usize>(
     bench_run_arg_cfg(&cfg, fs, exec_run_length)
 }
 
-/// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
+/// Repeatedly executes closures `fs` and collects the resulting latency data in a [`BenchOut`] object.
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
 /// [`BenchCfg::warmup_millis`] milliseconds.
@@ -159,7 +159,7 @@ pub fn bench_run_arg_cfg<const K: usize>(
     bench_run_x(cfg, fs, exec_run_length, &mut NoStatus)
 }
 
-/// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
+/// Repeatedly executes closures `fs`, collects the resulting latency data in a [`BenchOut`] object, and
 /// outputs information about the benchmark and its execution status.
 /// Runs with the default [`BenchCfg`].
 ///
@@ -179,7 +179,7 @@ pub fn bench_run_with_status<const K: usize>(
     bench_run_with_status_arg_cfg(&cfg, fs, exec_run_length)
 }
 
-/// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
+/// Repeatedly executes closures `fs`, collects the resulting latency data in a [`BenchOut`] object, and
 /// outputs information about the benchmark and its execution status.
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
@@ -260,7 +260,7 @@ mod validate {
 
 #[cfg(test)]
 #[cfg(feature = "_bench")]
-// cargo test --package bench_utils --lib --all-features -- multi::bench_run::status --nocapture
+// cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::status --nocapture
 mod status {
     use super::*;
     use crate::{BusyWork, DefaultStatus, LatencyUnit, RunLength, test_support::StringWriter};
@@ -275,15 +275,27 @@ mod status {
         target_latency: Duration,
         epsilon: f64,
     ) {
+        // Scale certain arguments to align with status tests in non-multi `bench_run`,
+        // because we have two functions here.
+        let warmup_millis2 = warmup_millis * 2;
+        let exec_run_length2 = match exec_run_length {
+            RunLength::Count(_) => exec_run_length,
+            RunLength::Duration(duration) => RunLength::Duration(duration * 2),
+            RunLength::CountWithTimeout(count, duration) => {
+                RunLength::CountWithTimeout(count, duration * 2)
+            }
+        };
+        let status_millis2 = status_millis * 2;
+
         println!(
-            "\n***** Testing: warmup_millis={warmup_millis}, exec_run_length={exec_run_length:?}, status_millis={status_millis}, target_latency={target_latency:?}, epsilon={epsilon}"
+            "\n***** Testing: warmup_millis={warmup_millis2}, exec_run_length={exec_run_length2:?}, status_millis={status_millis2}, target_latency={target_latency:?}, epsilon={epsilon}"
         );
 
-        let warmup_run_length = RunLength::Duration(Duration::from_millis(warmup_millis));
+        let warmup_run_length = RunLength::Duration(Duration::from_millis(warmup_millis2));
 
         let cfg = BenchCfg::default()
-            .with_warmup_millis(warmup_millis)
-            .with_status_millis(status_millis)
+            .with_warmup_millis(warmup_millis2)
+            .with_status_millis(status_millis2)
             .with_recording_unit(LatencyUnit::Nano);
 
         let mut w = StringWriter::new();
@@ -292,11 +304,16 @@ mod status {
             "Warming up".to_owned(),
             "\nExecuting bench_run".to_owned(),
         );
-        let fs = &mut array::from_fn::<_, 2, _>(|_| BusyWork::new(target_latency / 2).fun());
+        let fs = &mut array::from_fn::<_, 2, _>(|_| BusyWork::new(target_latency).fun());
 
-        let execs_per_milli = cfg.execs_per_milli(|| fs.iter_mut().for_each(|f| f()));
+        // let execs_per_milli = cfg.execs_per_milli(|| fs.iter_mut().for_each(|f| f()));
+        let execs_per_milli = cfg.execs_per_milli(|| {
+            for f in fs.iter_mut() {
+                f();
+            }
+        });
 
-        let out = bench_run_x(&cfg, fs, exec_run_length, &mut status);
+        let out = bench_run_x(&cfg, fs, exec_run_length2, &mut status);
 
         let status_str = w.as_str().expect("StringWriter doesn't contain string");
         println!("** {status_str}");
@@ -318,7 +335,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
         println!();
 
         {
-            assert_eq!(caps[1], warmup_millis.to_string());
+            assert_eq!(caps[1], warmup_millis2.to_string());
             let warmup_last = usize::from_str_radix(&caps[2], 10).unwrap();
             let warmup_est_count = usize::from_str_radix(&caps[3], 10).unwrap();
             rel_approx_eq!(
@@ -332,7 +349,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
         {
             rel_approx_eq!(
                 usize::from_str_radix(&caps[4], 10).unwrap() as f64,
-                exec_run_length
+                exec_run_length2
                     .estimated_duration(execs_per_milli)
                     .as_millis() as f64,
                 epsilon
@@ -341,7 +358,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let exec_est_count = usize::from_str_radix(&caps[6], 10).unwrap();
             rel_approx_eq!(
                 exec_est_count as f64,
-                exec_run_length.estimated_count(execs_per_milli) as f64,
+                exec_run_length2.estimated_count(execs_per_milli) as f64,
                 epsilon
             );
             rel_approx_eq!(exec_last as f64, exec_est_count as f64, epsilon);
