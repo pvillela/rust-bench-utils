@@ -1,8 +1,9 @@
 //! Implements functions to collect latency statistics for a closure.
 
 use crate::{
-    BenchCfg, BenchOut, RunLength, Status,
+    BenchCfg, BenchOut, RunLength,
     multi::{self},
+    status::Status,
 };
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -150,7 +151,9 @@ mod validate {
 // cargo test -r --package bench_utils --lib --all-features -- bench_run::status --nocapture
 mod status {
     use super::*;
-    use crate::{BusyWork, DefaultStatus, LatencyUnit, RunLength, test_support::StringWriter};
+    use crate::{
+        BusyWork, LatencyUnit, RunLength, status::DefaultStatus, test_support::StringWriter,
+    };
     use basic_stats::rel_approx_eq;
     use regex::Regex;
     use std::time::Duration;

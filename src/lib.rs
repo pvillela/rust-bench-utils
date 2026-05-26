@@ -65,7 +65,6 @@ mod bench_out;
 mod comp;
 mod fake_work;
 mod latency;
-mod status;
 mod summary_stats;
 
 pub use bench_cfg::*;
@@ -73,13 +72,13 @@ pub use bench_out::*;
 pub use comp::*;
 pub use fake_work::*;
 pub use latency::*;
-pub use status::*;
 pub use summary_stats::*;
 
 mod bench_run;
 pub use bench_run::*;
 
 pub mod multi;
+pub mod status;
 
 #[cfg(feature = "busy_work")]
 mod busy_work;

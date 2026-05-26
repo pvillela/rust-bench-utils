@@ -1,3 +1,5 @@
+//! Trait and types that support default and custom progress status reporting for benchmarks.
+
 use std::{io::Write, time::Duration};
 
 /// Provides optional status-reporting closures for warm-up and execution phases.
