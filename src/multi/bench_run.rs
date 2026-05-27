@@ -89,12 +89,12 @@ impl<const K: usize> BenchState<K> {
 /// - `execs_per_milli` - estimate of how many executions of `f` fit in one millisecond.
 pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     cfg: &BenchCfg,
-    latency_src: &mut impl Iterator<Item = [Duration; K]>,
+    mut latency_src: impl Iterator<Item = [Duration; K]>,
     exec_run_length: RunLength,
     s: &mut S,
 ) -> BenchOut<K> {
     let mut state = BenchOut::new(cfg);
-    let execs_per_milli = cfg.latency_src_execs_per_milli(latency_src);
+    let execs_per_milli = cfg.latency_src_execs_per_milli(&mut latency_src);
     let status_freq = cfg.status_freq(execs_per_milli);
 
     let warmup_run_length = RunLength::Duration(Duration::from_millis(cfg.warmup_millis()));
@@ -106,7 +106,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     // Warm-up.
     let mut warmup_status = S::part_apply(s.warmup_status(), warmup_est_dur, warmup_est_count);
     state.execute(
-        latency_src,
+        &mut latency_src,
         warmup_run_length,
         status_freq,
         warmup_est_count,
@@ -118,7 +118,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     // Execute.
     let mut exec_status = S::part_apply(s.exec_status(), exec_est_dur, exec_est_count);
     state.execute(
-        latency_src,
+        &mut latency_src,
         exec_run_length,
         status_freq,
         exec_est_count,
@@ -140,7 +140,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run<const K: usize>(
-    latency_src: &mut impl Iterator<Item = [Duration; K]>,
+    latency_src: impl Iterator<Item = [Duration; K]>,
     exec_run_length: RunLength,
 ) -> BenchOut<K> {
     let cfg = BenchCfg::default();
@@ -160,7 +160,7 @@ pub fn bench_run<const K: usize>(
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_arg_cfg<const K: usize>(
     cfg: &BenchCfg,
-    latency_src: &mut impl Iterator<Item = [Duration; K]>,
+    latency_src: impl Iterator<Item = [Duration; K]>,
     exec_run_length: RunLength,
 ) -> BenchOut<K> {
     bench_run_x(cfg, latency_src, exec_run_length, &mut NoStatus)
@@ -179,7 +179,7 @@ pub fn bench_run_arg_cfg<const K: usize>(
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_with_status<const K: usize>(
-    latency_src: &mut impl Iterator<Item = [Duration; K]>,
+    latency_src: impl Iterator<Item = [Duration; K]>,
     exec_run_length: RunLength,
 ) -> BenchOut<K> {
     let cfg = BenchCfg::default();
@@ -200,7 +200,7 @@ pub fn bench_run_with_status<const K: usize>(
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_with_status_arg_cfg<const K: usize>(
     cfg: &BenchCfg,
-    latency_src: &mut impl Iterator<Item = [Duration; K]>,
+    latency_src: impl Iterator<Item = [Duration; K]>,
     exec_run_length: RunLength,
 ) -> BenchOut<K> {
     let mut w = stderr();
@@ -218,50 +218,219 @@ pub fn bench_run_with_status_arg_cfg<const K: usize>(
 
 #[cfg(test)]
 #[cfg(feature = "_bench_long_test")]
+// cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::validate --nocapture --test-threads=1
 mod validate {
     use crate::{
-        BenchCfg, BusyWork, RunLength, bench_run_with_status_arg_cfg, rel_approx_eq_dur,
+        BenchCfg, BusyWork, RunLength, latency,
+        multi::{BenchOut, LatencySrc2},
+        rel_approx_eq_dur,
         test_support::AbsRelDiffDur,
     };
     use std::time::Duration;
 
-    const BENCH_TIME: Duration = Duration::from_millis(500);
+    fn run<R, Src, F0, F1>(
+        runner: R,
+        latency_src: Src,
+        f0: F0,
+        f1: F1,
+        warmup_millis: u64,
+        status_millis: u64,
+        bench_time: Duration,
+        target_latency: Duration,
+        epsilon: f64,
+    ) where
+        F0: FnMut(),
+        F1: FnMut(),
+        Src: Iterator<Item = [Duration; 2]>,
+        R: Fn(&BenchCfg, Src, RunLength) -> BenchOut<2>,
+    {
+        let warmup_millis2 = warmup_millis * 2;
+        let bench_time2 = bench_time * 2;
+        let status_millis2 = status_millis * 2;
+        let exec_count = (bench_time2.as_secs_f64() / target_latency.as_secs_f64()) as usize;
 
-    fn run_bench(warmup_millis: u64, target_latency: Duration, epsilon: f64) {
-        let name = format!("sleep_{}_micros", target_latency.as_micros());
-        let exec_count = (BENCH_TIME.as_secs_f64() / target_latency.as_secs_f64()) as usize;
-
+        let name = format!(
+            "target_latency={target_latency:?}, warmup={warmup_millis2}, bench_time={bench_time2:?}"
+        );
         println!("validate_bench_run: {name}");
 
-        let cfg = BenchCfg::default().with_warmup_millis(warmup_millis);
-        let out = bench_run_with_status_arg_cfg(
-            &cfg,
-            BusyWork::new(target_latency).fun(),
-            RunLength::Count(exec_count),
-        );
-        println!();
+        let mut fs = (f0, f1);
 
-        let out_median = out.median();
+        let cfg = BenchCfg::default()
+            .with_warmup_millis(warmup_millis2)
+            .with_status_millis(status_millis2);
+        let out = runner(&cfg, latency_src, RunLength::Count(exec_count));
+
+        let raw_latencies = [
+            latency(|| {
+                for _ in 0..exec_count {
+                    fs.0();
+                }
+            }),
+            latency(|| {
+                for _ in 0..exec_count {
+                    fs.1();
+                }
+            }),
+        ];
+        let raw_means = raw_latencies
+            .iter()
+            .map(|lat| *lat / exec_count as u32)
+            .collect::<Vec<_>>();
+
+        let aggregate_raw_mean = raw_latencies.iter().sum::<Duration>() / exec_count as u32;
+        let aggregate_out_mean = out[0].mean() + out[1].mean();
+        println!();
         println!(
-            "target_median={target_latency:?}, out.median()={out_median:?}, rel_diff={}",
-            target_latency.abs_rel_diff(out_median)
+            "aggregate_raw_mean={aggregate_raw_mean:?}, aggregate_out_mean={aggregate_out_mean:?}, rel_diff={}",
+            aggregate_raw_mean.abs_rel_diff(aggregate_out_mean)
         );
-        println!("{:?}", out.summary());
-        println!();
 
-        rel_approx_eq_dur!(target_latency, out_median, epsilon);
+        rel_approx_eq_dur!(
+            aggregate_raw_mean,
+            aggregate_out_mean,
+            epsilon / 2.0f64.sqrt()
+        );
+
+        for i in 0..2 {
+            let out_mean = out[i].mean();
+            let raw_mean = raw_means[i];
+
+            println!();
+            println!(
+                "target_mean={target_latency:?}, out[{i}].mean()={out_mean:?}, rel_diff={}",
+                target_latency.abs_rel_diff(out_mean)
+            );
+
+            println!(
+                "target_mean={target_latency:?}, raw_mean()={raw_mean:?}, rel_diff={}",
+                target_latency.abs_rel_diff(raw_mean)
+            );
+
+            println!(
+                "raw_mean={raw_mean:?}, out[{i}].mean()={out_mean:?}, rel_diff={}",
+                raw_mean.abs_rel_diff(out_mean)
+            );
+
+            rel_approx_eq_dur!(raw_mean, out_mean, epsilon);
+        }
     }
 
-    #[test]
-    fn test_millis() {
-        const EPSILON: f64 = 0.05;
-        run_bench(1200, Duration::from_millis(60), EPSILON);
+    fn fs(target_latency: Duration) -> (impl Fn() + Clone, impl Fn() + Clone) {
+        let latency_delta = target_latency / 10;
+
+        (
+            move || {
+                BusyWork::new(target_latency - latency_delta).fun()();
+                BusyWork::new(latency_delta).fun()();
+            },
+            BusyWork::new(target_latency).fun(),
+        )
     }
 
-    #[test]
-    fn test_micros() {
-        const EPSILON: f64 = 0.05;
-        run_bench(100, Duration::from_micros(60), EPSILON);
+    // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::validate::with_status --nocapture --test-threads=1
+    mod with_status {
+        use super::*;
+        use crate::multi::bench_run::bench_run_with_status_arg_cfg;
+
+        fn run_bench(
+            warmup_millis: u64,
+            status_millis: u64,
+            bench_time: Duration,
+            target_latency: Duration,
+            epsilon: f64,
+        ) {
+            let (f0, f1) = fs(target_latency);
+            let latency_src = LatencySrc2(f0.clone(), f1.clone());
+            let runner = bench_run_with_status_arg_cfg;
+
+            run(
+                runner,
+                latency_src,
+                f0,
+                f1,
+                warmup_millis,
+                status_millis,
+                bench_time,
+                target_latency,
+                epsilon,
+            );
+        }
+
+        #[test]
+        fn test_millis() {
+            const EPSILON: f64 = 0.02;
+            run_bench(
+                1000,
+                100,
+                Duration::from_millis(2000),
+                Duration::from_millis(10),
+                EPSILON,
+            );
+        }
+
+        #[test]
+        fn test_micros() {
+            const EPSILON: f64 = 0.02;
+            run_bench(
+                100,
+                10,
+                Duration::from_millis(200),
+                Duration::from_micros(50),
+                EPSILON,
+            );
+        }
+    }
+
+    // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::validate::without_status --nocapture --test-threads=1
+    mod without_status {
+        use super::*;
+        use crate::multi::bench_run::bench_run_arg_cfg;
+
+        fn run_bench_without_status(
+            warmup_millis: u64,
+            bench_time: Duration,
+            target_latency: Duration,
+            epsilon: f64,
+        ) {
+            let (f0, f1) = fs(target_latency);
+            let latency_src = LatencySrc2(f0.clone(), f1.clone());
+            let runner = bench_run_arg_cfg;
+
+            run(
+                runner,
+                latency_src,
+                f0,
+                f1,
+                warmup_millis,
+                0,
+                bench_time,
+                target_latency,
+                epsilon,
+            );
+        }
+
+        #[test]
+        fn test_millis() {
+            const EPSILON: f64 = 0.02;
+            run_bench_without_status(
+                1000,
+                Duration::from_millis(2000),
+                Duration::from_millis(10),
+                EPSILON,
+            );
+        }
+
+        #[test]
+        fn test_micros() {
+            const EPSILON: f64 = 0.02;
+            run_bench_without_status(
+                100,
+                Duration::from_millis(200),
+                Duration::from_micros(50),
+                EPSILON,
+            );
+        }
     }
 }
 

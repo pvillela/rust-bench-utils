@@ -69,7 +69,7 @@ impl BusyWork {
     ///
     /// The documentation for [`BusyWork`] and its constructor methods describes how to control the closure's
     /// latency.
-    pub fn fun(&self) -> impl Fn() + use<> {
+    pub fn fun(&self) -> impl Fn() + Clone + use<> {
         let effort = self.effort;
         move || Self::work(effort)
     }
