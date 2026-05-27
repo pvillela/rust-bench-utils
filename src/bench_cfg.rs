@@ -165,19 +165,57 @@ impl BenchCfg {
         self
     }
 
-    /// Estimates how many executions of `f` fit in one millisecond, for status-reporting estimates.
-    pub fn execs_per_milli(&self, f: impl FnMut()) -> f64 {
-        latency::executions_per_milli(self.status_millis, f)
+    fn execs_per_milli_budget(&self, bench_run_length: RunLength) -> RunLength {
+        const WARMUP_DIVISOR: u32 = 3;
+        const BENCH_DIVISOR: u32 = 30;
+
+        fn median<T: Ord + Copy>(mut arr: [T; 3]) -> T {
+            arr.sort();
+            arr[1]
+        }
+
+        let warmup_run_length = RunLength::Duration(Duration::from_millis(self.warmup_millis));
+        let status_run_length = RunLength::Duration(Duration::from_millis(self.status_millis));
+
+        let (warmup_count, warmup_dur) = warmup_run_length.get_exec_count_and_duration();
+        let (status_count, status_dur) = status_run_length.get_exec_count_and_duration();
+        let (bench_count, bench_dur) = bench_run_length.get_exec_count_and_duration();
+
+        let med_count = median([
+            warmup_count / WARMUP_DIVISOR as usize,
+            bench_count / BENCH_DIVISOR as usize,
+            status_count,
+        ]);
+
+        let med_dur = median([
+            warmup_dur / WARMUP_DIVISOR,
+            bench_dur / BENCH_DIVISOR,
+            status_dur,
+        ]);
+
+        RunLength::CountWithTimeout(med_count, med_dur)
     }
 
-    pub fn latency_src_execs_per_milli<const K: usize>(
+    /// Estimates how many executions of `f` fit in one millisecond.
+    ///
+    /// Used in status reporting as well as in execution loop termination logic (to ensure adherence to the
+    /// run length specified when the benchmark is executed).
+    pub fn execs_per_milli(&self, f: impl FnMut(), exec_run_length: RunLength) -> f64 {
+        let budget = self.execs_per_milli_budget(exec_run_length);
+        latency::fn_executions_per_milli(f, budget)
+    }
+
+    /// Estimates how many iterations of `src` can be done in one millisecond.
+    ///
+    /// Used in status reporting as well as in execution loop termination logic (to ensure adherence to the
+    /// run length specified when the benchmark is executed).
+    pub fn lat_src_execs_per_milli<const K: usize>(
         &self,
         src: &mut impl Iterator<Item = [Duration; K]>,
+        exec_run_length: RunLength,
     ) -> f64 {
-        latency::latency_src_executions_per_milli(
-            self.status_millis,
-            src.map(|arr| arr.iter().sum()),
-        )
+        let budget = self.execs_per_milli_budget(exec_run_length);
+        latency::lat_src_executions_per_milli(src.map(|arr| arr.iter().sum()), budget)
     }
 
     /// Number of executions between status updates, derived from `execs_per_milli`.
@@ -360,7 +398,7 @@ mod test {
     fn test_bench_cfg_executions_per_milli() {
         let cfg = BenchCfg::default();
         // Using a no-op closure, the calibration should return a reasonable positive value
-        let epms = cfg.execs_per_milli(|| {});
+        let epms = cfg.execs_per_milli(|| {}, RunLength::Count(10));
         assert!(epms.is_finite());
     }
 }

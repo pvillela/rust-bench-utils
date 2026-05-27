@@ -1,5 +1,7 @@
 use std::time::{Duration, Instant};
 
+use crate::{RunLength, multi::LatencySrc1};
+
 /// Invokes `f` once and returns its latency.
 #[inline(always)]
 pub fn latency(f: impl FnOnce()) -> Duration {
@@ -70,52 +72,36 @@ impl LatencyUnit {
 ///
 /// # Arguments
 ///
-/// `budget_millis` - the time budget for the estimation process, in milliseconds.
 /// `f` - the target function.
-pub fn executions_per_milli(budget_millis: u64, mut f: impl FnMut()) -> f64 {
-    let mut acc_latency = Duration::from_nanos(0);
-    let mut acc_execs = 0u64;
-
-    for i in 1.. {
-        let iter_execs = 2u64.pow(i - 1);
-        let iter_start = Instant::now();
-
-        for _ in 0..iter_execs {
-            f();
-        }
-
-        let iter_latency = iter_start.elapsed();
-        acc_latency += iter_latency;
-        acc_execs += iter_execs;
-        let budget = Duration::from_millis(budget_millis);
-
-        if iter_latency >= budget / 2 || acc_latency >= budget {
-            let iter_execs_per_milli = iter_execs as f64 / (iter_latency.as_secs_f64() * 1000.0);
-            let acc_execs_per_milli = acc_execs as f64 / (acc_latency.as_secs_f64() * 1000.0);
-            return iter_execs_per_milli.max(acc_execs_per_milli);
-        }
-    }
-
-    unreachable!("above loop must return at some point")
+/// `budget` - the budget for the estimation process, in terms of duration and/or iterations.
+pub fn fn_executions_per_milli(f: impl FnMut(), budget: RunLength) -> f64 {
+    let src = LatencySrc1(f).map(|arr| arr[0]);
+    lat_src_executions_per_milli(src, budget)
 }
 
-pub fn latency_src_executions_per_milli(
-    budget_millis: u64,
+/// Estimates how many iterations of `src` can be done in one millisecond by iterating one or more times
+/// and doing a proportionality calculation.
+///
+/// # Arguments
+///
+/// `src` - the latency source.
+/// `budget` - the budget for the estimation process, in terms of duration and/or iterations.
+pub fn lat_src_executions_per_milli(
     mut src: impl Iterator<Item = Duration>,
+    budget: RunLength,
 ) -> f64 {
     let mut acc_latency = Duration::from_nanos(0);
     let mut acc_execs: usize = 0;
 
     for i in 1.. {
         let iter_execs = 2usize.pow(i - 1);
-
         let iter_latency = (&mut src).take(iter_execs).sum();
 
         acc_latency += iter_latency;
         acc_execs += iter_execs;
-        let budget = Duration::from_millis(budget_millis);
+        let (budget_count, budget_dur) = budget.get_exec_count_and_duration();
 
-        if iter_latency >= budget / 2 || acc_latency >= budget {
+        if iter_latency >= budget_dur / 2 || acc_latency >= budget_dur || i >= budget_count as u32 {
             let iter_execs_per_milli = iter_execs as f64 / (iter_latency.as_secs_f64() * 1000.0);
             let acc_execs_per_milli = acc_execs as f64 / (acc_latency.as_secs_f64() * 1000.0);
             return iter_execs_per_milli.max(acc_execs_per_milli);

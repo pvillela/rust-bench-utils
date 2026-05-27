@@ -295,7 +295,7 @@ mod status {
 
         let f = BusyWork::new(target_latency).fun();
 
-        let execs_per_milli = cfg.execs_per_milli(&f);
+        let execs_per_milli = cfg.execs_per_milli(&f, exec_run_length);
 
         let out = bench_run_x(&cfg, f, exec_run_length, &mut status);
 

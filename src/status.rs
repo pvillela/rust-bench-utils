@@ -2,7 +2,7 @@
 
 use std::{io::Write, time::Duration};
 
-/// Provides optional status-reporting closures for warm-up and execution phases.
+/// Provides optional status reporting closures for warm-up and execution phases.
 ///
 /// Implementors return either `Some(closure)` to report progress or `None` to skip reporting.
 /// The returned closures receive the estimated duration, the estimated total execution count,

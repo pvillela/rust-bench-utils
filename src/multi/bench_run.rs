@@ -94,7 +94,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     s: &mut S,
 ) -> BenchOut<K> {
     let mut state = BenchOut::new(cfg);
-    let execs_per_milli = cfg.latency_src_execs_per_milli(&mut latency_src);
+    let execs_per_milli = cfg.lat_src_execs_per_milli(&mut latency_src, exec_run_length);
     let status_freq = cfg.status_freq(execs_per_milli);
 
     let warmup_run_length = RunLength::Duration(Duration::from_millis(cfg.warmup_millis()));
@@ -493,7 +493,7 @@ mod status {
             BusyWork::new(target_latency).fun(),
         );
 
-        let execs_per_milli = cfg.latency_src_execs_per_milli(&mut latency_src);
+        let execs_per_milli = cfg.lat_src_execs_per_milli(&mut latency_src, exec_run_length2);
 
         let out = bench_run_x(&cfg, &mut latency_src, exec_run_length2, &mut status);
 
