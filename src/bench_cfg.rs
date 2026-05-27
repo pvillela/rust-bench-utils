@@ -1,7 +1,10 @@
 use basic_stats::aok::AokValue;
 
 use crate::{LatencyUnit, latency};
-use std::time::Duration;
+use std::{
+    ops::{Add, Div},
+    time::Duration,
+};
 
 /// Specifies how long a benchmark should run for. Encapsulates a target number of iterations for the benchmark to run
 /// and a time duration. The benchmark run length can be set as a number of iterations, a time duration, or
@@ -165,42 +168,80 @@ impl BenchCfg {
         self
     }
 
-    fn execs_per_milli_budget(&self, bench_run_length: RunLength) -> RunLength {
+    fn execs_per_milli_budget(&self, exec_run_length: RunLength) -> RunLength {
         const WARMUP_DIVISOR: u32 = 3;
-        const BENCH_DIVISOR: u32 = 30;
+        const EXEC_DIVISOR: u32 = 30;
 
-        fn median<T: Ord + Copy>(mut arr: [T; 3]) -> T {
-            arr.sort();
-            arr[1]
+        // Computes the median of a vector of length 3 or less.
+        fn median<T, D>(mut vec: Vec<T>, vec_len_2_divisor: D) -> Option<T>
+        where
+            T: Ord + Copy + Add<Output = T> + Div<D, Output = T>,
+        {
+            vec.sort();
+            match vec.len() {
+                0 => None,
+                1 => Some(vec[0]),
+                2 => Some((vec[0] + vec[1]) / vec_len_2_divisor),
+                3 => Some(vec[1]),
+                _ => panic!("vector length exceeds 3"),
+            }
         }
 
-        let warmup_run_length = RunLength::Duration(Duration::from_millis(self.warmup_millis));
-        let status_run_length = RunLength::Duration(Duration::from_millis(self.status_millis));
+        let adj_warmup_run_length = RunLength::Duration(Duration::from_millis(
+            self.warmup_millis / WARMUP_DIVISOR as u64,
+        ));
+        let adj_status_run_length = RunLength::Duration(Duration::from_millis(self.status_millis));
+        let adj_exec_run_length = match exec_run_length {
+            RunLength::Count(count) => RunLength::Count(count / EXEC_DIVISOR as usize),
+            RunLength::Duration(dur) => RunLength::Duration(dur / EXEC_DIVISOR),
+            RunLength::CountWithTimeout(count, dur) => {
+                RunLength::CountWithTimeout(count / EXEC_DIVISOR as usize, dur / EXEC_DIVISOR)
+            }
+        };
 
-        let (warmup_count, warmup_dur) = warmup_run_length.get_exec_count_and_duration();
-        let (status_count, status_dur) = status_run_length.get_exec_count_and_duration();
-        let (bench_count, bench_dur) = bench_run_length.get_exec_count_and_duration();
+        let run_lengths = [
+            adj_warmup_run_length,
+            adj_status_run_length,
+            adj_exec_run_length,
+        ];
 
-        let med_count = median([
-            warmup_count / WARMUP_DIVISOR as usize,
-            bench_count / BENCH_DIVISOR as usize,
-            status_count,
-        ]);
+        let counts = run_lengths
+            .iter()
+            .filter_map(|rl| match rl {
+                RunLength::Count(count) => Some(*count),
+                RunLength::CountWithTimeout(count, _) => Some(*count),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
 
-        let med_dur = median([
-            warmup_dur / WARMUP_DIVISOR,
-            bench_dur / BENCH_DIVISOR,
-            status_dur,
-        ]);
+        let durs = [adj_exec_run_length]
+            .iter()
+            .filter_map(|rl| match rl {
+                RunLength::Duration(dur) => Some(*dur),
+                RunLength::CountWithTimeout(_, dur) => Some(*dur),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
 
-        RunLength::CountWithTimeout(med_count, med_dur)
+        let median_count = median(counts, 2);
+        let median_dur = median(durs, 2);
+
+        let budget = match (median_count, median_dur) {
+            (Some(count), Some(dur)) => RunLength::CountWithTimeout(count, dur),
+            (Some(count), None) => RunLength::Count(count),
+            (None, Some(dur)) => RunLength::Duration(dur),
+            (None, None) => unreachable!("impossible"),
+        };
+
+        println!("*** budget={budget:?}");
+        budget
     }
 
     /// Estimates how many executions of `f` fit in one millisecond.
     ///
     /// Used in status reporting as well as in execution loop termination logic (to ensure adherence to the
     /// run length specified when the benchmark is executed).
-    pub fn execs_per_milli(&self, f: impl FnMut(), exec_run_length: RunLength) -> f64 {
+    pub fn fn_execs_per_milli(&self, f: impl FnMut(), exec_run_length: RunLength) -> f64 {
         let budget = self.execs_per_milli_budget(exec_run_length);
         latency::fn_executions_per_milli(f, budget)
     }
@@ -209,13 +250,14 @@ impl BenchCfg {
     ///
     /// Used in status reporting as well as in execution loop termination logic (to ensure adherence to the
     /// run length specified when the benchmark is executed).
-    pub fn lat_src_execs_per_milli<const K: usize>(
+    pub fn ltn_src_execs_per_milli<const K: usize>(
         &self,
         src: &mut impl Iterator<Item = [Duration; K]>,
         exec_run_length: RunLength,
     ) -> f64 {
         let budget = self.execs_per_milli_budget(exec_run_length);
-        latency::lat_src_executions_per_milli(src.map(|arr| arr.iter().sum()), budget)
+        println!("*** execs_per_milli_budget={budget:?}");
+        latency::ltn_src_executions_per_milli(src.map(|arr| arr.iter().sum()), budget)
     }
 
     /// Number of executions between status updates, derived from `execs_per_milli`.
@@ -398,7 +440,7 @@ mod test {
     fn test_bench_cfg_executions_per_milli() {
         let cfg = BenchCfg::default();
         // Using a no-op closure, the calibration should return a reasonable positive value
-        let epms = cfg.execs_per_milli(|| {}, RunLength::Count(10));
+        let epms = cfg.fn_execs_per_milli(|| {}, RunLength::Count(10));
         assert!(epms.is_finite());
     }
 }

@@ -76,7 +76,7 @@ impl LatencyUnit {
 /// `budget` - the budget for the estimation process, in terms of duration and/or iterations.
 pub fn fn_executions_per_milli(f: impl FnMut(), budget: RunLength) -> f64 {
     let src = LatencySrc1(f).map(|arr| arr[0]);
-    lat_src_executions_per_milli(src, budget)
+    ltn_src_executions_per_milli(src, budget)
 }
 
 /// Estimates how many iterations of `src` can be done in one millisecond by iterating one or more times
@@ -86,7 +86,7 @@ pub fn fn_executions_per_milli(f: impl FnMut(), budget: RunLength) -> f64 {
 ///
 /// `src` - the latency source.
 /// `budget` - the budget for the estimation process, in terms of duration and/or iterations.
-pub fn lat_src_executions_per_milli(
+pub fn ltn_src_executions_per_milli(
     mut src: impl Iterator<Item = Duration>,
     budget: RunLength,
 ) -> f64 {
@@ -100,10 +100,15 @@ pub fn lat_src_executions_per_milli(
         acc_latency += iter_latency;
         acc_execs += iter_execs;
         let (budget_count, budget_dur) = budget.get_exec_count_and_duration();
-
-        if iter_latency >= budget_dur / 2 || acc_latency >= budget_dur || i >= budget_count as u32 {
+        println!("*** ltn_src_executions_per_milli: i={i}");
+        if iter_latency >= budget_dur / 2 || acc_latency >= budget_dur || acc_execs >= budget_count
+        {
             let iter_execs_per_milli = iter_execs as f64 / (iter_latency.as_secs_f64() * 1000.0);
             let acc_execs_per_milli = acc_execs as f64 / (acc_latency.as_secs_f64() * 1000.0);
+            println!(
+                "*** ltn_src_executions_per_milli={}",
+                iter_execs_per_milli.max(acc_execs_per_milli)
+            );
             return iter_execs_per_milli.max(acc_execs_per_milli);
         }
     }

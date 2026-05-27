@@ -93,9 +93,12 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     exec_run_length: RunLength,
     s: &mut S,
 ) -> BenchOut<K> {
+    println!("*** bench_run_x -- exec_run_length={exec_run_length:?}");
     let mut state = BenchOut::new(cfg);
-    let execs_per_milli = cfg.lat_src_execs_per_milli(&mut latency_src, exec_run_length);
+    let execs_per_milli = cfg.ltn_src_execs_per_milli(&mut latency_src, exec_run_length);
+    println!("*** execs_per_milli={execs_per_milli}");
     let status_freq = cfg.status_freq(execs_per_milli);
+    println!("*** status_freq={status_freq}");
 
     let warmup_run_length = RunLength::Duration(Duration::from_millis(cfg.warmup_millis()));
     let warmup_est_dur = warmup_run_length.estimated_duration(execs_per_milli);
@@ -163,7 +166,12 @@ pub fn bench_run_arg_cfg<const K: usize>(
     latency_src: impl Iterator<Item = [Duration; K]>,
     exec_run_length: RunLength,
 ) -> BenchOut<K> {
-    bench_run_x(cfg, latency_src, exec_run_length, &mut NoStatus)
+    // 100 millis is reasonable to avoid churn in `BenchOut.execute` and support calculation of
+    // a reasonable estimation budget for `BenchCfg::*_executions_per_milli`.
+    const NO_STATUS_MILLIS: u64 = 100;
+
+    let cfg = &cfg.clone().with_status_millis(NO_STATUS_MILLIS);
+    bench_run_x(&cfg, latency_src, exec_run_length, &mut NoStatus)
 }
 
 /// Repeatedly executes closures `fs`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -493,7 +501,7 @@ mod status {
             BusyWork::new(target_latency).fun(),
         );
 
-        let execs_per_milli = cfg.lat_src_execs_per_milli(&mut latency_src, exec_run_length2);
+        let execs_per_milli = cfg.ltn_src_execs_per_milli(&mut latency_src, exec_run_length2);
 
         let out = bench_run_x(&cfg, &mut latency_src, exec_run_length2, &mut status);
 
