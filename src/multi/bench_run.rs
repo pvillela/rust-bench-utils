@@ -255,7 +255,7 @@ mod validate {
         let warmup_millis2 = warmup_millis * 2;
         let bench_time2 = bench_time * 2;
         let status_millis2 = status_millis * 2;
-        let exec_count = (bench_time2.as_secs_f64() / target_latency.as_secs_f64()) as usize;
+        let exec_count = (bench_time.as_secs_f64() / target_latency.as_secs_f64()) as usize;
 
         let name = format!(
             "target_latency={target_latency:?}, warmup={warmup_millis2}, bench_time={bench_time2:?}"
@@ -411,7 +411,9 @@ mod validate {
                 f0,
                 f1,
                 warmup_millis,
-                0,
+                // u64::MAX,
+                // 100,
+                10,
                 bench_time,
                 target_latency,
                 epsilon,

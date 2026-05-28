@@ -220,12 +220,13 @@ mod validate {
             epsilon: f64,
         ) {
             let f = BusyWork::new(target_latency).fun();
-            let runner = bench_run::bench_run_with_status_arg_cfg;
+            let runner = bench_run::bench_run_arg_cfg;
             run(
                 runner,
                 f,
                 warmup_millis,
-                u64::MAX,
+                u64::MAX, // this value makes no difference as it is overridden in `bench_run_arg_cfg`
+                // 0,
                 bench_time,
                 target_latency,
                 epsilon,

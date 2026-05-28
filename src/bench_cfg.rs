@@ -204,6 +204,7 @@ impl BenchCfg {
             adj_status_run_length,
             adj_exec_run_length,
         ];
+        println!("*** run_lengths[warmup, status, exec]={run_lengths:?}");
 
         let counts = run_lengths
             .iter()
