@@ -99,164 +99,167 @@ pub fn bench_run_with_status_arg_cfg(
 
 #[cfg(test)]
 #[cfg(feature = "_bench_long_test")]
-// cargo test -r --package bench_utils --lib --all-features -- bench_run::validate --nocapture --test-threads=1 --skip multi
-mod validate {
-    use crate::{
-        BenchCfg, BenchOut, BusyWork, RunLength, latency, rel_approx_eq_dur,
-        test_support::AbsRelDiffDur,
-    };
-    use std::time::{Duration, Instant};
+// cargo test -r --package bench_utils --lib --all-features -- bench_run::long --nocapture --test-threads=1 --skip multi
+mod long {
+    // cargo test -r --package bench_utils --lib --all-features -- bench_run::long::validate --nocapture --test-threads=1 --skip multi
+    mod validate {
+        use crate::{
+            BenchCfg, BenchOut, BusyWork, RunLength, latency, rel_approx_eq_dur,
+            test_support::AbsRelDiffDur,
+        };
+        use std::time::{Duration, Instant};
 
-    fn run<R, Fa>(
-        runner: R,
-        mut f: Fa,
-        warmup_millis: u64,
-        status_millis: u64,
-        bench_time: Duration,
-        target_latency: Duration,
-        epsilon: f64,
-    ) where
-        Fa: FnMut() + Clone,
-        R: Fn(&BenchCfg, Fa, RunLength) -> BenchOut,
-    {
-        let start = Instant::now();
-
-        let name = format!(
-            "target_latency={target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}"
-        );
-        let exec_count = (bench_time.as_secs_f64() / target_latency.as_secs_f64()) as usize;
-
-        println!("validate_bench_run: {name}");
-
-        let cfg = BenchCfg::default()
-            .with_warmup_millis(warmup_millis)
-            .with_status_millis(status_millis);
-        let out = runner(&cfg, f.clone(), RunLength::Count(exec_count));
-
-        let raw_latency = latency(|| {
-            for _ in 0..exec_count {
-                f();
-            }
-        });
-
-        println!();
-
-        let out_mean = out.mean();
-        println!(
-            "target_mean={target_latency:?}, out.mean()={out_mean:?}, rel_diff={}",
-            target_latency.abs_rel_diff(out_mean)
-        );
-        let raw_mean = raw_latency / exec_count as u32;
-        println!(
-            "target_mean={target_latency:?}, raw_mean()={raw_mean:?}, rel_diff={}",
-            target_latency.abs_rel_diff(raw_mean)
-        );
-
-        println!(
-            "raw_mean={raw_mean:?}, out_mean()={out_mean:?}, rel_diff={}",
-            raw_mean.abs_rel_diff(out_mean)
-        );
-
-        println!("test total elapsed time = {:?}", start.elapsed());
-
-        rel_approx_eq_dur!(raw_mean, out_mean, epsilon);
-    }
-
-    // cargo test -r --package bench_utils --lib --all-features -- bench_run::validate::with_status --nocapture --test-threads=1 --skip multi
-    mod with_status {
-        use super::*;
-        use crate::bench_run::{self, validate::run};
-
-        fn run_bench(
+        fn run<R, Fa>(
+            runner: R,
+            mut f: Fa,
             warmup_millis: u64,
             status_millis: u64,
             bench_time: Duration,
             target_latency: Duration,
             epsilon: f64,
-        ) {
-            let f = BusyWork::new(target_latency).fun();
-            let runner = bench_run::bench_run_with_status_arg_cfg;
-            run(
-                runner,
-                f,
-                warmup_millis,
-                status_millis,
-                bench_time,
-                target_latency,
-                epsilon,
+        ) where
+            Fa: FnMut() + Clone,
+            R: Fn(&BenchCfg, Fa, RunLength) -> BenchOut,
+        {
+            let start = Instant::now();
+
+            let name = format!(
+                "target_latency={target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}"
             );
+            let exec_count = (bench_time.as_secs_f64() / target_latency.as_secs_f64()) as usize;
+
+            println!("validate_bench_run: {name}");
+
+            let cfg = BenchCfg::default()
+                .with_warmup_millis(warmup_millis)
+                .with_status_millis(status_millis);
+            let out = runner(&cfg, f.clone(), RunLength::Count(exec_count));
+
+            let raw_latency = latency(|| {
+                for _ in 0..exec_count {
+                    f();
+                }
+            });
+
+            println!();
+
+            let out_mean = out.mean();
+            println!(
+                "target_mean={target_latency:?}, out.mean()={out_mean:?}, rel_diff={}",
+                target_latency.abs_rel_diff(out_mean)
+            );
+            let raw_mean = raw_latency / exec_count as u32;
+            println!(
+                "target_mean={target_latency:?}, raw_mean()={raw_mean:?}, rel_diff={}",
+                target_latency.abs_rel_diff(raw_mean)
+            );
+
+            println!(
+                "raw_mean={raw_mean:?}, out_mean()={out_mean:?}, rel_diff={}",
+                raw_mean.abs_rel_diff(out_mean)
+            );
+
+            println!("test total elapsed time = {:?}", start.elapsed());
+
+            rel_approx_eq_dur!(raw_mean, out_mean, epsilon);
         }
 
-        #[test]
-        fn test_millis() {
-            const EPSILON: f64 = 0.02;
-            run_bench(
-                1000,
-                100,
-                Duration::from_millis(2000),
-                Duration::from_millis(10),
-                EPSILON,
-            );
+        // cargo test -r --package bench_utils --lib --all-features -- bench_run::validate::with_status --nocapture --test-threads=1 --skip multi
+        mod with_status {
+            use super::*;
+            use crate::bench_run::bench_run_with_status_arg_cfg;
+
+            fn run_bench(
+                warmup_millis: u64,
+                status_millis: u64,
+                bench_time: Duration,
+                target_latency: Duration,
+                epsilon: f64,
+            ) {
+                let f = BusyWork::new(target_latency).fun();
+                let runner = bench_run_with_status_arg_cfg;
+                run(
+                    runner,
+                    f,
+                    warmup_millis,
+                    status_millis,
+                    bench_time,
+                    target_latency,
+                    epsilon,
+                );
+            }
+
+            #[test]
+            fn test_millis() {
+                const EPSILON: f64 = 0.02;
+                run_bench(
+                    1000,
+                    100,
+                    Duration::from_millis(2000),
+                    Duration::from_millis(10),
+                    EPSILON,
+                );
+            }
+
+            #[test]
+            fn test_micros() {
+                const EPSILON: f64 = 0.02;
+                run_bench(
+                    100,
+                    10,
+                    Duration::from_millis(200),
+                    Duration::from_micros(50),
+                    EPSILON,
+                );
+            }
         }
 
-        #[test]
-        fn test_micros() {
-            const EPSILON: f64 = 0.02;
-            run_bench(
-                100,
-                10,
-                Duration::from_millis(200),
-                Duration::from_micros(50),
-                EPSILON,
-            );
-        }
-    }
+        // cargo test -r --package bench_utils --lib --all-features -- bench_run::validate::without_status --nocapture --test-threads=1 --skip multi
+        mod without_status {
+            use super::*;
+            use crate::bench_run::bench_run_arg_cfg;
 
-    // cargo test -r --package bench_utils --lib --all-features -- bench_run::validate::without_status --nocapture --test-threads=1 --skip multi
-    mod without_status {
-        use super::*;
-        use crate::bench_run::{self, validate::run};
+            fn run_bench(
+                warmup_millis: u64,
+                bench_time: Duration,
+                target_latency: Duration,
+                epsilon: f64,
+            ) {
+                let f = BusyWork::new(target_latency).fun();
+                let runner = bench_run_arg_cfg;
+                run(
+                    runner,
+                    f,
+                    warmup_millis,
+                    u64::MAX, // this value makes no difference as it is overridden in `bench_run_arg_cfg`
+                    // 0,
+                    bench_time,
+                    target_latency,
+                    epsilon,
+                );
+            }
 
-        fn run_bench(
-            warmup_millis: u64,
-            bench_time: Duration,
-            target_latency: Duration,
-            epsilon: f64,
-        ) {
-            let f = BusyWork::new(target_latency).fun();
-            let runner = bench_run::bench_run_arg_cfg;
-            run(
-                runner,
-                f,
-                warmup_millis,
-                u64::MAX, // this value makes no difference as it is overridden in `bench_run_arg_cfg`
-                // 0,
-                bench_time,
-                target_latency,
-                epsilon,
-            );
-        }
+            #[test]
+            fn test_millis() {
+                const EPSILON: f64 = 0.02;
+                run_bench(
+                    1000,
+                    Duration::from_millis(2000),
+                    Duration::from_millis(10),
+                    EPSILON,
+                );
+            }
 
-        #[test]
-        fn test_millis() {
-            const EPSILON: f64 = 0.02;
-            run_bench(
-                1000,
-                Duration::from_millis(2000),
-                Duration::from_millis(10),
-                EPSILON,
-            );
-        }
-
-        #[test]
-        fn test_micros() {
-            const EPSILON: f64 = 0.02;
-            run_bench(
-                100,
-                Duration::from_millis(200),
-                Duration::from_micros(50),
-                EPSILON,
-            );
+            #[test]
+            fn test_micros() {
+                const EPSILON: f64 = 0.02;
+                run_bench(
+                    100,
+                    Duration::from_millis(200),
+                    Duration::from_micros(50),
+                    EPSILON,
+                );
+            }
         }
     }
 }

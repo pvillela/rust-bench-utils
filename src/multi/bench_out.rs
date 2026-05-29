@@ -110,6 +110,14 @@ impl<const K: usize> BenchOut<K> {
         &self.arr[0]
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = &crate::BenchOut> {
+        // BenchOutIterator {
+        //     index: 0,
+        //     out: self,
+        // }
+        self.arr.iter()
+    }
+
     #[doc(hidden)]
     /// Creates a new empty instance.
     pub fn reset(&mut self) {
