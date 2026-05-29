@@ -236,12 +236,12 @@ mod validate {
         rel_approx_eq_dur,
         test_support::AbsRelDiffDur,
     };
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
-    fn run<const K: usize, R, F0, F1>(
+    fn run<const K: usize, R, F0, F1, Src>(
         runner: R,
-        mut f0: F0,
-        mut f1: F1,
+        mut fs: (F0, F1),
+        src: Src,
         base_warmup_millis: u64,
         base_status_millis: u64,
         base_bench_time: Duration,
@@ -250,8 +250,11 @@ mod validate {
     ) where
         F0: FnMut(),
         F1: FnMut(),
-        R: FnOnce(BenchCfg, RunLength) -> BenchOut<K>,
+        Src: Iterator<Item = [Duration; K]>,
+        R: FnOnce(&BenchCfg, Src, RunLength) -> BenchOut<K>,
     {
+        let start = Instant::now();
+
         if K < 1 || K > 2 {
             panic!("K must be 1 or 2");
         }
@@ -269,20 +272,20 @@ mod validate {
         let cfg = BenchCfg::default()
             .with_warmup_millis(warmup_millis)
             .with_status_millis(status_millis);
-        let out = runner(cfg, RunLength::Count(exec_count));
+        let out = runner(&cfg, src, RunLength::Count(exec_count));
 
         let mut raw_latencies = Vec::<Duration>::new();
         if K >= 1 {
             raw_latencies.push(latency(|| {
                 for _ in 0..exec_count {
-                    f0();
+                    fs.0();
                 }
             }));
         }
         if K == 2 {
             raw_latencies.push(latency(|| {
                 for _ in 0..exec_count {
-                    f1();
+                    fs.1();
                 }
             }));
         }
@@ -330,6 +333,8 @@ mod validate {
 
             rel_approx_eq_dur!(raw_mean, out_mean, epsilon);
         }
+
+        println!("test total elapsed time = {:?}", start.elapsed());
     }
 
     fn fs1(base_target_latency: Duration) -> (impl Fn() + Clone, impl Fn() + Clone) {
@@ -342,7 +347,7 @@ mod validate {
     }
 
     fn latency_src1(base_target_latency: Duration) -> impl Iterator<Item = [Duration; 1]> {
-        LatencySrc1(fs1(base_target_latency).0.clone())
+        LatencySrc1(fs1(base_target_latency).0)
     }
 
     fn fs2(base_target_latency: Duration) -> (impl Fn() + Clone, impl Fn() + Clone) {
@@ -358,29 +363,7 @@ mod validate {
     }
 
     fn latency_src2(base_target_latency: Duration) -> impl Iterator<Item = [Duration; 2]> {
-        LatencySrc2(
-            fs2(base_target_latency).0.clone(),
-            fs2(base_target_latency).1.clone(),
-        )
-    }
-
-    fn partial_appy_ltn_src<const K: usize, Src: Iterator<Item = [Duration; K]>>(
-        r: impl Fn(&BenchCfg, Src, RunLength) -> BenchOut<K>,
-        latency_src: Src,
-    ) -> impl FnOnce(BenchCfg, RunLength) -> BenchOut<K> {
-        move |cfg, rl| r(&cfg, latency_src, rl)
-    }
-
-    fn runner_with_status<const K: usize>(
-        latency_src: impl Iterator<Item = [Duration; K]>,
-    ) -> impl FnOnce(BenchCfg, RunLength) -> BenchOut<K> {
-        partial_appy_ltn_src(bench_run_with_status_arg_cfg, latency_src)
-    }
-
-    fn runner_without_status<const K: usize>(
-        latency_src: impl Iterator<Item = [Duration; K]>,
-    ) -> impl FnOnce(BenchCfg, RunLength) -> BenchOut<K> {
-        partial_appy_ltn_src(bench_run_arg_cfg, latency_src)
+        LatencySrc2(fs2(base_target_latency).0, fs2(base_target_latency).1)
     }
 
     // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::validate::with_status1 --nocapture --test-threads=1
@@ -394,13 +377,10 @@ mod validate {
             base_target_latency: Duration,
             epsilon: f64,
         ) {
-            let latency_src = latency_src1(base_target_latency);
-            let runner = runner_with_status(latency_src);
-
             run(
-                runner,
-                fs1(base_target_latency).0.clone(),
-                fs1(base_target_latency).1.clone(),
+                bench_run_with_status_arg_cfg,
+                fs1(base_target_latency),
+                latency_src1(base_target_latency),
                 base_warmup_millis,
                 base_status_millis,
                 base_bench_time,
@@ -444,13 +424,10 @@ mod validate {
             base_target_latency: Duration,
             epsilon: f64,
         ) {
-            let latency_src = latency_src1(base_target_latency);
-            let runner = runner_without_status(latency_src);
-
             run(
-                runner,
-                fs1(base_target_latency).0.clone(),
-                fs1(base_target_latency).1.clone(),
+                bench_run_arg_cfg,
+                fs1(base_target_latency),
+                latency_src1(base_target_latency),
                 base_warmup_millis,
                 0,
                 base_bench_time,
@@ -493,13 +470,10 @@ mod validate {
             base_target_latency: Duration,
             epsilon: f64,
         ) {
-            let latency_src = latency_src2(base_target_latency);
-            let runner = runner_with_status(latency_src);
-
             run(
-                runner,
-                fs2(base_target_latency).0.clone(),
-                fs2(base_target_latency).1.clone(),
+                bench_run_with_status_arg_cfg,
+                fs2(base_target_latency),
+                latency_src2(base_target_latency),
                 base_warmup_millis,
                 base_status_millis,
                 base_bench_time,
@@ -543,13 +517,10 @@ mod validate {
             base_target_latency: Duration,
             epsilon: f64,
         ) {
-            let latency_src = latency_src2(base_target_latency);
-            let runner = runner_without_status(latency_src);
-
             run(
-                runner,
-                fs2(base_target_latency).0.clone(),
-                fs2(base_target_latency).1.clone(),
+                bench_run_arg_cfg,
+                fs2(base_target_latency),
+                latency_src2(base_target_latency),
                 base_warmup_millis,
                 0,
                 base_bench_time,

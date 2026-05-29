@@ -105,7 +105,7 @@ mod validate {
         BenchCfg, BenchOut, BusyWork, RunLength, latency, rel_approx_eq_dur,
         test_support::AbsRelDiffDur,
     };
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     fn run<R, Fa>(
         runner: R,
@@ -119,6 +119,8 @@ mod validate {
         Fa: FnMut() + Clone,
         R: Fn(&BenchCfg, Fa, RunLength) -> BenchOut,
     {
+        let start = Instant::now();
+
         let name = format!(
             "target_latency={target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}"
         );
@@ -154,6 +156,8 @@ mod validate {
             "raw_mean={raw_mean:?}, out_mean()={out_mean:?}, rel_diff={}",
             raw_mean.abs_rel_diff(out_mean)
         );
+
+        println!("test total elapsed time = {:?}", start.elapsed());
 
         rel_approx_eq_dur!(raw_mean, out_mean, epsilon);
     }
