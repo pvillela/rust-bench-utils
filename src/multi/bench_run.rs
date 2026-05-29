@@ -295,55 +295,53 @@ mod validate {
             .map(|lat| *lat / exec_count as u32)
             .collect::<Vec<_>>();
 
-        if K >= 2 {
-            let aggregate_raw_mean = raw_latencies.iter().sum::<Duration>() / exec_count as u32;
-            let aggregate_out_mean = out[0].mean() + out[1].mean();
-            println!();
-            println!(
-                "aggregate_raw_mean={aggregate_raw_mean:?}, aggregate_out_mean={aggregate_out_mean:?}, rel_diff={}",
-                aggregate_raw_mean.abs_rel_diff(aggregate_out_mean)
-            );
-
-            rel_approx_eq_dur!(
-                aggregate_raw_mean,
-                aggregate_out_mean,
-                epsilon / (K as f64).sqrt()
-            );
-        }
-
         for i in 0..K {
             let out_mean = out[i].mean();
             let raw_mean = raw_means[i];
 
-            println!();
             println!(
                 "target_mean={base_target_latency:?}, out[{i}].mean()={out_mean:?}, rel_diff={}",
                 base_target_latency.abs_rel_diff(out_mean)
             );
 
             println!(
-                "target_mean={base_target_latency:?}, raw_mean()={raw_mean:?}, rel_diff={}",
+                "target_mean={base_target_latency:?}, raw_mean[{i}]={raw_mean:?}, rel_diff={}",
                 base_target_latency.abs_rel_diff(raw_mean)
             );
 
             println!(
-                "raw_mean={raw_mean:?}, out[{i}].mean()={out_mean:?}, rel_diff={}",
+                "raw_mean[{i}]={raw_mean:?}, out[{i}].mean()={out_mean:?}, rel_diff={}",
                 raw_mean.abs_rel_diff(out_mean)
             );
+        }
 
-            rel_approx_eq_dur!(raw_mean, out_mean, epsilon);
+        let aggregate_raw_mean = raw_latencies.iter().sum::<Duration>() / exec_count as u32;
+        let aggregate_out_mean = out[0].mean() + out[1].mean();
+
+        if K >= 2 {
+            println!(
+                "aggregate_raw_mean={aggregate_raw_mean:?}, aggregate_out_mean={aggregate_out_mean:?}, rel_diff={}",
+                aggregate_raw_mean.abs_rel_diff(aggregate_out_mean)
+            );
         }
 
         println!("test total elapsed time = {:?}", start.elapsed());
+
+        // Assertions
+        {
+            for i in 0..K {
+                rel_approx_eq_dur!(raw_means[i], out[i].mean(), epsilon);
+            }
+
+            if K >= 2 {
+                rel_approx_eq_dur!(aggregate_raw_mean, aggregate_out_mean, epsilon / K as f64);
+            }
+        }
     }
 
     fn fs1(base_target_latency: Duration) -> (impl Fn() + Clone, impl Fn() + Clone) {
-        (
-            move || {
-                BusyWork::new(base_target_latency).fun()();
-            },
-            || (),
-        )
+        let f = BusyWork::new(base_target_latency).fun(); // calibrate once
+        (f, || ())
     }
 
     fn latency_src1(base_target_latency: Duration) -> impl Iterator<Item = [Duration; 1]> {
@@ -352,16 +350,17 @@ mod validate {
 
     fn fs2(base_target_latency: Duration) -> (impl Fn() + Clone, impl Fn() + Clone) {
         let latency_delta = base_target_latency / 10;
-
+        let f0a = BusyWork::new(base_target_latency - latency_delta).fun();
+        let f0b = BusyWork::new(latency_delta).fun();
+        let f1 = BusyWork::new(base_target_latency).fun(); // calibrate once
         (
             move || {
-                BusyWork::new(base_target_latency - latency_delta).fun()();
-                BusyWork::new(latency_delta).fun()();
+                f0a();
+                f0b();
             },
-            BusyWork::new(base_target_latency).fun(),
+            f1,
         )
     }
-
     fn latency_src2(base_target_latency: Duration) -> impl Iterator<Item = [Duration; 2]> {
         LatencySrc2(fs2(base_target_latency).0, fs2(base_target_latency).1)
     }
