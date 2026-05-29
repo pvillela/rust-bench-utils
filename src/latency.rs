@@ -91,11 +91,11 @@ pub fn ltn_src_executions_per_milli(
     budget: RunLength,
 ) -> f64 {
     let mut acc_latency = Duration::from_nanos(0);
-    let mut acc_execs: usize = 0;
+    let mut acc_execs: u64 = 0;
 
     for i in 1.. {
-        let iter_execs = 2usize.pow(i - 1);
-        let iter_latency = (&mut src).take(iter_execs).sum();
+        let iter_execs = 2u64.pow((i - 1));
+        let iter_latency = (&mut src).take(iter_execs as usize).sum();
 
         acc_latency += iter_latency;
         acc_execs += iter_execs;

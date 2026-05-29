@@ -14,7 +14,7 @@ pub fn validate_latency_overhead(
     cfg: &BenchCfg,
     bench_duration: Duration,
     target_latency: Duration,
-    group_size: usize,
+    group_size: u64,
 ) -> (Duration, Duration) {
     let name = "Group of ".to_owned() + &group_size.to_string();
     let solo_f = BusyWork::new(target_latency).fun();
@@ -26,7 +26,7 @@ pub fn validate_latency_overhead(
 
     let target_group_latency = target_latency * group_size as u32;
     let exec_count_group =
-        (bench_duration.as_secs_f64() / target_group_latency.as_secs_f64()) as usize;
+        (bench_duration.as_secs_f64() / target_group_latency.as_secs_f64()) as u64;
     // Guard against integer truncation to 0 when target_median_group is larger than
     // bench_duration. Fall back to 1 execution so the benchmark still produces
     // meaningful data and the assertion doesn't fire on an empty sample.

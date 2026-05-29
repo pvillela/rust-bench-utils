@@ -15,7 +15,7 @@ fn main() {
 
     println!("target_latency_nanos={}", target_latency.as_nanos());
 
-    const N: usize = 10;
+    const N: u64 = 10;
 
     let mut sum2dev = 0.;
     for _ in 0..N {

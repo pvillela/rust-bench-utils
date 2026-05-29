@@ -8,7 +8,7 @@ pub struct Args {
     pub target_ratio: f64,
     pub latency_unit: LatencyUnit,
     pub base_median: f64,
-    pub nrepeats: usize,
+    pub nrepeats: u64,
 }
 
 fn with_default(res: Result<String, VarError>, deflt: &str) -> String {
@@ -52,7 +52,7 @@ pub fn get_args() -> Args {
     );
 
     let nrepeats_str = with_default(env::var("NREPEATS"), "10");
-    let nrepeats = nrepeats_str.parse::<usize>().unwrap_or_else(|_| {
+    let nrepeats = nrepeats_str.parse::<u64>().unwrap_or_else(|_| {
         panic!("NREPEATS, if provided, must be a non-negative integer; was \"{nrepeats_str}\"")
     });
 

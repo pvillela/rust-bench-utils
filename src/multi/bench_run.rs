@@ -19,11 +19,11 @@ impl<const K: usize> BenchState<K> {
         &mut self,
         latency_src: &mut impl Iterator<Item = [Duration; K]>,
         run_length: RunLength,
-        status_freq: usize,
+        status_freq: u64,
         // Used in control of the exit from the iteration loop when both `status_freq` and `exec_count` are too high
         // compared to `run_length` duration.
-        est_count: usize,
-        status: &mut Option<impl FnMut(usize)>,
+        est_count: u64,
+        status: &mut Option<impl FnMut(u64)>,
     ) {
         assert!(status_freq > 0, "status_freq must be > 0");
 
@@ -64,7 +64,7 @@ impl<const K: usize> BenchState<K> {
                     let remaining_time = run_time - elapsed;
                     let avg_time_per_iter = elapsed / i as u32;
                     est_remaining_iters =
-                        remaining_time.div_duration_f64(avg_time_per_iter).ceil() as usize;
+                        remaining_time.div_duration_f64(avg_time_per_iter).ceil() as u64;
                 }
             }
         }
@@ -288,7 +288,7 @@ mod long {
 
             let exec_count = (bench_time.as_secs_f64()
                 / (base_target_latency * K as u32).as_secs_f64())
-                as usize;
+                as u64;
             let cfg = BenchCfg::default()
                 .with_warmup_millis(warmup_millis)
                 .with_status_millis(status_millis);
@@ -660,8 +660,8 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         {
             assert_eq!(caps[1], warmup_millis2.to_string());
-            let warmup_last = usize::from_str_radix(&caps[2], 10).unwrap();
-            let warmup_est_count = usize::from_str_radix(&caps[3], 10).unwrap();
+            let warmup_last = u64::from_str_radix(&caps[2], 10).unwrap();
+            let warmup_est_count = u64::from_str_radix(&caps[3], 10).unwrap();
             rel_approx_eq!(
                 warmup_est_count as f64,
                 warmup_run_length.estimated_count(execs_per_milli) as f64,
@@ -672,14 +672,14 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         {
             rel_approx_eq!(
-                usize::from_str_radix(&caps[4], 10).unwrap() as f64,
+                u64::from_str_radix(&caps[4], 10).unwrap() as f64,
                 exec_run_length2
                     .estimated_duration(execs_per_milli)
                     .as_millis() as f64,
                 epsilon
             );
-            let exec_last = usize::from_str_radix(&caps[5], 10).unwrap();
-            let exec_est_count = usize::from_str_radix(&caps[6], 10).unwrap();
+            let exec_last = u64::from_str_radix(&caps[5], 10).unwrap();
+            let exec_est_count = u64::from_str_radix(&caps[6], 10).unwrap();
             rel_approx_eq!(
                 exec_est_count as f64,
                 exec_run_length2.estimated_count(execs_per_milli) as f64,

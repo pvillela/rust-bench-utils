@@ -12,11 +12,11 @@ use std::{
 #[derive(Debug, Clone, Copy)]
 pub enum RunLength {
     /// Run for a fixed number of iterations.
-    Count(usize),
+    Count(u64),
     /// Run for a fixed duration.
     Duration(Duration),
     /// Run for a fixed number of iterations, but stop early if the given duration is exceeded.
-    CountWithTimeout(usize, Duration),
+    CountWithTimeout(u64, Duration),
 }
 
 impl RunLength {
@@ -24,24 +24,24 @@ impl RunLength {
     ///
     /// The benchmark ends when the specified number of iterations is reached (or exceeded)
     /// or when the time duration is reached (or exceeded), whichever comes first.
-    pub fn get_exec_count_and_duration(&self) -> (usize, Duration) {
+    pub fn get_exec_count_and_duration(&self) -> (u64, Duration) {
         match self {
             Self::Count(count) => (*count, Duration::MAX),
-            Self::Duration(duration) => (usize::MAX, *duration),
+            Self::Duration(duration) => (u64::MAX, *duration),
             Self::CountWithTimeout(count, duration) => (*count, *duration),
         }
     }
 
     /// Estimated number of iterations.
-    pub fn estimated_count(&self, execs_per_milli: f64) -> usize {
+    pub fn estimated_count(&self, execs_per_milli: f64) -> u64 {
         match self {
             Self::Count(count) => *count,
             Self::Duration(duration) => {
-                (duration.as_millis() as f64 * execs_per_milli).ceil() as usize
+                (duration.as_millis() as f64 * execs_per_milli).ceil() as u64
             }
             Self::CountWithTimeout(count, duration) => {
                 let count_from_duration =
-                    (duration.as_millis() as f64 * execs_per_milli).ceil() as usize;
+                    (duration.as_millis() as f64 * execs_per_milli).ceil() as u64;
                 *count.min(&count_from_duration)
             }
         }
@@ -192,10 +192,10 @@ impl BenchCfg {
         ));
         let adj_status_run_length = RunLength::Duration(Duration::from_millis(self.status_millis));
         let adj_exec_run_length = match exec_run_length {
-            RunLength::Count(count) => RunLength::Count(count / EXEC_DIVISOR as usize),
+            RunLength::Count(count) => RunLength::Count(count / EXEC_DIVISOR as u64),
             RunLength::Duration(dur) => RunLength::Duration(dur / EXEC_DIVISOR),
             RunLength::CountWithTimeout(count, dur) => {
-                RunLength::CountWithTimeout(count / EXEC_DIVISOR as usize, dur / EXEC_DIVISOR)
+                RunLength::CountWithTimeout(count / EXEC_DIVISOR as u64, dur / EXEC_DIVISOR)
             }
         };
 
@@ -262,9 +262,9 @@ impl BenchCfg {
     }
 
     /// Number of executions between status updates, derived from `execs_per_milli`.
-    pub fn status_freq(&self, execs_per_milli: f64) -> usize {
+    pub fn status_freq(&self, execs_per_milli: f64) -> u64 {
         let status_freq = self.status_millis as f64 * execs_per_milli;
-        1.max(status_freq.ceil() as usize)
+        1.max(status_freq.ceil() as u64)
     }
 }
 
@@ -332,7 +332,7 @@ mod test {
         // Duration variant
         let (count, dur) =
             RunLength::Duration(Duration::from_secs(5)).get_exec_count_and_duration();
-        assert_eq!(count, usize::MAX);
+        assert_eq!(count, u64::MAX);
         assert_eq!(dur, Duration::from_secs(5));
 
         // CountWithTimeout variant

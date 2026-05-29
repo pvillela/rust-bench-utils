@@ -126,7 +126,7 @@ mod long {
             let name = format!(
                 "target_latency={target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}"
             );
-            let exec_count = (bench_time.as_secs_f64() / target_latency.as_secs_f64()) as usize;
+            let exec_count = (bench_time.as_secs_f64() / target_latency.as_secs_f64()) as u64;
 
             println!("validate_bench_run: {name}");
 
@@ -328,8 +328,8 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         {
             assert_eq!(caps[1], warmup_millis.to_string());
-            let warmup_last = usize::from_str_radix(&caps[2], 10).unwrap();
-            let warmup_est_count = usize::from_str_radix(&caps[3], 10).unwrap();
+            let warmup_last = u64::from_str_radix(&caps[2], 10).unwrap();
+            let warmup_est_count = u64::from_str_radix(&caps[3], 10).unwrap();
             rel_approx_eq!(
                 warmup_est_count as f64,
                 warmup_run_length.estimated_count(execs_per_milli) as f64,
@@ -340,14 +340,14 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         {
             rel_approx_eq!(
-                usize::from_str_radix(&caps[4], 10).unwrap() as f64,
+                u64::from_str_radix(&caps[4], 10).unwrap() as f64,
                 exec_run_length
                     .estimated_duration(execs_per_milli)
                     .as_millis() as f64,
                 epsilon
             );
-            let exec_last = usize::from_str_radix(&caps[5], 10).unwrap();
-            let exec_est_count = usize::from_str_radix(&caps[6], 10).unwrap();
+            let exec_last = u64::from_str_radix(&caps[5], 10).unwrap();
+            let exec_est_count = u64::from_str_radix(&caps[6], 10).unwrap();
             rel_approx_eq!(
                 exec_est_count as f64,
                 exec_run_length.estimated_count(execs_per_milli) as f64,
