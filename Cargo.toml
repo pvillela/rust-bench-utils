@@ -22,7 +22,9 @@ exclude = ["CHANGELOG.md", "*.sh", ".gitignore", "examples", "bin"]
 [dependencies]
 basic_stats = { path = "../basic-stats", default-features = false, optional = true }
 criterion = { version = "0.8.2", optional = true }
+env_logger = { version = "0.11", optional = true }
 hdrhistogram = "7.5"
+log = "0.4"
 regex = { version = "1.12.3", optional = true }
 sha2 = { version = "0.11.0", optional = true }
 
@@ -55,6 +57,7 @@ _bench_long_test = ["_bench"] # used for tests that take a long time
 _test = ["_test_support"] # used only by tests
 _test_support = [
     "basic_stats/_dev_utils",
+    "dep:env_logger",
     "dep:regex",
 ] # used only for gating non-test items
 _experimental = [

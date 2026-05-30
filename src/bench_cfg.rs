@@ -1,6 +1,6 @@
-use basic_stats::aok::AokValue;
-
 use crate::{LatencyUnit, latency};
+use basic_stats::aok::AokValue;
+use log::debug;
 use std::{
     ops::{Add, Div},
     time::Duration,
@@ -193,7 +193,7 @@ impl BenchCfg {
             adj_status_run_length,
             adj_exec_run_length,
         ];
-        println!("*** run_lengths[warmup, status, exec]={run_lengths:?}");
+        debug!("run_lengths[warmup, status, exec]={run_lengths:?}");
 
         let counts = run_lengths
             .iter()
@@ -223,7 +223,7 @@ impl BenchCfg {
             (None, None) => unreachable!("impossible"),
         };
 
-        println!("*** budget={budget:?}");
+        debug!("budget={budget:?}");
         budget
     }
 
@@ -246,7 +246,7 @@ impl BenchCfg {
         exec_run_length: RunLength,
     ) -> f64 {
         let budget = self.execs_per_milli_budget(exec_run_length);
-        println!("*** execs_per_milli_budget={budget:?}");
+        debug!("execs_per_milli_budget={budget:?}");
         latency::ltn_src_executions_per_milli(src.map(|arr| arr.iter().sum()), budget)
     }
 

@@ -5,6 +5,7 @@ use crate::{
     multi::BenchOut,
     status::{DefaultStatus, NoStatus, Status},
 };
+use log::debug;
 use std::{
     io::stderr,
     time::{Duration, Instant},
@@ -91,12 +92,12 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     exec_run_length: RunLength,
     s: &mut S,
 ) -> BenchOut<K> {
-    println!("*** bench_run_x -- exec_run_length={exec_run_length:?}");
+    debug!("bench_run_x -- exec_run_length={exec_run_length:?}");
     let mut state = BenchOut::new(cfg);
     let execs_per_milli = cfg.ltn_src_execs_per_milli(&mut latency_src, exec_run_length);
-    println!("*** execs_per_milli={execs_per_milli}");
+    debug!("execs_per_milli={execs_per_milli}");
     let status_freq = cfg.status_freq(execs_per_milli);
-    println!("*** status_freq={status_freq}");
+    debug!("status_freq={status_freq}");
 
     let warmup_run_length = RunLength::Duration(Duration::from_millis(cfg.warmup_millis()));
     let warmup_est_dur = warmup_run_length.estimated_duration(execs_per_milli);
@@ -265,7 +266,7 @@ mod long {
             R: FnOnce(&BenchCfg, Src, RunLength) -> BenchOut<K>,
         {
             assert!(1 <= K && K <= 2, "K={K} must be 1 or 2");
-
+            _ = env_logger::try_init();
             let start = Instant::now();
 
             let FnsLatencySrc {
