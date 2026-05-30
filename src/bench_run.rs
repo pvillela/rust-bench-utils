@@ -214,7 +214,7 @@ mod long {
             }
         }
 
-        // cargo test -r --package bench_utils --lib --all-features -- bench_run::validate::without_status --nocapture --test-threads=1 --skip multi
+        // cargo test -r --package bench_utils --lib --all-features -- bench_run::long::validate::without_status --nocapture --test-threads=1 --skip multi
         mod without_status {
             use super::*;
             use crate::bench_run::bench_run_arg_cfg;

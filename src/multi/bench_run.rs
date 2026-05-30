@@ -264,6 +264,8 @@ mod long {
             Src: Iterator<Item = [Duration; K]>,
             R: FnOnce(&BenchCfg, Src, RunLength) -> BenchOut<K>,
         {
+            assert!(1 <= K && K <= 2, "K={K} must be 1 or 2");
+
             let start = Instant::now();
 
             let FnsLatencySrc {
@@ -271,10 +273,6 @@ mod long {
                 mut f1,
                 src,
             } = fsrc;
-
-            if K < 1 || K > 2 {
-                panic!("K must be 1 or 2");
-            }
 
             let warmup_millis = base_warmup_millis * K as u64;
             let bench_time = base_bench_time * K as u32;
@@ -284,9 +282,8 @@ mod long {
                 "validate_bench_run: K={K}, base_target_latency={base_target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}"
             );
 
-            let exec_count = (bench_time.as_secs_f64()
-                / (base_target_latency * K as u32).as_secs_f64())
-                as u64;
+            let exec_count =
+                (bench_time.as_secs_f64() / (base_target_latency * K as u32).as_secs_f64()) as u64;
             let cfg = BenchCfg::default()
                 .with_warmup_millis(warmup_millis)
                 .with_status_millis(status_millis);
@@ -390,7 +387,7 @@ mod long {
             FnsLatencySrc::new(f0, f1, src)
         }
 
-        // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::validate::with_status1 --nocapture --test-threads=1
+        // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::long::validate::with_status1 --nocapture --test-threads=1
         mod with_status1 {
             use super::*;
 
@@ -437,7 +434,7 @@ mod long {
             }
         }
 
-        // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::validate::without_status1 --nocapture --test-threads=1
+        // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::long::validate::without_status1 --nocapture --test-threads=1
         mod without_status1 {
             use super::*;
 
@@ -481,7 +478,7 @@ mod long {
             }
         }
 
-        // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::validate::with_status2 --nocapture --test-threads=1
+        // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::long::validate::with_status2 --nocapture --test-threads=1
         mod with_status2 {
             use super::*;
 
@@ -528,7 +525,7 @@ mod long {
             }
         }
 
-        // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::validate::without_status2 --nocapture --test-threads=1
+        // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::long::validate::without_status2 --nocapture --test-threads=1
         mod without_status2 {
             use super::*;
 
