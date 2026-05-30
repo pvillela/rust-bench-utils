@@ -83,8 +83,7 @@ pub fn lognormal_out_jittered(
 ) -> BenchOut {
     let lognormal_samp = lognormal_samp_jittered(mu, sigma, k, n_jitter, jitter_epsilon)
         .map(|d| cfg.recording_unit().latency_from_u64(d));
-    let out = BenchOut::from_iter(&cfg, lognormal_samp);
-    out
+    BenchOut::from_iter(cfg, lognormal_samp)
 }
 
 /// Creates a [`BenchOut`] populated with a non-jittered lognormal sample.
@@ -155,6 +154,7 @@ impl Write for StringWriter {
                         std::io::Error::other("backspace being writen into empty `StringWriter`")
                     })
                     .map(|b| b as usize);
+                #[allow(clippy::question_mark)]
                 if res.is_err() {
                     return res;
                 }

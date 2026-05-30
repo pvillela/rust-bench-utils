@@ -41,19 +41,17 @@ impl<const K: usize> BenchState<K> {
                 true
             };
 
-            if est_remaining_iters > 0 {
-                est_remaining_iters -= 1;
-            }
+            est_remaining_iters = est_remaining_iters.saturating_sub(1);
 
             if i % status_freq == 0 || i == exec_count || est_remaining_iters == 0 || iter_finished
             {
                 let elapsed = start.elapsed();
                 let finished = i == exec_count || elapsed >= run_time || iter_finished;
 
-                if i % status_freq == 0 || finished {
-                    if let Some(exec_status) = status {
-                        exec_status(i);
-                    }
+                if (i % status_freq == 0 || finished)
+                    && let Some(exec_status) = status
+                {
+                    exec_status(i);
                 }
 
                 if finished {
@@ -171,7 +169,7 @@ pub fn bench_run_arg_cfg<const K: usize>(
     const NO_STATUS_MILLIS: u64 = 100;
 
     let cfg = &cfg.clone().with_status_millis(NO_STATUS_MILLIS);
-    bench_run_x(&cfg, latency_src, exec_run_length, &mut NoStatus)
+    bench_run_x(cfg, latency_src, exec_run_length, &mut NoStatus)
 }
 
 /// Repeatedly executes closures `fs`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -660,8 +658,8 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         {
             assert_eq!(caps[1], warmup_millis2.to_string());
-            let warmup_last = u64::from_str_radix(&caps[2], 10).unwrap();
-            let warmup_est_count = u64::from_str_radix(&caps[3], 10).unwrap();
+            let warmup_last = caps[2].parse::<u64>().unwrap();
+            let warmup_est_count = caps[3].parse::<u64>().unwrap();
             rel_approx_eq!(
                 warmup_est_count as f64,
                 warmup_run_length.estimated_count(execs_per_milli) as f64,
@@ -672,21 +670,21 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         {
             rel_approx_eq!(
-                u64::from_str_radix(&caps[4], 10).unwrap() as f64,
+                caps[4].parse::<u64>().unwrap() as f64,
                 exec_run_length2
                     .estimated_duration(execs_per_milli)
                     .as_millis() as f64,
                 epsilon
             );
-            let exec_last = u64::from_str_radix(&caps[5], 10).unwrap();
-            let exec_est_count = u64::from_str_radix(&caps[6], 10).unwrap();
+            let exec_last = caps[5].parse::<u64>().unwrap();
+            let exec_est_count = caps[6].parse::<u64>().unwrap();
             rel_approx_eq!(
                 exec_est_count as f64,
                 exec_run_length2.estimated_count(execs_per_milli) as f64,
                 epsilon
             );
             rel_approx_eq!(exec_last as f64, exec_est_count as f64, epsilon);
-            assert_eq!(out.n(), exec_last as u64);
+            assert_eq!(out.n(), exec_last);
         }
     }
 

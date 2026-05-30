@@ -60,6 +60,8 @@
 //! and hypothesis tests on log-latencies translate directly to statements about
 //! median latencies.
 
+#![allow(clippy::new_without_default)]
+
 mod bench_cfg;
 mod bench_out;
 mod comp;

@@ -94,7 +94,7 @@ pub fn ltn_src_executions_per_milli(
     let mut acc_execs: u64 = 0;
 
     for i in 1.. {
-        let iter_execs = 2u64.pow((i - 1));
+        let iter_execs = 2u64.pow(i - 1);
         let iter_latency = (&mut src).take(iter_execs as usize).sum();
 
         acc_latency += iter_latency;
@@ -230,11 +230,11 @@ mod test {
             Duration::from_nanos(500_700),
         );
         assert_eq!(
-            LatencyUnit::Milli.latency_from_f64(1000.999_999),
+            LatencyUnit::Milli.latency_from_f64(1_000.999_999),
             Duration::from_nanos(1_000_999_999),
         );
         assert_eq!(
-            LatencyUnit::Milli.latency_from_f64(1000.000_001),
+            LatencyUnit::Milli.latency_from_f64(1_000.000_001),
             Duration::from_nanos(1_000_000_001),
         );
     }
@@ -242,7 +242,7 @@ mod test {
     #[test]
     fn test_latency_round_trip_f64() {
         // Round trip
-        let nanos_u = 999 as u64;
+        let nanos_u = 999_u64;
         let dur = Duration::from_nanos(nanos_u);
 
         let nanos = LatencyUnit::Nano.latency_as_f64(dur);

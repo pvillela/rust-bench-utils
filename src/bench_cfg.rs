@@ -96,17 +96,6 @@ impl BenchCfg {
     /// Default error behavior: do not panic on error, return NaN/tainted values instead.
     pub const DEFAULT_PANIC_ON_ERROR: bool = false;
 
-    /// Creates a new instance with default attribute values.
-    pub fn default() -> Self {
-        Self {
-            warmup_millis: Self::DEFAULT_WARMUP_MILLIS,
-            recording_unit: Self::DEFAULT_RECORDING_UNIT,
-            sigfig: Self::DEFAULT_SIGFIG,
-            status_millis: Self::DEFAULT_STATUS_MILLIS,
-            panic_on_error: Self::DEFAULT_PANIC_ON_ERROR,
-        }
-    }
-
     /// The number of milliseconds used to "warm-up" the benchmark.
     pub fn warmup_millis(&self) -> u64 {
         self.warmup_millis
@@ -270,7 +259,13 @@ impl BenchCfg {
 
 impl Default for BenchCfg {
     fn default() -> Self {
-        Self::default()
+        Self {
+            warmup_millis: Self::DEFAULT_WARMUP_MILLIS,
+            recording_unit: Self::DEFAULT_RECORDING_UNIT,
+            sigfig: Self::DEFAULT_SIGFIG,
+            status_millis: Self::DEFAULT_STATUS_MILLIS,
+            panic_on_error: Self::DEFAULT_PANIC_ON_ERROR,
+        }
     }
 }
 
@@ -319,7 +314,7 @@ mod test {
         assert_eq!(cfg.recording_unit(), LatencyUnit::Micro);
         assert_eq!(cfg.sigfig(), 5);
         assert_eq!(200, cfg.status_millis);
-        assert_eq!(true, cfg.panic_on_error);
+        assert!(cfg.panic_on_error);
     }
 
     #[test]
