@@ -63,7 +63,7 @@ impl RunLength {
     }
 }
 
-/// Global benchmark configuration.
+/// Benchmark configuration, excluding the benchmark run length.
 ///
 /// Encapsulates the following data:
 /// - `warmup_millis`: warm-up duration in milliseconds

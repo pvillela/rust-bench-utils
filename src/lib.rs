@@ -1,18 +1,5 @@
-//! Utilities for measuring latency and synthesizing workloads.
-//!
-//! # Overview
-//!
-//! `bench_utils` provides building blocks for latency benchmarking in Rust:
-//!
-//! - Measure the wall-clock latency of any closure with [`latency`].
-//! - Run a full benchmark — warm-up, execute, collect statistics — with [`bench_run`].
-//! - Configure warm-up duration, time units, and error behavior via [`BenchCfg`].
-//! - Benchmark multiple closures, interleaving their execution, with
-//!   the [`multi`] module, which reduces the impact of time-dependent noise when comparing
-//!   latencies between functions.
-//! - Compare two benchmark results with [`Comp`], which provides Welch's t-tests
-//!   and confidence intervals on the ratio of medians.
-//!
+#![doc = include_str!("lib.md")]
+
 //! # Quick start
 //!
 //! ```rust,no_run

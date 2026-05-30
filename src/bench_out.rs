@@ -11,7 +11,37 @@ use basic_stats::{
     normal::{student_1samp_ci, student_1samp_p, student_1samp_t, student_1samp_test},
 };
 
-/// Contains the data resulting from benchmarking a closure.
+struct FlatIterator<I> {
+    it: I,
+    value_opt: Option<Duration>,
+    count: u64,
+}
+
+impl<I: Iterator<Item = (Duration, u64)>> Iterator for FlatIterator<I> {
+    type Item = Duration;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.count > 0 {
+            self.count -= 1;
+            self.value_opt
+        } else {
+            match self.it.next() {
+                Some((value, count)) => {
+                    assert!(
+                        count > 0,
+                        "counts from iterator with counts must be positive"
+                    );
+                    self.count = count - 1;
+                    self.value_opt = Some(value);
+                    self.value_opt
+                }
+                None => None,
+            }
+        }
+    }
+}
+
+/// Contains the latency observations resulting from benchmarking a closure.
 ///
 /// It is returned by the core benchmarking functions in this library.
 /// Its methods provide descriptive and inferential statistics about the latency sample of the
@@ -99,6 +129,29 @@ impl BenchOut {
             self.n_ln += 1;
             self.sum_ln += ln;
             self.sum2_ln += ln.powi(2);
+        }
+    }
+
+    /// Returns all the latency data collected as an iterator of value-count pairs, where each value is a latency
+    /// measurement and each count is the number of occurences of the latency measurment.
+    ///
+    /// The iterator yields values in strictly increasing order and all counts are positive.
+    pub fn iter_with_counts(&self) -> impl Iterator<Item = (Duration, u64)> {
+        self.hist.iter_recorded().map(|x| {
+            let value = self.recording_unit.latency_from_u64(x.value_iterated_to());
+            let count = x.count_at_value();
+            (value, count)
+        })
+    }
+
+    /// Returns all the latency data collected as an iterator of durations.
+    ///
+    /// The iterator yields values in monotonically non-decreasing order.
+    pub fn iter_flat(&self) -> impl Iterator<Item = Duration> {
+        FlatIterator {
+            it: self.iter_with_counts(),
+            value_opt: None,
+            count: 0,
         }
     }
 

@@ -111,10 +111,6 @@ impl<const K: usize> BenchOut<K> {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &crate::BenchOut> {
-        // BenchOutIterator {
-        //     index: 0,
-        //     out: self,
-        // }
         self.arr.iter()
     }
 
