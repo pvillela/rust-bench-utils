@@ -183,6 +183,11 @@ bin
 # Files from macOS
 .DS_Store
 
+# Coverage
+*.profdata
+*.profraw
+coverage/
+
 ## Other
 .devcontainer/
 .idea/
