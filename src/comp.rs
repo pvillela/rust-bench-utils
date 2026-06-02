@@ -104,8 +104,8 @@ impl<'a> Comp<'a> {
     }
 
     /// Welch's t statistic for the hypothesis that
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm), or equivalently,
-    /// `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
+    /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm, in the recording unit),
+    /// or equivalently, `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
     ///
     /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
@@ -128,7 +128,7 @@ impl<'a> Comp<'a> {
     }
 
     /// Degrees of freedom for Welch's t statistic for
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2)))` (where `ln` is the natural logarithm).
+    /// `mean(ln(latency(f1))) - mean(ln(latency(f2)))` (where `ln` is the natural logarithm, in the recording unit).
     ///
     /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
@@ -148,8 +148,8 @@ impl<'a> Comp<'a> {
     }
 
     /// p-value of Welch's two-sample t-test of the hypothesis that
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm), or equivalently,
-    /// `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
+    /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm, in the recording unit),
+    /// or equivalently, `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
     ///
     /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
@@ -174,7 +174,7 @@ impl<'a> Comp<'a> {
     }
 
     /// Welch confidence interval for
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2)))` (where `ln` is the natural logarithm),
+    /// `mean(ln(latency(f1))) - mean(ln(latency(f2)))` (where `ln` is the natural logarithm, in the recording unit),
     /// with confidence level `(1 - alpha)`.
     ///
     /// Assumes that both `latency(f1)` and `latency(f2)` are approximately log-normal.
@@ -240,8 +240,8 @@ impl<'a> Comp<'a> {
     }
 
     /// Welch's two-sample t-test of the hypothesis that
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm), or equivalently,
-    /// `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
+    /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm, in the recording unit),
+    /// or equivalently, `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
     ///
     /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.

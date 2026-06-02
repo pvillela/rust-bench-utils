@@ -7,21 +7,16 @@ use crate::{
 };
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
-/// *optionally* outputs information about the benchmark and its execution status.
+/// *optionally* reports progress status during benchmark execution.
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
-/// `warmup_millis` milliseconds.
+/// `cfg.warmup_millis` milliseconds.
 ///
 /// Arguments:
 /// - `cfg` - bench configuration used to run the benchmark.
-/// - `f` - benchmark target.
-/// - `warmup_millis` - duration (in milliseconds) of warm-up execution.
+/// - `f` - benchmark target closure.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
-/// - `warmup_status` - optionally invoked periodically during warm-up. Its argument is the current
-///   warm-up execution iteration.
-/// - `exec_status` - optionally invoked periodically during data collection. Its argument is the
-///   current number of executions performed.
-/// - `execs_per_milli` - estimate of how many executions of `f` fit in one millisecond.
+/// - `s` - status handler for reporting warm-up and execution progress.
 pub fn bench_run_x<'a, S: Status<'a>>(
     cfg: &BenchCfg,
     f: impl FnMut(),

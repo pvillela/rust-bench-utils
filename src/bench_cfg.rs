@@ -74,7 +74,7 @@ impl RunLength {
 /// - `status_millis`: milliseconds between status reports during bench execution
 /// - `panic_on_error`: if set to `true`, library functions that don't return a [`Result`] should panic upon
 ///   encountering an error condition; when set to `false`, instead of panicking, functions should return a
-///   tainted value, i.e., `NaN` or a data structure that has `NaN` in one or more fields.
+///   tainted value, i.e., non-finite value such as `NaN` or a data structure that has non-finite values in one or more fields.
 #[derive(Debug, Clone)]
 pub struct BenchCfg {
     warmup_millis: u64,
@@ -237,6 +237,9 @@ impl BenchCfg {
     }
 
     /// Estimates how many iterations of `src` can be done in one millisecond.
+    /// The iterator `src` is expected to be a wrapper of `K` closures such that each
+    /// invocation of `next()` causes each of the `K` closures to be invoked in turn and
+    /// an array containing the respective latencies is returned,
     ///
     /// Used in status reporting as well as in execution loop termination logic (to ensure adherence to the
     /// run length specified when the benchmark is executed).

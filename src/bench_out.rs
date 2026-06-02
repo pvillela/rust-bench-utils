@@ -44,8 +44,8 @@ impl<I: Iterator<Item = (Duration, u64)>> Iterator for FlatIterator<I> {
 /// Contains the latency observations resulting from benchmarking a closure.
 ///
 /// It is returned by the core benchmarking functions in this library.
-/// Its methods provide descriptive and inferential statistics about the latency sample of the
-/// benchmarked closure.
+/// Its methods provide access to the raw data sample collected for the benchmarked closure, as well as descriptive and
+/// inferential statistics.
 ///
 /// The `*_ln_*` methods provide statistics for `mean(ln(latency(f)))`, where `ln` is the natural logarithm.
 /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
@@ -85,6 +85,7 @@ impl BenchOut {
         }
     }
 
+    #[doc(hidden)]
     /// Creates a [`BenchOut`] from an iterator of [`Duration`] values.
     ///
     /// Each item in the iterator is recorded as a single latency observation.
@@ -114,7 +115,7 @@ impl BenchOut {
     }
 
     #[inline(always)]
-    /// Updates `self` with an elapsed time observation for the function.
+    /// Updates `self` with an elapsed time observation for the target function.
     pub(crate) fn capture_data(&mut self, latency: Duration) {
         let elapsed = self.recording_unit.latency_as_u64(latency);
         self.hist
@@ -207,6 +208,9 @@ impl BenchOut {
     }
 
     /// Sample median of latencies.
+    ///
+    /// # Panics
+    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
     pub fn median(&self) -> Duration {
         self.summary().median
     }
@@ -232,8 +236,8 @@ impl BenchOut {
     }
 
     /// Student's one-sample t statistic for
-    /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm), or equivalently,
-    /// the equality of `median(latency(f))` and `exp(ln_mu0)`.
+    /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm, in the recording unit),
+    /// or equivalently, the equality of `median(latency(f))` and `exp(ln_mu0)`.
     ///
     /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
@@ -255,7 +259,8 @@ impl BenchOut {
         )
     }
 
-    /// Degrees of freedom for Student's t statistic for `mean(ln(latency(f)))` (where `ln` is the natural logarithm).
+    /// Degrees of freedom for Student's t statistic for `mean(ln(latency(f)))` (where `ln` is the natural logarithm,
+    /// in the recording unit).
     ///
     /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
@@ -265,8 +270,8 @@ impl BenchOut {
     }
 
     /// p-value of Student's one-sample t-test for
-    /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm), or equivalently,
-    /// the equality of `median(latency(f))` and `exp(ln_mu0)`.
+    /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm, in the recording unit),
+    /// or equivalently, the equality of `median(latency(f))` and `exp(ln_mu0)`.
     ///
     /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
@@ -291,8 +296,7 @@ impl BenchOut {
     }
 
     /// Student's one-sample confidence interval for
-    /// `mean(ln(latency(f)))` (where `ln` is the natural logarithm),
-    /// in the recording unit,
+    /// `mean(ln(latency(f)))` (where `ln` is the natural logarithm, in the recording unit),
     /// with confidence level `(1 - alpha)`.
     ///
     /// Assumes that `latency(f)` is approximately log-normal.
@@ -362,7 +366,7 @@ impl BenchOut {
     }
 
     /// Student's one-sample test of the hypothesis that
-    /// `mean(ln(latency(f))) == ln_mu0` (where `ln` is the natural logarithm), or equivalently,
+    /// `mean(ln(latency(f))) == ln_mu0` (where `ln` is the natural logarithm, in the recording unit), or equivalently,
     /// `median(latency(f)) == exp(ln_mu0)`.
     ///
     /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.

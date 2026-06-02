@@ -82,8 +82,5 @@ pub mod stats_types {
 #[cfg(feature = "_bench")]
 pub mod bench_support;
 
-/// Lognormal sample generators, a [`StringWriter`](crate::test_support::StringWriter) for testing status output,
-/// and constants for low/high log-standard-deviation.
-/// Gated by feature **"_test_support"**.
 #[cfg(feature = "_test_support")]
 pub mod test_support;

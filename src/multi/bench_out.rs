@@ -198,8 +198,8 @@ impl<const K: usize> BenchOut<K> {
     }
 
     /// Student's one-sample t statistics for
-    /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm), or equivalently,
-    /// the equality of `median(latency(f))` and `exp(ln_mu0)`.
+    /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm, in the recording unit),
+    /// or equivalently, the equality of `median(latency(f))` and `exp(ln_mu0)`.
     ///
     /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
@@ -217,7 +217,8 @@ impl<const K: usize> BenchOut<K> {
         array::from_fn(|k| self.arr[k].student_ln_t(ln_mu0))
     }
 
-    /// Degrees of freedom for Student's t statistics for `mean(ln(latency(f)))` (where `ln` is the natural logarithm).
+    /// Degrees of freedom for Student's t statistics for `mean(ln(latency(f)))`
+    /// (where `ln` is the natural logarithm, in the recording unit).
     ///
     /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
@@ -227,8 +228,8 @@ impl<const K: usize> BenchOut<K> {
     }
 
     /// p-values of Student's one-sample t-tests for
-    /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm), or equivalently,
-    /// the equality of `median(latency(f))` and `exp(ln_mu0)`.
+    /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm, in the recording unit),
+    /// or equivalently, the equality of `median(latency(f))` and `exp(ln_mu0)`.
     ///
     /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
@@ -247,7 +248,7 @@ impl<const K: usize> BenchOut<K> {
     }
 
     /// Student's one-sample confidence intervals for
-    /// `mean(ln(latency(f)))` (where `ln` is the natural logarithm).
+    /// `mean(ln(latency(f)))` (where `ln` is the natural logarithm, in the recording unit).
     /// with confidence level `(1 - alpha)`.
     ///
     /// Assumes that `latency(f)` is approximately log-normal.
@@ -300,7 +301,7 @@ impl<const K: usize> BenchOut<K> {
     }
 
     /// Student's one-sample tests of the hypotheses that
-    /// `mean(ln(latency(f))) == ln_mu0` (where `ln` is the natural logarithm), or equivalently,
+    /// `mean(ln(latency(f))) == ln_mu0` (where `ln` is the natural logarithm, in the recording unit), or equivalently,
     /// `median(latency(f)) == exp(ln_mu0)`.
     ///
     /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.

@@ -81,6 +81,8 @@ pub fn fn_executions_per_milli(f: impl FnMut(), budget: RunLength) -> f64 {
 
 /// Estimates how many iterations of `src` can be done in one millisecond by iterating one or more times
 /// and doing a proportionality calculation.
+/// The iterator `src` is expected to encapsulate closure invocations such that each
+/// invocation of `next()` yields the latency observed for a closure invocation.
 ///
 /// # Arguments
 ///

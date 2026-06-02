@@ -1,3 +1,7 @@
+//! Lognormal sample generators, a [`StringWriter`](crate::test_support::StringWriter) for testing status output,
+//! and constants for low/high log-standard-deviation.
+//! Gated by feature **"_test_support"**.
+
 use crate::{BenchCfg, BenchOut};
 use basic_stats::{core::SampleMoments, dev_utils::ApproxEq, normal::normal_detm_samp};
 use std::{io::Write, sync::LazyLock, time::Duration};
@@ -135,7 +139,7 @@ pub fn lognormal_moments_ln(mu: f64, sigma: f64, k: u64) -> SampleMoments {
     lognormal_moments_ln_jittered(mu, sigma, k, 3, 0.)
 }
 
-/// Writer backed by a [`Vec<u8>`] that can process backspace characters ("\u{8}") properly like stdeout and stderr do.
+/// Writer backed by a [`Vec<u8>`] that can process backspace characters ("\u{8}") properly like stdout and stderr do.
 ///
 /// Used for testing of status reporting by this crate and `bench_diff`.
 pub struct StringWriter {
@@ -184,7 +188,14 @@ impl StringWriter {
     }
 }
 
+/// Extension trait providing [`abs_rel_diff`](AbsRelDiffDur::abs_rel_diff) on [`Duration`].
+///
+/// Computes the absolute relative difference between two durations,
+/// delegating to [`f64::abs_rel_diff`] on their second-resolution values.
 pub trait AbsRelDiffDur {
+    /// Computes the absolute value of the relative difference between `self` and `other`.
+    ///
+    /// Returns `|self - other| / max(self, other)`, or 0 when both are zero.
     fn abs_rel_diff(self, other: Duration) -> f64;
 }
 

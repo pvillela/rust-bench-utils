@@ -10,8 +10,8 @@ use std::{hint::black_box, time::Duration};
 /// The closure executes a work function whose latency is controlled by the `effort` value encapsulated in this struct.
 ///
 /// Given a desired target latency at a milliseconds scale, the latency of the resulting closure is not as reliable as
-/// using `|| thread::sleep(target_latency)`. However, the busy work closure is a more realistic sythetic load as its
-/// latency is the result of computations, and it is more reliable for latencies at the microsends scale.
+/// using `|| thread::sleep(target_latency)`. However, the busy work closure is a more realistic synthetic load as its
+/// latency is the result of computations, and it is more reliable for latencies at the microseconds scale.
 /// In any case, the ratio of the latencies of two closures created from two [`BusyWork`] instances is reliably
 /// proportional to the ratio of the respective `effort` attributes, the more so the higher the sample size.
 pub struct BusyWork {

@@ -70,22 +70,21 @@ impl<const K: usize> BenchState<K> {
     }
 }
 
-/// Repeatedly executes closures `fs`, collects the resulting latency data in a [`BenchOut`] object, and
-/// *optionally* outputs information about the benchmark and its execution status.
+/// Repeatedly invkes the `latency_src.next()`, collects the resulting latency data in a
+/// [`BenchOut`] object, and *optionally* reports progress status during benchmark
+/// execution.
+/// The iterator `latency_src` is expected to be a wrapper of `K` closures such that each
+/// invocation of `next()` causes each of the `K` closures to be invoked in turn and
+/// an array containing the respective latencies is returned,
 ///
-/// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
-/// `warmup_millis` milliseconds.
+/// Prior to data collection, the benchmark is "warmed-up" by repeatedly invoking
+/// `latency_src.next()` for [`BenchCfg::warmup_millis`] milliseconds.
 ///
 /// Arguments:
 /// - `cfg` - bench configuration used to run the benchmark.
-/// - `f` - benchmark target.
-/// - `warmup_millis` - duration (in milliseconds) of warm-up execution.
+/// - `latency_src` - iterator yielding arrays of measured latencies.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
-/// - `warmup_status` - optionally invoked periodically during warm-up. Its argument is the current
-///   warm-up execution iteration.
-/// - `exec_status` - optionally invoked periodically during data collection. Its argument is the
-///   current number of executions performed.
-/// - `execs_per_milli` - estimate of how many executions of `f` fit in one millisecond.
+/// - `s` - status handler for reporting warm-up and execution progress.
 pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     cfg: &BenchCfg,
     mut latency_src: impl Iterator<Item = [Duration; K]>,
@@ -130,13 +129,16 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     state
 }
 
-/// Repeatedly executes closures `fs` and collects the resulting latency data in a [`BenchOut`] object.
-/// Runs with the default [`BenchCfg`].
+/// Repeatedly invkes the `latency_src.next()`, collects the resulting latency data in a
+/// [`BenchOut`] object, and *optionally* reports progress status during benchmark
+/// execution.
+/// The iterator `latency_src` is expected to be a wrapper of `K` closures such that each
+/// invocation of `next()` causes each of the `K` closures to be invoked in turn and
+/// an array containing the respective latencies is returned,
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
 /// [`BenchCfg::warmup_millis`] milliseconds.
-/// This function calls [`bench_run_x`] with no-op closures for the arguments that support the output of
-/// benchmark status.
+/// This function calls [`bench_run_arg_cfg`] with the default bench configuration.
 ///
 /// Arguments:
 /// - `f` - benchmark target.
@@ -149,12 +151,16 @@ pub fn bench_run<const K: usize>(
     bench_run_arg_cfg(&cfg, latency_src, exec_run_length)
 }
 
-/// Repeatedly executes closures `fs` and collects the resulting latency data in a [`BenchOut`] object.
+/// Repeatedly invkes the `latency_src.next()`, collects the resulting latency data in a
+/// [`BenchOut`] object, and *optionally* reports progress status during benchmark
+/// execution.
+/// The iterator `latency_src` is expected to be a wrapper of `K` closures such that each
+/// invocation of `next()` causes each of the `K` closures to be invoked in turn and
+/// an array containing the respective latencies is returned,
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
 /// [`BenchCfg::warmup_millis`] milliseconds.
-/// This function calls [`bench_run_x`] with no-op closures for the arguments that support the output of
-/// benchmark status.
+/// This function calls [`bench_run_x`] with a no-op progress status handler.
 ///
 /// Arguments:
 /// - `cfg` - bench configuration used to run the benchmark.
@@ -173,14 +179,16 @@ pub fn bench_run_arg_cfg<const K: usize>(
     bench_run_x(cfg, latency_src, exec_run_length, &mut NoStatus)
 }
 
-/// Repeatedly executes closures `fs`, collects the resulting latency data in a [`BenchOut`] object, and
-/// outputs information about the benchmark and its execution status.
-/// Runs with the default [`BenchCfg`].
+/// Repeatedly invkes the `latency_src.next()`, collects the resulting latency data in a
+/// [`BenchOut`] object, and *optionally* reports progress status during benchmark
+/// execution.
+/// The iterator `latency_src` is expected to be a wrapper of `K` closures such that each
+/// invocation of `next()` causes each of the `K` closures to be invoked in turn and
+/// an array containing the respective latencies is returned,
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
 /// [`BenchCfg::warmup_millis`] milliseconds.
-/// This function calls [`bench_run_x`] with pre-defined closures for the arguments that support the output of
-/// benchmark status to `stderr`.
+/// This function calls [`bench_run_with_status_arg_cfg`] with the default bench configuration.
 ///
 /// Arguments:
 /// - `f` - benchmark target.
@@ -193,12 +201,16 @@ pub fn bench_run_with_status<const K: usize>(
     bench_run_with_status_arg_cfg(&cfg, latency_src, exec_run_length)
 }
 
-/// Repeatedly executes closures `fs`, collects the resulting latency data in a [`BenchOut`] object, and
-/// outputs information about the benchmark and its execution status.
+/// Repeatedly invkes the `latency_src.next()`, collects the resulting latency data in a
+/// [`BenchOut`] object, and *optionally* reports progress status during benchmark
+/// execution.
+/// The iterator `latency_src` is expected to be a wrapper of `K` closures such that each
+/// invocation of `next()` causes each of the `K` closures to be invoked in turn and
+/// an array containing the respective latencies is returned,
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
 /// [`BenchCfg::warmup_millis`] milliseconds.
-/// This function calls [`bench_run_x`] with pre-defined closures for the arguments that support the output of
+/// This function calls [`bench_run_x`] with a pre-defined status handler that outputs
 /// benchmark status to `stderr`.
 ///
 /// Arguments:
