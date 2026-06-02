@@ -1,0 +1,28 @@
+{
+  "name": "Rust Dev Environment with ClaudeSeek",
+  "image": "mcr.microsoft.com/devcontainers/base:jammy",
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
+    "ghcr.io/devcontainers/features/rust:1": {
+      "version": "latest",
+      "profile": "default"
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer"
+      ]
+    }
+  },
+  "containerEnv": {},
+  "runArgs": [
+    "--env-file",
+    ".devcontainer/devcontainer.env"
+  ],
+  "mounts": [
+    "source=${localEnv:HOME}/.omp,target=/home/vscode/.omp,type=bind,consistency=cached",
+    "source=/home/pvillela/DEV/Rust/basic-stats,target=/workspaces/basic-stats,type=bind,consistency=cached,readonly"
+  ]
+}

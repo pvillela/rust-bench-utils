@@ -188,8 +188,10 @@ bin
 *.profraw
 coverage/
 
+## Security
+**/devcontainer.env
+
 ## Other
-.devcontainer/
 .idea/
 .gradle/
 out/
