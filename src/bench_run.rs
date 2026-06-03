@@ -21,7 +21,7 @@ pub fn bench_run_x<'a, S: Status<'a>>(
     cfg: &BenchCfg,
     f: impl FnMut(),
     exec_run_length: RunLength,
-    s: &mut S,
+    s: S,
 ) -> BenchOut {
     multi::bench_run_x(cfg, LatencySrc1(f), exec_run_length, s).into()
 }
@@ -290,7 +290,7 @@ mod status {
             .with_recording_unit(LatencyUnit::Nano);
 
         let mut w = StringWriter::new();
-        let mut status = DefaultStatus::new(
+        let status = DefaultStatus::new(
             &mut w,
             "Warming up".to_owned(),
             "\nExecuting bench_run".to_owned(),
@@ -300,7 +300,7 @@ mod status {
 
         let execs_per_milli = cfg.fn_execs_per_milli(&f, exec_run_length);
 
-        let out = bench_run_x(&cfg, f, exec_run_length, &mut status);
+        let out = bench_run_x(&cfg, f, exec_run_length, status);
 
         let status_str = w.as_str().expect("StringWriter doesn't contain string");
         println!("** {status_str}");

@@ -1,7 +1,7 @@
 use crate::latency;
 use std::time::Duration;
 
-/// Represents an iterator that encapsulates `K` closures and, for each invocation of `next()`,
+/// An iterator that encapsulates `K` closures and, for each invocation of `next()`,
 /// yields an array of size `K` with the wall-clock latency durations from one execution of each
 /// of the `K` closures.
 pub trait LatencySrc<const K: usize>: Iterator<Item = [Duration; K]> {}
