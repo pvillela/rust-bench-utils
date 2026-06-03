@@ -1,4 +1,4 @@
-use crate::{LatencyUnit, latency};
+use crate::{LatencyUnit, latency, multi::LatencySrc};
 use basic_stats::aok::AokValue;
 use log::debug;
 use std::{
@@ -237,15 +237,12 @@ impl BenchCfg {
     }
 
     /// Estimates how many iterations of `src` can be done in one millisecond.
-    /// The iterator `src` is expected to be a wrapper of `K` closures such that each
-    /// invocation of `next()` causes each of the `K` closures to be invoked in turn and
-    /// an array containing the respective latencies is returned,
     ///
     /// Used in status reporting as well as in execution loop termination logic (to ensure adherence to the
     /// run length specified when the benchmark is executed).
     pub fn ltn_src_execs_per_milli<const K: usize>(
         &self,
-        src: &mut impl Iterator<Item = [Duration; K]>,
+        src: &mut impl LatencySrc<K>,
         exec_run_length: RunLength,
     ) -> f64 {
         let budget = self.execs_per_milli_budget(exec_run_length);
