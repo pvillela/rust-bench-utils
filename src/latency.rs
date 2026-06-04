@@ -263,33 +263,18 @@ mod test {
 #[cfg(feature = "_test")]
 // cargo test --package bench_utils --lib --all-features -- latency::test_executions_per_milli --nocapture
 mod test_executions_per_milli {
+    use crate::test_support::SyntheticDurationIterator;
+
     use super::*;
     use basic_stats::rel_approx_eq;
-
-    struct ConvergingIterator {
-        limit: Duration,
-        iteration: u64,
-    }
-    impl Iterator for ConvergingIterator {
-        type Item = Duration;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            self.iteration += 1;
-            let value = self.limit.mul_f64(1.0 + 1.0 / self.iteration as f64);
-            Some(value)
-        }
-    }
 
     #[test]
     fn test_ltn_src_executions_per_milli() {
         const EPSILON: f64 = 0.01;
 
-        let limit = Duration::from_millis(10);
+        let target_latency = Duration::from_millis(10);
         let exp_epm = 0.1;
-        let src = ConvergingIterator {
-            limit,
-            iteration: 0,
-        };
+        let src = SyntheticDurationIterator::new(target_latency);
         let epm = ltn_src_executions_per_milli(src, RunLength::Count(1000));
 
         rel_approx_eq!(exp_epm, epm, EPSILON);

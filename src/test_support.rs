@@ -2,9 +2,9 @@
 //! and constants for low/high log-standard-deviation.
 //! Gated by feature **"_test"**.
 
-use crate::{BenchCfg, BenchOut};
+use crate::{BenchCfg, BenchOut, multi::LatencySrc};
 use basic_stats::{core::SampleMoments, dev_utils::ApproxEq, normal::normal_detm_samp};
-use std::{io::Write, sync::LazyLock, time::Duration};
+use std::{array, io::Write, sync::LazyLock, time::Duration};
 
 /// Low log-standard-deviation value for test sample generation.
 ///
@@ -222,18 +222,61 @@ mod macros {
     }
 }
 
-// mod macros {
-//     /// Asserts that two durations are approximately equal within `epsilon` relative to their magnitudes.
-//     #[macro_export]
-//     macro_rules! rel_approx_eq_dur {
-//         ($a:expr, $b:expr, $epsilon:expr $(,)?) => {
-//             let rel_diff = basic_stats::dev_utils::ApproxEq::abs_rel_diff($a.as_secs_f64(), $b.as_secs_f64());
-//             if !basic_stats::dev_utils::ApproxEq::rel_approx_eq($a.as_secs_f64(), $b.as_secs_f64(), $epsilon) {
-//                 panic!(
-//                     "assertion for relative approximate equality failed: left={:?}, right={:?}, rel_diff={}, epsilon={})",
-//                     $a, $b, rel_diff, $epsilon
-//                 );
-//             }
-//         };
-//     }
-// }
+pub struct SyntheticDurationIterator {
+    target_latency: Duration,
+    iteration: u64,
+}
+
+impl SyntheticDurationIterator {
+    pub fn new(target_latency: Duration) -> Self {
+        Self {
+            target_latency,
+            iteration: 0,
+        }
+    }
+}
+
+impl Iterator for SyntheticDurationIterator {
+    type Item = Duration;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iteration += 1;
+        let sign = if self.iteration % 2 == 1 { 1.0 } else { -1.0 };
+        let value = self
+            .target_latency
+            .mul_f64(1.0 + sign / self.iteration as f64);
+        Some(value)
+    }
+}
+
+pub struct SyntheticLatencySrc<const K: usize> {
+    iters: [SyntheticDurationIterator; K],
+}
+
+impl<const K: usize> SyntheticLatencySrc<K> {
+    pub fn new(target_latencies: [Duration; K]) -> Self {
+        Self {
+            iters: target_latencies.map(|ltn| SyntheticDurationIterator::new(ltn)),
+        }
+    }
+
+    pub fn target_latencies(&self) -> [Duration; K] {
+        array::from_fn(|k| self.iters[k].target_latency)
+    }
+}
+
+impl<const K: usize> Iterator for SyntheticLatencySrc<K> {
+    type Item = [Duration; K];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let opts = array::from_fn(|k| self.iters[k].next());
+        if opts.iter().all(|v| v.is_some()) {
+            let res = opts.map(|v| v.expect("must be Some"));
+            Some(res)
+        } else {
+            None
+        }
+    }
+}
+
+impl<const K: usize> LatencySrc<K> for SyntheticLatencySrc<K> {}
