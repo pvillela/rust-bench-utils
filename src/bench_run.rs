@@ -493,10 +493,13 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
 #[cfg(test)]
 #[cfg(feature = "_test")]
-/// Tests created by Claude Code, improved a bit by me.
+/// Tests for `bench_run`, `bench_run_with_status`, `bench_run_x` — K=1 wrappers around `multi` functions.
+/// The core benchmark logic (including K=1 and K=2 validation) lives in `multi::bench_run::simple_tests`.
+/// See also `multi::bench_run::status` and `multi::bench_run::long` for status-output and long-running validation tests.
 mod simple_tests {
     use super::*;
     use crate::{LatencyUnit, RunLength};
+    use crate::{status::DefaultStatus, test_support::StringWriter};
     use std::{thread, time::Duration};
 
     /// Helper to get a clean config with minimal warmup/calibration for fast tests.
@@ -541,5 +544,30 @@ mod simple_tests {
         );
         // At least some executions should have been captured
         assert!(out.n() > 0 && out.n() < 20);
+    }
+
+    #[test]
+    fn test_bench_run_default() {
+        let out = bench_run(|| (), RunLength::Count(5));
+        assert_eq!(out.n(), 5);
+    }
+
+    #[test]
+    fn test_bench_run_with_status() {
+        let out = bench_run_with_status(|| (), RunLength::Count(5));
+        assert_eq!(out.n(), 5);
+    }
+
+    #[test]
+    fn test_bench_run_x() {
+        let cfg = quick_cfg();
+        let mut buf = StringWriter::new();
+        let status = DefaultStatus::new(
+            &mut buf,
+            "Warming up".to_string(),
+            "Running".to_string(),
+        );
+        let out = bench_run_x(&cfg, || (), RunLength::Count(5), status);
+        assert_eq!(out.n(), 5);
     }
 }

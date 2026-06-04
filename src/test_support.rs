@@ -1,6 +1,6 @@
 //! Lognormal sample generators, a [`StringWriter`](crate::test_support::StringWriter) for testing status output,
 //! and constants for low/high log-standard-deviation.
-//! Gated by feature **"_test_support"**.
+//! Gated by feature **"_test"**.
 
 use crate::{BenchCfg, BenchOut};
 use basic_stats::{core::SampleMoments, dev_utils::ApproxEq, normal::normal_detm_samp};
@@ -74,7 +74,7 @@ pub fn lognormal_samp(mu: f64, sigma: f64, k: u64) -> impl Iterator<Item = u64> 
 /// - `cfg` - benchmark configuration (recording unit, etc.).
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
-/// - `k` - controls the sample size.
+/// - `k` - controls the sample size; the total number of items is `2*k*k - 1`.
 /// - `n_jitter` - denominator controlling the jitter period (must be >= 3).
 /// - `jitter_epsilon` - maximum magnitude of the jitter added to each value.
 pub fn lognormal_out_jittered(
@@ -99,7 +99,7 @@ pub fn lognormal_out_jittered(
 /// - `cfg` - benchmark configuration.
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
-/// - `k` - controls the sample size.
+/// - `k` - controls the sample size; the total number of items is `2*k*k - 1`.
 pub fn lognormal_out(cfg: &BenchCfg, mu: f64, sigma: f64, k: u64) -> BenchOut {
     lognormal_out_jittered(cfg, mu, sigma, k, 3, 0.)
 }
@@ -111,7 +111,7 @@ pub fn lognormal_out(cfg: &BenchCfg, mu: f64, sigma: f64, k: u64) -> BenchOut {
 ///
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
-/// - `k` - controls the sample size.
+/// - `k` - controls the sample size; the total number of items is `2*k*k - 1`.
 /// - `n_jitter` - denominator controlling the jitter period (must be >= 3).
 /// - `jitter_epsilon` - maximum magnitude of the jitter added to each value.
 pub fn lognormal_moments_ln_jittered(
@@ -134,7 +134,7 @@ pub fn lognormal_moments_ln_jittered(
 ///
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
-/// - `k` - controls the sample size.
+/// - `k` - controls the sample size; the total number of items is `2*k*k - 1`.
 pub fn lognormal_moments_ln(mu: f64, sigma: f64, k: u64) -> SampleMoments {
     lognormal_moments_ln_jittered(mu, sigma, k, 3, 0.)
 }

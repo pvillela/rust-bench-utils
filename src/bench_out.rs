@@ -676,4 +676,101 @@ mod test {
             assert_eq!(exp_accepted_hyp, student_test.accepted());
         }
     }
+
+    #[test]
+    fn test_bench_out_mean_panics_on_empty() {
+        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let out = BenchOut::from_iter(&cfg, std::iter::empty());
+        let result = std::panic::catch_unwind(|| out.mean());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bench_out_stdev_panics_on_empty() {
+        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let out = BenchOut::from_iter(&cfg, std::iter::empty());
+        let result = std::panic::catch_unwind(|| out.stdev());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bench_out_median_panics_on_empty() {
+        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let out = BenchOut::from_iter(&cfg, std::iter::empty());
+        let result = std::panic::catch_unwind(|| out.median());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bench_out_mean_ln_panics_on_empty() {
+        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let out = BenchOut::from_iter(&cfg, std::iter::empty());
+        let result = std::panic::catch_unwind(|| out.mean_ln());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bench_out_stdev_ln_panics_on_empty() {
+        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let out = BenchOut::from_iter(&cfg, std::iter::empty());
+        let result = std::panic::catch_unwind(|| out.stdev_ln());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bench_out_student_ln_t_panics_on_single() {
+        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let out = BenchOut::from_iter(&cfg, [Duration::from_millis(1)].into_iter());
+        let result = std::panic::catch_unwind(|| out.student_ln_t(0.0));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bench_out_iter_with_counts() {
+        const EPSILON: f64 = 0.001;
+        let cfg = BenchCfg::default();
+        let out = BenchOut::from_iter(
+            &cfg,
+            [
+                Duration::from_millis(1),
+                Duration::from_millis(1),
+                Duration::from_millis(2),
+            ]
+            .into_iter(),
+        );
+        let pairs: Vec<_> = out.iter_with_counts().collect();
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0].1, 2);
+        assert_eq!(pairs[1].1, 1);
+        // HDR histogram has slight quantization; compare approximately
+        rel_approx_eq_dur!(pairs[0].0, Duration::from_millis(1), EPSILON);
+        rel_approx_eq_dur!(pairs[1].0, Duration::from_millis(2), EPSILON);
+    }
+
+    #[test]
+    fn test_bench_out_iter_flat() {
+        let cfg = BenchCfg::default();
+        let out = BenchOut::from_iter(
+            &cfg,
+            [
+                Duration::from_millis(1),
+                Duration::from_millis(1),
+                Duration::from_millis(2),
+            ]
+            .into_iter(),
+        );
+        assert_eq!(out.iter_flat().count(), 3);
+    }
+
+    #[test]
+    fn test_bench_out_reset() {
+        let cfg = BenchCfg::default();
+        let mut out = BenchOut::from_iter(
+            &cfg,
+            [Duration::from_millis(1), Duration::from_millis(2)].into_iter(),
+        );
+        assert_eq!(out.n(), 2);
+        out.reset();
+        assert_eq!(out.n(), 0);
+    }
 }

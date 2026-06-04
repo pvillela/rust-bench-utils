@@ -49,13 +49,12 @@ __null = ["dep:basic_stats"]
 _ALL_NON_TEST = ["default", "busy_work", "_experimental", "_bench_diff"]
 
 _bench = [
-    "_test_support",
+    "_test",
     "busy_work",
     "dep:criterion",
 ] # used by some benches and some tests
 _bench_long_test = ["_bench"] # used for tests that take a long time
-_test = ["_test_support"] # used only by tests
-_test_support = [
+_test = [
     "basic_stats/_dev_utils",
     "dep:env_logger",
     "dep:regex",
@@ -91,7 +90,7 @@ required-features = ["_bench"]
 [[bench]]
 name = "validate_fake_work"
 harness = false
-required-features = ["_test_support"]
+required-features = ["_test"]
 
 [[bench]]
 name = "validate_latency_overhead"

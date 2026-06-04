@@ -286,7 +286,8 @@ impl<T> PanicIfNeeded for T where T: AokValue + Sized {}
 #[cfg(test)]
 #[cfg(feature = "_test")]
 mod test {
-    use crate::{BenchCfg, LatencyUnit, RunLength};
+    use crate::{BenchCfg, LatencyUnit, PanicIfNeeded, RunLength};
+    use std::panic::catch_unwind;
     use std::time::Duration;
 
     #[test]
@@ -438,5 +439,25 @@ mod test {
         // Using a no-op closure, the calibration should return a reasonable positive value
         let epms = cfg.fn_execs_per_milli(|| {}, RunLength::Count(10));
         assert!(epms.is_finite());
+    }
+
+    #[test]
+    fn test_panic_if_needed_not_panics_on_normal() {
+        let val: f64 = 42.0;
+        assert_eq!(val.panic_if_needed(true, "msg"), 42.0);
+    }
+
+    #[test]
+    fn test_panic_if_needed_not_panics_when_disabled() {
+        let nan = f64::NAN;
+        assert!(nan.panic_if_needed(false, "msg").is_nan());
+    }
+
+    #[test]
+    fn test_panic_if_needed_panics_when_enabled() {
+        let result = catch_unwind(|| {
+            f64::NAN.panic_if_needed(true, "expected");
+        });
+        assert!(result.is_err());
     }
 }

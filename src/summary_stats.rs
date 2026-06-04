@@ -82,3 +82,19 @@ pub fn summary_stats(out: &BenchOut) -> SummaryStats {
         max: ru.latency_from_u64(hist.max()),
     }
 }
+
+
+#[cfg(test)]
+#[cfg(feature = "_test")]
+mod test {
+    use super::*;
+    use crate::BenchCfg;
+
+    #[test]
+    fn test_summary_stats_panics_on_empty() {
+        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let out = crate::BenchOut::from_iter(&cfg, std::iter::empty::<std::time::Duration>());
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| summary_stats(&out)));
+        assert!(result.is_err(), "expected panic on empty sample");
+    }
+}

@@ -2,7 +2,7 @@
 
 //! # Quick start
 //!
-//! ```rust,no_run
+//! ```rust
 //! use bench_utils::{bench_run, BenchCfg, RunLength};
 //!
 //! // Benchmark a no-op closure for 1000 iterations with default configuration.
@@ -82,5 +82,5 @@ pub mod stats_types {
 #[cfg(feature = "_bench")]
 pub mod bench_support;
 
-#[cfg(feature = "_test_support")]
+#[cfg(feature = "_test")]
 pub mod test_support;

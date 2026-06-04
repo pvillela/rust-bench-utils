@@ -300,7 +300,6 @@ impl<'a> Comp<'a> {
 
     #[cfg(feature = "_experimental")]
     /// Wilcoxon rank sum *W* statistic for `latency(f1)` and `latency(f2)`.
-    ///
     /// Gated by feature **"_experimental"**.
     pub fn wilcoxon_rank_sum_w(&self) -> f64 {
         self.rank_sum().w()
@@ -308,7 +307,6 @@ impl<'a> Comp<'a> {
 
     #[cfg(feature = "_experimental")]
     /// Wilcoxon rank sum normal approximation *z* value for `latency(f1)` and `latency(f2)`.
-    ///
     /// Gated by feature **"_experimental"**.
     ///
     /// # Panics
@@ -325,7 +323,6 @@ impl<'a> Comp<'a> {
 
     #[cfg(feature = "_experimental")]
     /// Wilcoxon rank sum normal approximation *p* value for `latency(f1)` and `latency(f2)`.
-    ///
     /// Gated by feature **"_experimental"**.
     ///
     /// # Panics
@@ -343,7 +340,6 @@ impl<'a> Comp<'a> {
     #[cfg(feature = "_experimental")]
     /// Wilcoxon rank sum test for `latency(f1)` and `latency(f2)`,
     /// with alternative hypothesis `alt_hyp` and confidence level `(1 - alpha)`.
-    ///
     /// Gated by feature **"_experimental"**.
     ///
     /// # Panics
@@ -365,7 +361,6 @@ impl<'a> Comp<'a> {
 
 #[cfg(test)]
 #[cfg(feature = "_test")]
-#[cfg(feature = "_experimental")]
 mod test {
     use super::*;
     use crate::test_support::{
@@ -585,6 +580,48 @@ mod test {
                 accepted_hyp,
             };
             run_test(args);
+        }
+    }
+
+    #[cfg(feature = "_experimental")]
+    // cargo test --package bench_utils --lib --all-features -- comp::test::wilcoxon_tests::test_wilcoxon_rank_sum_methods --exact --nocapture --include-ignored
+    mod wilcoxon_tests {
+        use super::*;
+        use crate::test_support::LO_STDEV_LN;
+
+        const ALPHA: f64 = 0.05;
+
+        #[test]
+        fn test_wilcoxon_rank_sum_methods() {
+            let cfg = BenchCfg::default();
+
+            let median_ratio_1_2: f64 = 1.05;
+            let mu1 = 8.0;
+            let mu2 = mu1 - median_ratio_1_2.ln();
+            let k = 10;
+            let alt_hyp = AltHyp::Gt;
+
+            let out1 = lognormal_out(&cfg, mu1, *LO_STDEV_LN, k);
+            let out2 = lognormal_out(&cfg, mu2, *LO_STDEV_LN, k);
+
+            let comp = Comp::new(&out1, &out2);
+
+            let w = comp.wilcoxon_rank_sum_w();
+            assert!(w > 0.0, "w should be positive, got {}", w);
+
+            let z = comp.wilcoxon_rank_sum_z();
+            assert!(z > 1.0, "z should be greater than 1.0, got {}", z);
+
+            let p = comp.wilcoxon_rank_sum_p(alt_hyp);
+            assert!(
+                0.0 < p && p < 0.5,
+                "p should be between 0.5 and 1, got {}",
+                p
+            );
+
+            let result = comp.wilcoxon_rank_sum_test(alt_hyp, ALPHA);
+            let accepted = result.accepted();
+            assert_eq!(accepted, AcceptedHyp::Alt);
         }
     }
 }

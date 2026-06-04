@@ -259,3 +259,74 @@ mod test {
         assert_eq!(dur_nan, dur_mil);
     }
 }
+#[cfg(test)]
+#[cfg(feature = "_test")]
+// cargo test --package bench_utils --lib --all-features -- latency::test_executions_per_milli --nocapture
+mod test_executions_per_milli {
+    use super::*;
+    use basic_stats::rel_approx_eq;
+
+    struct ConvergingIterator {
+        limit: Duration,
+        iteration: u64,
+    }
+    impl Iterator for ConvergingIterator {
+        type Item = Duration;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.iteration += 1;
+            let value = self.limit.mul_f64(1.0 + 1.0 / self.iteration as f64);
+            Some(value)
+        }
+    }
+
+    #[test]
+    fn test_ltn_src_executions_per_milli() {
+        const EPSILON: f64 = 0.01;
+
+        let limit = Duration::from_millis(10);
+        let exp_epm = 0.1;
+        let src = ConvergingIterator {
+            limit,
+            iteration: 0,
+        };
+        let epm = ltn_src_executions_per_milli(src, RunLength::Count(1000));
+
+        rel_approx_eq!(exp_epm, epm, EPSILON);
+    }
+
+    #[test]
+    fn no_op_yields_positive_finite_estimate() {
+        let e = fn_executions_per_milli(|| {}, RunLength::Count(1000));
+        assert!(e > 0.0, "no-op should yield positive: {}", e);
+        assert!(e.is_finite(), "no-op estimate should be finite: {}", e);
+    }
+
+    #[test]
+    fn ltn_src_no_op_yields_positive_finite_estimate() {
+        let src = LatencySrc1(|| {}).map(|arr| arr[0]);
+        let e = ltn_src_executions_per_milli(src, RunLength::Count(1000));
+        assert!(e > 0.0, "ltn_src no-op should yield positive: {}", e);
+        assert!(
+            e.is_finite(),
+            "ltn_src no-op estimate should be finite: {}",
+            e
+        );
+    }
+
+    #[test]
+    fn fn_and_ltn_src_agree_for_no_op() {
+        let fn_e = fn_executions_per_milli(|| {}, RunLength::Count(1000));
+        let src_e = ltn_src_executions_per_milli(
+            LatencySrc1(|| {}).map(|arr| arr[0]),
+            RunLength::Count(1000),
+        );
+        let ratio = fn_e / src_e;
+        assert!(
+            ratio > 0.5 && ratio < 2.0,
+            "fn and ltn_src estimates should agree: fn={}, src={}",
+            fn_e,
+            src_e,
+        );
+    }
+}

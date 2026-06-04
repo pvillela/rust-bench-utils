@@ -577,4 +577,49 @@ mod test {
 
         assert_eq!(out1.mean(), Duration::from_millis(6));
     }
+
+    #[test]
+    fn test_bench_out_2_comp() {
+        let mu = 8.0;
+        let sigma = *LO_STDEV_LN;
+        let k = 10;
+
+        let cfg = BenchCfg::default();
+        let out = BenchOut::<2>::from_iter(&cfg, lognormal_samp2(&cfg, mu, sigma, k));
+
+        let comp = out.comp();
+        // Both outputs are fed the same data (`[y, y]`), so medians are equal
+        assert_eq!(comp.out_f1().median(), comp.out_f2().median());
+        // Verify both outputs have the expected sample size: 2*k*k - 1
+        assert_eq!(comp.out_f1().n(), 2 * k * k - 1);
+        assert_eq!(comp.out_f2().n(), 2 * k * k - 1);
+    }
+
+    #[test]
+    fn test_bench_out_1_flatten() {
+        let cfg = BenchCfg::default();
+        let out = BenchOut::<1>::from_iter(
+            &cfg,
+            [[Duration::from_millis(5)], [Duration::from_millis(7)]].into_iter(),
+        );
+
+        let flat: crate::BenchOut = out.flatten();
+        assert_eq!(flat.n(), 2);
+    }
+
+    #[test]
+    fn test_bench_out_reset() {
+        let cfg = BenchCfg::default();
+        let mut out = BenchOut::<2>::from_iter(
+            &cfg,
+            [
+                [Duration::from_millis(1), Duration::from_millis(2)],
+                [Duration::from_millis(3), Duration::from_millis(4)],
+            ]
+            .into_iter(),
+        );
+        assert!(out.n() > 0);
+        out.reset();
+        assert_eq!(out.n(), 0);
+    }
 }
