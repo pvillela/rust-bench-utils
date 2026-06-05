@@ -409,24 +409,26 @@ mod test {
     fn test_comp() {
         let cfg = BenchCfg::default();
 
-        let k = 6_400;
-        let n_jitter = 7; // should be coprime with 2*k
+        let samp_size = 12_800;
+        let n_jitter = 7;
 
         let sigma_lo = *LO_STDEV_LN;
         let sigma_hi = *HI_STDEV_LN;
 
         let mu_a = 8.;
-        let out_a = lognormal_out(&cfg, mu_a, sigma_lo, k);
-        let moments_ln_a = lognormal_moments_ln(mu_a, sigma_lo, k);
-        let out_aj = lognormal_out_jittered(&cfg, mu_a, sigma_hi, k, n_jitter, JITTER_EPSILON);
+        let out_a = lognormal_out(&cfg, mu_a, sigma_lo, samp_size);
+        let moments_ln_a = lognormal_moments_ln(mu_a, sigma_lo, samp_size);
+        let out_aj =
+            lognormal_out_jittered(&cfg, mu_a, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
         let moments_ln_aj =
-            lognormal_moments_ln_jittered(mu_a, sigma_hi, k, n_jitter, JITTER_EPSILON);
+            lognormal_moments_ln_jittered(mu_a, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
 
         let median_ratio_a_b: f64 = 1.01;
         let mu_b = mu_a - median_ratio_a_b.ln();
-        let out_bj = lognormal_out_jittered(&cfg, mu_b, sigma_hi, k, n_jitter, JITTER_EPSILON);
+        let out_bj =
+            lognormal_out_jittered(&cfg, mu_b, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
         let moments_ln_bj =
-            lognormal_moments_ln_jittered(mu_b, sigma_hi, k, n_jitter, JITTER_EPSILON);
+            lognormal_moments_ln_jittered(mu_b, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
 
         #[derive(Debug)]
         struct TestArgs<'a> {
@@ -598,11 +600,11 @@ mod test {
             let median_ratio_1_2: f64 = 1.05;
             let mu1 = 8.0;
             let mu2 = mu1 - median_ratio_1_2.ln();
-            let k = 10;
+            let samp_size = 20;
             let alt_hyp = AltHyp::Gt;
 
-            let out1 = lognormal_out(&cfg, mu1, *LO_STDEV_LN, k);
-            let out2 = lognormal_out(&cfg, mu2, *LO_STDEV_LN, k);
+            let out1 = lognormal_out(&cfg, mu1, *LO_STDEV_LN, samp_size);
+            let out2 = lognormal_out(&cfg, mu2, *LO_STDEV_LN, samp_size);
 
             let comp = Comp::new(&out1, &out2);
 
