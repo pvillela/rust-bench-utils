@@ -40,7 +40,7 @@ fn jitter(v: f64, i: i64, n_jitter: i64, epsilon: f64) -> f64 {
 pub fn lognormal_samp_jittered(
     mu: f64,
     sigma: f64,
-    k: u64,
+    k: usize,
     n_jitter: i64,
     jitter_epsilon: f64,
 ) -> impl Iterator<Item = u64> {
@@ -60,7 +60,7 @@ pub fn lognormal_samp_jittered(
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
 /// - `k` - controls the sample size; the total number of items is `2*k*k - 1`.
-pub fn lognormal_samp(mu: f64, sigma: f64, k: u64) -> impl Iterator<Item = u64> {
+pub fn lognormal_samp(mu: f64, sigma: f64, k: usize) -> impl Iterator<Item = u64> {
     lognormal_samp_jittered(mu, sigma, k, 3, 0.)
 }
 
@@ -81,7 +81,7 @@ pub fn lognormal_out_jittered(
     cfg: &BenchCfg,
     mu: f64,
     sigma: f64,
-    k: u64,
+    k: usize,
     n_jitter: i64,
     jitter_epsilon: f64,
 ) -> BenchOut {
@@ -100,7 +100,7 @@ pub fn lognormal_out_jittered(
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
 /// - `k` - controls the sample size; the total number of items is `2*k*k - 1`.
-pub fn lognormal_out(cfg: &BenchCfg, mu: f64, sigma: f64, k: u64) -> BenchOut {
+pub fn lognormal_out(cfg: &BenchCfg, mu: f64, sigma: f64, k: usize) -> BenchOut {
     lognormal_out_jittered(cfg, mu, sigma, k, 3, 0.)
 }
 
@@ -117,7 +117,7 @@ pub fn lognormal_out(cfg: &BenchCfg, mu: f64, sigma: f64, k: u64) -> BenchOut {
 pub fn lognormal_moments_ln_jittered(
     mu: f64,
     sigma: f64,
-    k: u64,
+    k: usize,
     n_jitter: i64,
     jitter_epsilon: f64,
 ) -> SampleMoments {
@@ -135,7 +135,7 @@ pub fn lognormal_moments_ln_jittered(
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
 /// - `k` - controls the sample size; the total number of items is `2*k*k - 1`.
-pub fn lognormal_moments_ln(mu: f64, sigma: f64, k: u64) -> SampleMoments {
+pub fn lognormal_moments_ln(mu: f64, sigma: f64, k: usize) -> SampleMoments {
     lognormal_moments_ln_jittered(mu, sigma, k, 3, 0.)
 }
 

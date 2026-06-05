@@ -409,7 +409,7 @@ mod test {
     fn test_comp() {
         let cfg = BenchCfg::default();
 
-        let k = 80;
+        let k = 6_400;
         let n_jitter = 7; // should be coprime with 2*k
 
         let sigma_lo = *LO_STDEV_LN;

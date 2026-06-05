@@ -349,7 +349,7 @@ mod test {
         cfg: &BenchCfg,
         rec_mu: f64,
         sigma: f64,
-        k: u64,
+        k: usize,
     ) -> impl Iterator<Item = [Duration; 2]> {
         lognormal_samp(rec_mu, sigma, k).map(|x| {
             let y = cfg.recording_unit().latency_from_u64(x);
@@ -366,7 +366,7 @@ mod test {
         // in ln of nanoseconds (recording unit is Nano by default)
         let mu = mu_micro + (1000_f64).ln();
         let sigma = *LO_STDEV_LN;
-        let k = 100;
+        let k = 10_000;
 
         let cfg = BenchCfg::default();
         let ru = cfg.recording_unit();
@@ -374,7 +374,7 @@ mod test {
         let out = BenchOut::<2>::from_iter(&cfg, lognormal_samp2(&cfg, mu, sigma, k));
 
         assert_eq!(ru, LatencyUnit::Nano);
-        assert_eq!(out.n(), 2 * k * k - 1);
+        assert_eq!(out.n() as usize, 2 * k - 1);
         assert_eq!(out.nf(), out.n() as f64);
 
         let normal = Normal::new(mu, sigma).unwrap();
@@ -481,7 +481,7 @@ mod test {
         // in ln of nanoseconds (recording unit is Nano by default)
         let mu = mu_micro + (1000_f64).ln();
         let sigma = *LO_STDEV_LN;
-        let k = 100;
+        let k = 10_000;
 
         let cfg = BenchCfg::default();
         let ru = cfg.recording_unit();
@@ -492,7 +492,7 @@ mod test {
         let moments_ln = SampleMoments::from_iterator(normal_samp);
 
         assert_eq!(out.recording_unit(), LatencyUnit::Nano);
-        assert_eq!(out.n(), 2 * k * k - 1);
+        assert_eq!(out.n() as usize, 2 * k - 1);
         assert_eq!(out.nf(), out.n() as f64);
 
         // The true median should lie inside the CI
@@ -582,7 +582,7 @@ mod test {
     fn test_bench_out_2_comp() {
         let mu = 8.0;
         let sigma = *LO_STDEV_LN;
-        let k = 10;
+        let k = 100;
 
         let cfg = BenchCfg::default();
         let out = BenchOut::<2>::from_iter(&cfg, lognormal_samp2(&cfg, mu, sigma, k));
@@ -591,8 +591,8 @@ mod test {
         // Both outputs are fed the same data (`[y, y]`), so medians are equal
         assert_eq!(comp.out_f1().median(), comp.out_f2().median());
         // Verify both outputs have the expected sample size: 2*k*k - 1
-        assert_eq!(comp.out_f1().n(), 2 * k * k - 1);
-        assert_eq!(comp.out_f2().n(), 2 * k * k - 1);
+        assert_eq!(comp.out_f1().n() as usize, 2 * k - 1);
+        assert_eq!(comp.out_f2().n() as usize, 2 * k - 1);
     }
 
     #[test]

@@ -56,6 +56,7 @@ _bench = [
 _bench_long_test = ["_bench"] # used for tests that take a long time
 _test = [
     "basic_stats/_dev_utils",
+    "basic_stats/detm_samp",
     "dep:env_logger",
     "dep:regex",
 ] # used only for gating non-test items

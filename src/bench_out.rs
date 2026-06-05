@@ -458,6 +458,7 @@ impl From<multi::BenchOut<1>> for BenchOut {
 
 #[cfg(test)]
 #[cfg(feature = "_test")]
+// cargo test --package bench_utils --lib --all-features -- bench_out::test --nocapture
 mod test {
     use super::*;
     use crate::rel_approx_eq_dur;
@@ -484,7 +485,7 @@ mod test {
         // in ln of nanoseconds (recording unit is Nano by default)
         let mu = mu_micro + (1000_f64).ln();
         let sigma = *LO_STDEV_LN;
-        let k = 100;
+        let k = 10_000;
 
         let cfg = BenchCfg::default();
         let ru = cfg.recording_unit();
@@ -493,7 +494,7 @@ mod test {
         let out = BenchOut::from_iter(&cfg, lognormal_samp);
 
         assert_eq!(ru, LatencyUnit::Nano);
-        assert_eq!(out.n(), 2 * k * k - 1);
+        assert_eq!(out.n() as usize, 2 * k - 1);
         assert_eq!(out.nf(), out.n() as f64);
 
         let normal = Normal::new(mu, sigma).unwrap();
@@ -594,7 +595,7 @@ mod test {
         // in ln of nanoseconds (recording unit is Nano by default)
         let mu = mu_micro + (1000_f64).ln();
         let sigma = *LO_STDEV_LN;
-        let k = 100;
+        let k = 10_000;
 
         let cfg = BenchCfg::default();
         let ru = cfg.recording_unit();
@@ -606,7 +607,7 @@ mod test {
         let moments_ln = SampleMoments::from_iterator(normal_samp);
 
         assert_eq!(out.recording_unit(), LatencyUnit::Nano);
-        assert_eq!(out.n(), 2 * k * k - 1);
+        assert_eq!(out.n() as usize, 2 * k - 1);
         assert_eq!(out.nf(), out.n() as f64);
 
         // The true median should lie inside the CI
