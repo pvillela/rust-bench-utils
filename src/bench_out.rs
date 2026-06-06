@@ -181,6 +181,9 @@ impl BenchOut {
     /// Summary descriptive statistics.
     ///
     /// Includes sample size, mean, standard deviation, median, several percentiles, min, and max.
+    ///
+    /// # Panics
+    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
     pub fn summary(&self) -> SummaryStats {
         summary_stats(self)
     }

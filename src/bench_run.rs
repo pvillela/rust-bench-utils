@@ -282,7 +282,7 @@ mod status {
             "\n***** Testing: warmup_millis={warmup_millis}, exec_run_length={exec_run_length:?}, status_millis={status_millis}, target_latency={target_latency:?}, epsilon={epsilon}"
         );
 
-        let warmup_run_length = RunLength::Duration(Duration::from_millis(warmup_millis));
+        let warmup_run_length = RunLength::Time(Duration::from_millis(warmup_millis));
 
         let cfg = BenchCfg::default()
             .with_warmup_millis(warmup_millis)
@@ -526,7 +526,7 @@ mod simple_tests {
         let out = bench_run_arg_cfg(
             &cfg,
             || thread::sleep(Duration::from_nanos(1)),
-            RunLength::Duration(Duration::from_nanos(1)),
+            RunLength::Time(Duration::from_nanos(1)),
         );
         // At least some executions should have been captured
         assert!(out.n() > 0);
@@ -562,11 +562,7 @@ mod simple_tests {
     fn test_bench_run_x() {
         let cfg = quick_cfg();
         let mut buf = StringWriter::new();
-        let status = DefaultStatus::new(
-            &mut buf,
-            "Warming up".to_string(),
-            "Running".to_string(),
-        );
+        let status = DefaultStatus::new(&mut buf, "Warming up".to_string(), "Running".to_string());
         let out = bench_run_x(&cfg, || (), RunLength::Count(5), status);
         assert_eq!(out.n(), 5);
     }

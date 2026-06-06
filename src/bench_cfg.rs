@@ -14,7 +14,7 @@ pub enum RunLength {
     /// Run for a fixed number of iterations.
     Count(u64),
     /// Run for a fixed duration.
-    Duration(Duration),
+    Time(Duration),
     /// Run for a fixed number of iterations, but stop early if the given duration is exceeded.
     CountWithTimeout(u64, Duration),
 }
@@ -27,7 +27,7 @@ impl RunLength {
     pub fn get_exec_count_and_duration(&self) -> (u64, Duration) {
         match self {
             Self::Count(count) => (*count, Duration::MAX),
-            Self::Duration(duration) => (u64::MAX, *duration),
+            Self::Time(duration) => (u64::MAX, *duration),
             Self::CountWithTimeout(count, duration) => (*count, *duration),
         }
     }
@@ -36,9 +36,7 @@ impl RunLength {
     pub fn estimated_count(&self, execs_per_milli: f64) -> u64 {
         match self {
             Self::Count(count) => *count,
-            Self::Duration(duration) => {
-                (duration.as_millis() as f64 * execs_per_milli).ceil() as u64
-            }
+            Self::Time(duration) => (duration.as_millis() as f64 * execs_per_milli).ceil() as u64,
             Self::CountWithTimeout(count, duration) => {
                 let count_from_duration =
                     (duration.as_millis() as f64 * execs_per_milli).ceil() as u64;
@@ -53,7 +51,7 @@ impl RunLength {
             Self::Count(count) => {
                 Duration::from_millis((*count as f64 / execs_per_milli).ceil() as u64)
             }
-            Self::Duration(duration) => *duration,
+            Self::Time(duration) => *duration,
             Self::CountWithTimeout(count, duration) => {
                 let duration_from_count =
                     Duration::from_millis((*count as f64 / execs_per_milli).ceil() as u64);
@@ -176,13 +174,13 @@ impl BenchCfg {
             }
         }
 
-        let adj_warmup_run_length = RunLength::Duration(Duration::from_millis(
+        let adj_warmup_run_length = RunLength::Time(Duration::from_millis(
             self.warmup_millis / WARMUP_DIVISOR as u64,
         ));
-        let adj_status_run_length = RunLength::Duration(Duration::from_millis(self.status_millis));
+        let adj_status_run_length = RunLength::Time(Duration::from_millis(self.status_millis));
         let adj_exec_run_length = match exec_run_length {
             RunLength::Count(count) => RunLength::Count(count / EXEC_DIVISOR as u64),
-            RunLength::Duration(dur) => RunLength::Duration(dur / EXEC_DIVISOR),
+            RunLength::Time(dur) => RunLength::Time(dur / EXEC_DIVISOR),
             RunLength::CountWithTimeout(count, dur) => {
                 RunLength::CountWithTimeout(count / EXEC_DIVISOR as u64, dur / EXEC_DIVISOR)
             }
@@ -207,7 +205,7 @@ impl BenchCfg {
         let durs = [adj_exec_run_length]
             .iter()
             .filter_map(|rl| match rl {
-                RunLength::Duration(dur) => Some(*dur),
+                RunLength::Time(dur) => Some(*dur),
                 RunLength::CountWithTimeout(_, dur) => Some(*dur),
                 _ => None,
             })
@@ -219,7 +217,7 @@ impl BenchCfg {
         let budget = match (median_count, median_dur) {
             (Some(count), Some(dur)) => RunLength::CountWithTimeout(count, dur),
             (Some(count), None) => RunLength::Count(count),
-            (None, Some(dur)) => RunLength::Duration(dur),
+            (None, Some(dur)) => RunLength::Time(dur),
             (None, None) => unreachable!("impossible"),
         };
 
@@ -326,8 +324,7 @@ mod test {
         assert_eq!(dur, Duration::MAX);
 
         // Duration variant
-        let (count, dur) =
-            RunLength::Duration(Duration::from_secs(5)).get_exec_count_and_duration();
+        let (count, dur) = RunLength::Time(Duration::from_secs(5)).get_exec_count_and_duration();
         assert_eq!(count, u64::MAX);
         assert_eq!(dur, Duration::from_secs(5));
 
@@ -347,7 +344,7 @@ mod test {
 
         // Duration: count derived from time
         // 3 seconds * 1000 execs/milli = 3_000_000
-        let est = RunLength::Duration(Duration::from_secs(3)).estimated_count(execs_per_milli);
+        let est = RunLength::Time(Duration::from_secs(3)).estimated_count(execs_per_milli);
         assert_eq!(est, 3_000_000);
 
         // CountWithTimeout: min of count and time-based estimate
@@ -370,7 +367,7 @@ mod test {
         assert_eq!(RunLength::Count(5).estimated_count(0.0), 5);
 
         // Zero executions per milli with Duration: 0 * 10 = 0
-        let est = RunLength::Duration(Duration::from_millis(10)).estimated_count(0.0);
+        let est = RunLength::Time(Duration::from_millis(10)).estimated_count(0.0);
         assert_eq!(est, 0);
     }
 
@@ -386,7 +383,7 @@ mod test {
 
         // Duration: just the duration
         assert_eq!(
-            RunLength::Duration(Duration::from_secs(2)).estimated_duration(execs_per_milli),
+            RunLength::Time(Duration::from_secs(2)).estimated_duration(execs_per_milli),
             Duration::from_secs(2)
         );
 

@@ -95,7 +95,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     let status_freq = cfg.status_freq(execs_per_milli);
     debug!("status_freq={status_freq}");
 
-    let warmup_run_length = RunLength::Duration(Duration::from_millis(cfg.warmup_millis()));
+    let warmup_run_length = RunLength::Time(Duration::from_millis(cfg.warmup_millis()));
     let warmup_est_dur = warmup_run_length.estimated_duration(execs_per_milli);
     let warmup_est_count = warmup_run_length.estimated_count(execs_per_milli);
     let exec_est_dur = exec_run_length.estimated_duration(execs_per_milli);
@@ -592,7 +592,7 @@ mod status {
         let warmup_millis2 = warmup_millis * 2;
         let exec_run_length2 = match exec_run_length {
             RunLength::Count(_) => exec_run_length,
-            RunLength::Duration(duration) => RunLength::Duration(duration * 2),
+            RunLength::Time(duration) => RunLength::Time(duration * 2),
             RunLength::CountWithTimeout(count, duration) => {
                 RunLength::CountWithTimeout(count, duration * 2)
             }
@@ -603,7 +603,7 @@ mod status {
             "\n***** Testing: warmup_millis={warmup_millis2}, exec_run_length={exec_run_length2:?}, status_millis={status_millis2}, target_latency={target_latency:?}, epsilon={epsilon}"
         );
 
-        let warmup_run_length = RunLength::Duration(Duration::from_millis(warmup_millis2));
+        let warmup_run_length = RunLength::Time(Duration::from_millis(warmup_millis2));
 
         let cfg = BenchCfg::default()
             .with_warmup_millis(warmup_millis2)
@@ -851,7 +851,7 @@ mod simple_tests {
         let out = bench_run_arg_cfg(
             &cfg,
             LatencySrc1(|| thread::sleep(Duration::from_nanos(1))),
-            RunLength::Duration(Duration::from_nanos(1)),
+            RunLength::Time(Duration::from_nanos(1)),
         );
         // At least some executions should have been captured
         assert!(out.n() > 0);

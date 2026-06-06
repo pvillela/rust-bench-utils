@@ -54,8 +54,7 @@ impl LatencyUnit {
 
     /// Converts an `f64` value to a [`Duration`] according to the unit `self`.
     ///
-    /// Rounds the floating point value, so precision can be lost in a round trip starting with `self.latency_as_f64`,
-    /// followed by `self.latency_from_f64`, followed by `self.latency_as_f64`.
+    /// `NaN` is converted to a zero duration rather than panic.
     #[inline(always)]
     pub fn latency_from_f64(&self, elapsed: f64) -> Duration {
         // self.latency_from_u64(elapsed as u64)
@@ -243,9 +242,8 @@ mod test {
 
     #[test]
     fn test_latency_round_trip_f64() {
-        // Round trip
-        let nanos_u = 999_u64;
-        let dur = Duration::from_nanos(nanos_u);
+        let nanos_u64 = 999_u64;
+        let dur = Duration::from_nanos(nanos_u64);
 
         let nanos = LatencyUnit::Nano.latency_as_f64(dur);
         let micros = LatencyUnit::Micro.latency_as_f64(dur);
@@ -255,8 +253,9 @@ mod test {
         let dur_mic = LatencyUnit::Micro.latency_from_f64(micros);
         let dur_mil = LatencyUnit::Milli.latency_from_f64(millis);
 
-        assert_eq!(dur_nan, dur_mic);
-        assert_eq!(dur_nan, dur_mil);
+        assert_eq!(dur, dur_nan);
+        assert_eq!(dur, dur_mic);
+        assert_eq!(dur, dur_mil);
     }
 }
 #[cfg(test)]

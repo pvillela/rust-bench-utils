@@ -1,14 +1,18 @@
 use crate::latency;
 use std::time::Duration;
 
-/// An iterator that encapsulates `K` closures and, for each invocation of `next()`,
-/// yields an array of size `K` with the wall-clock latency durations from one execution of each
-/// of the `K` closures.
+/// An infinite iterator that encapsulates `K` closures and, for each invocation
+/// of `next()`, yields an array of size `K` with the wall-clock latency durations from one execution
+/// of each of the `K` closures.
+///
+/// The iterator doesn't have to be infinite, though normally it would be. If a finite iterator is used
+/// with the benchmarking functions, the benchmark will complete if the iterator is exhausted before
+/// the configured benchmark run length.
 pub trait LatencySrc<const K: usize>: Iterator<Item = [Duration; K]> {}
 
 impl<const K: usize, T: LatencySrc<K>> LatencySrc<K> for &mut T {}
 
-/// Iterator that yields the latency of a single closure on each call to `next()`.
+/// Infinite iterator that yields the latency of a single closure on each call to `next()`.
 ///
 /// Each invocation returns a single-element array containing the wall-clock duration
 /// of executing the wrapped closure.
@@ -25,7 +29,7 @@ impl<F0: FnMut()> Iterator for LatencySrc1<F0> {
 
 impl<F0: FnMut()> LatencySrc<1> for LatencySrc1<F0> {}
 
-/// Iterator that measures the latencies of two closures on each call to `next()`.
+/// Infinite iterator that measures the latencies of two closures on each call to `next()`.
 ///
 /// Each invocation yields a two-element array containing the wall-clock durations
 /// of executing each wrapped closure.

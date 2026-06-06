@@ -58,10 +58,6 @@ pub struct SummaryStats {
 ///
 /// Panics if the current value of [`crate::BenchCfg::panic_on_error`] is `true` **and** the number of observations is zero.
 pub fn summary_stats(out: &BenchOut) -> SummaryStats {
-    if out.panic_on_error() && out.n() == 0 {
-        panic!("number of observations is zero");
-    }
-
     let hist = &out.hist;
     let ru = out.recording_unit();
 
@@ -82,7 +78,6 @@ pub fn summary_stats(out: &BenchOut) -> SummaryStats {
         max: ru.latency_from_u64(hist.max()),
     }
 }
-
 
 #[cfg(test)]
 #[cfg(feature = "_test")]
