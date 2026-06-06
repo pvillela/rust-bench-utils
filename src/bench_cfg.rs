@@ -70,9 +70,14 @@ impl RunLength {
 ///   this is the number of significant decimal digits (of `recording_unit`) to which the histogram will maintain
 ///   value resolution and separation
 /// - `status_millis`: milliseconds between status reports during bench execution
-/// - `panic_on_error`: if set to `true`, library functions that don't return a [`Result`] should panic upon
-///   encountering an error condition; when set to `false`, instead of panicking, functions should return a
-///   tainted value, i.e., non-finite value such as `NaN` or a data structure that has non-finite values in one or more fields.
+/// - `panic_on_error`: determins whether library functions that don't return a [`Result`] should panic upon
+///   encountering an error condition:
+///   - when `true` and an error occurs, the function panics;
+///   - when `false` and an error occurs:
+///     - functions returning a floating point value (or a struct with a floating point field) return a
+///       tainted value, i.e., a non-finite value such as `NaN` (or a data structure that has non-finite values in
+///       one or more fields);
+///     - functions returning `Duration` values return zero durations.
 #[derive(Debug, Clone)]
 pub struct BenchCfg {
     warmup_millis: u64,
