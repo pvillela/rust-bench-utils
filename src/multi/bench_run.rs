@@ -32,10 +32,12 @@ impl<const K: usize> BenchState<K> {
         assert!(exec_count > 0, "exec_count must be > 0");
 
         let mut est_remaining_iters = est_count;
+        let mut acc_latency = Duration::ZERO; // enables testing with synthetic latency sources
         let start = Instant::now();
 
         for i in 1..=exec_count {
             let iter_finished = if let Some(latencies) = src.next() {
+                acc_latency += latencies.iter().sum();
                 self.capture_data(latencies);
                 false
             } else {
@@ -44,10 +46,17 @@ impl<const K: usize> BenchState<K> {
 
             est_remaining_iters = est_remaining_iters.saturating_sub(1);
 
-            if i % status_freq == 0 || i == exec_count || est_remaining_iters == 0 || iter_finished
+            if i % status_freq == 0
+                || i == exec_count
+                || est_remaining_iters == 0
+                || acc_latency >= run_time
+                || iter_finished
             {
                 let elapsed = start.elapsed();
-                let finished = i == exec_count || elapsed >= run_time || iter_finished;
+                let finished = i == exec_count
+                    || elapsed >= run_time
+                    || acc_latency >= run_time
+                    || iter_finished;
 
                 if (i % status_freq == 0 || finished)
                     && let Some(exec_status) = status
