@@ -98,13 +98,13 @@ pub fn src_execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: RunLen
         acc_latency += iter_latency;
         acc_execs += iter_execs;
         let (budget_count, budget_dur) = budget.get_exec_count_and_duration();
-        trace!("ltn_src_executions_per_milli: i={i}");
+        trace!("src_execs_per_sec >>> i={i}");
         if iter_latency >= budget_dur / 2 || acc_latency >= budget_dur || acc_execs >= budget_count
         {
             let iter_execs_per_sec = iter_execs as f64 / iter_latency.as_secs_f64();
             let acc_execs_per_sec = acc_execs as f64 / acc_latency.as_secs_f64();
             trace!(
-                "ltn_src_executions_per_milli={}",
+                "src_execs_per_sec >>> src_execs_per_sec={}",
                 iter_execs_per_sec.max(acc_execs_per_sec)
             );
             return iter_execs_per_sec.max(acc_execs_per_sec);
@@ -257,7 +257,7 @@ mod test {
 }
 #[cfg(test)]
 #[cfg(feature = "_test")]
-// cargo test --package bench_utils --lib --all-features -- latency::test_executions_per_milli --nocapture
+// cargo test --package bench_utils --lib --all-features -- latency::test_executions_per_second --nocapture
 mod test_executions_per_second {
     use crate::test_support::SyntheticDurationIterator;
 
@@ -287,12 +287,8 @@ mod test_executions_per_second {
     fn no_op_src_yields_positive_finite_estimate() {
         let src = LatencySrc1(|| {}).map(|arr| arr[0]);
         let e = src_execs_per_sec(src, RunLength::Count(1000));
-        assert!(e > 0.0, "ltn_src no-op should yield positive: {}", e);
-        assert!(
-            e.is_finite(),
-            "ltn_src no-op estimate should be finite: {}",
-            e
-        );
+        assert!(e > 0.0, "src no-op should yield positive: {}", e);
+        assert!(e.is_finite(), "src no-op estimate should be finite: {}", e);
     }
 
     #[test]
@@ -302,7 +298,7 @@ mod test_executions_per_second {
         let ratio = fn_e / src_e;
         assert!(
             ratio > 0.5 && ratio < 2.0,
-            "fn and ltn_src estimates should agree: fn={}, src={}",
+            "fn and src estimates should agree: fn={}, src={}",
             fn_e,
             src_e,
         );

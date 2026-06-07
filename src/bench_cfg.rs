@@ -442,8 +442,8 @@ mod test {
     fn test_bench_cfg_execs_per_second() {
         let cfg = BenchCfg::default();
         // Using a no-op closure, the calibration should return a reasonable positive value
-        let epms = cfg.fn_execs_per_sec(|| {}, RunLength::Count(10));
-        assert!(epms.is_finite());
+        let eps = cfg.fn_execs_per_sec(|| {}, RunLength::Count(10));
+        assert!(eps.is_finite());
     }
 
     #[test]

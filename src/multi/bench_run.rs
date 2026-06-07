@@ -175,7 +175,7 @@ pub fn bench_run_arg_cfg<const K: usize>(
     exec_run_length: RunLength,
 ) -> BenchOut<K> {
     // 100 millis is reasonable to avoid churn in `BenchOut.execute` and support calculation of
-    // a reasonable estimation budget for `BenchCfg::*_executions_per_milli`.
+    // a reasonable estimation budget for `BenchCfg::*_execs_per_sec`.
     const NO_STATUS_MILLIS: u64 = 100;
 
     let cfg = &cfg.clone().with_status_millis(NO_STATUS_MILLIS);
