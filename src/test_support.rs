@@ -34,17 +34,17 @@ fn jitter(v: f64, i: i64, n_jitter: i64, epsilon: f64) -> f64 {
 ///
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
-/// - `k` - controls the sample size; the total number of items is `2*k*k - 1`.
+/// - `samp_size` - sample size.
 /// - `n_jitter` - denominator controlling the jitter period (must be >= 3).
 /// - `jitter_epsilon` - maximum magnitude of the jitter added to each value.
 pub fn lognormal_samp_jittered(
     mu: f64,
     sigma: f64,
-    k: usize,
+    samp_size: usize,
     n_jitter: i64,
     jitter_epsilon: f64,
 ) -> impl Iterator<Item = u64> {
-    let normal_samp = normal_detm_samp(mu, sigma, k).unwrap();
+    let normal_samp = normal_detm_samp(mu, sigma, samp_size).unwrap();
     normal_samp
         .enumerate()
         .map(move |(i, v)| jitter(v, i as i64, n_jitter, jitter_epsilon))
@@ -59,9 +59,9 @@ pub fn lognormal_samp_jittered(
 ///
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
-/// - `k` - controls the sample size; the total number of items is `2*k*k - 1`.
-pub fn lognormal_samp(mu: f64, sigma: f64, k: usize) -> impl Iterator<Item = u64> {
-    lognormal_samp_jittered(mu, sigma, k, 3, 0.)
+/// - `samp_size` - sample size.
+pub fn lognormal_samp(mu: f64, sigma: f64, samp_size: usize) -> impl Iterator<Item = u64> {
+    lognormal_samp_jittered(mu, sigma, samp_size, 3, 0.)
 }
 
 /// Creates a [`BenchOut`] populated with a jittered lognormal sample.
@@ -74,18 +74,18 @@ pub fn lognormal_samp(mu: f64, sigma: f64, k: usize) -> impl Iterator<Item = u64
 /// - `cfg` - benchmark configuration (recording unit, etc.).
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
-/// - `k` - controls the sample size; the total number of items is `2*k*k - 1`.
+/// - `samp_size` - sample size.
 /// - `n_jitter` - denominator controlling the jitter period (must be >= 3).
 /// - `jitter_epsilon` - maximum magnitude of the jitter added to each value.
 pub fn lognormal_out_jittered(
     cfg: &BenchCfg,
     mu: f64,
     sigma: f64,
-    k: usize,
+    samp_size: usize,
     n_jitter: i64,
     jitter_epsilon: f64,
 ) -> BenchOut {
-    let lognormal_samp = lognormal_samp_jittered(mu, sigma, k, n_jitter, jitter_epsilon)
+    let lognormal_samp = lognormal_samp_jittered(mu, sigma, samp_size, n_jitter, jitter_epsilon)
         .map(|d| cfg.recording_unit().latency_from_u64(d));
     BenchOut::from_iter(cfg, lognormal_samp)
 }
@@ -111,17 +111,17 @@ pub fn lognormal_out(cfg: &BenchCfg, mu: f64, sigma: f64, k: usize) -> BenchOut 
 ///
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
-/// - `k` - controls the sample size; the total number of items is `2*k*k - 1`.
+/// - `samp_size` - sample size.
 /// - `n_jitter` - denominator controlling the jitter period (must be >= 3).
 /// - `jitter_epsilon` - maximum magnitude of the jitter added to each value.
 pub fn lognormal_moments_ln_jittered(
     mu: f64,
     sigma: f64,
-    k: usize,
+    samp_size: usize,
     n_jitter: i64,
     jitter_epsilon: f64,
 ) -> SampleMoments {
-    let dataset = lognormal_samp_jittered(mu, sigma, k, n_jitter, jitter_epsilon)
+    let dataset = lognormal_samp_jittered(mu, sigma, samp_size, n_jitter, jitter_epsilon)
         .map(|v| (v.max(1) as f64).ln());
     SampleMoments::from_iterator(dataset)
 }

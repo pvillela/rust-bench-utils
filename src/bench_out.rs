@@ -86,7 +86,7 @@ impl BenchOut {
     }
 
     #[doc(hidden)]
-    /// Creates a [`BenchOut`] from an iterator of [`Duration`] values.
+    /// Creates a [`BenchOut`] from a **finite** iterator of [`Duration`] values.
     ///
     /// Each item in the iterator is recorded as a single latency observation.
     /// The HDR histogram, running sums, and log-latency sums are updated accordingly.
@@ -95,6 +95,9 @@ impl BenchOut {
     ///
     /// - `cfg` - benchmark configuration (recording unit, significant figures, etc.).
     /// - `src` - source of elapsed-time measurements to ingest.
+    ///
+    /// ## May hang
+    /// Hangs if th iterator is not finite.
     pub fn from_iter(cfg: &BenchCfg, src: impl Iterator<Item = Duration>) -> Self {
         let mut out = Self::new(cfg);
         for item in src {

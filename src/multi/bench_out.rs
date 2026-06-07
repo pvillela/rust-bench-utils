@@ -76,7 +76,7 @@ impl<const K: usize> BenchOut<K> {
         }
     }
 
-    /// Creates a [`BenchOut<K>`] from an iterator of `[Duration; K]` arrays.
+    /// Creates a [`BenchOut<K>`] from a **finite** iterator of `[Duration; K]` arrays.
     ///
     /// Each item in the iterator must be an array of `K` [`Duration`] values — one per closure.
     /// The durations are recorded into the corresponding inner [`BenchOut`](crate::BenchOut).
@@ -85,6 +85,9 @@ impl<const K: usize> BenchOut<K> {
     ///
     /// - `cfg` - benchmark configuration.
     /// - `src` - source of per-closure elapsed-time measurements.
+    ///
+    /// # May hang
+    /// Hangs if the iterator is not finite.
     pub fn from_iter(cfg: &BenchCfg, src: impl Iterator<Item = [Duration; K]>) -> Self {
         let mut out = Self::new(cfg);
 
@@ -349,9 +352,9 @@ mod test {
         cfg: &BenchCfg,
         rec_mu: f64,
         sigma: f64,
-        k: usize,
+        samp_size: usize,
     ) -> impl Iterator<Item = [Duration; 2]> {
-        lognormal_samp(rec_mu, sigma, k).map(|x| {
+        lognormal_samp(rec_mu, sigma, samp_size).map(|x| {
             let y = cfg.recording_unit().latency_from_u64(x);
             [y, y]
         })

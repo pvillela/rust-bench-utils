@@ -36,10 +36,12 @@ impl RunLength {
     pub fn estimated_count(&self, execs_per_milli: f64) -> u64 {
         match self {
             Self::Count(count) => *count,
-            Self::Time(duration) => (duration.as_millis() as f64 * execs_per_milli).ceil() as u64,
+            Self::Time(duration) => {
+                (duration.as_secs_f64() * 1000.0 * execs_per_milli).round() as u64
+            }
             Self::CountWithTimeout(count, duration) => {
                 let count_from_duration =
-                    (duration.as_millis() as f64 * execs_per_milli).ceil() as u64;
+                    (duration.as_secs_f64() * 1000.0 * execs_per_milli).round() as u64;
                 *count.min(&count_from_duration)
             }
         }
@@ -49,12 +51,12 @@ impl RunLength {
     pub fn estimated_duration(&self, execs_per_milli: f64) -> Duration {
         match self {
             Self::Count(count) => {
-                Duration::from_millis((*count as f64 / execs_per_milli).ceil() as u64)
+                Duration::from_secs_f64((*count as f64 / (execs_per_milli * 1000.0)))
             }
             Self::Time(duration) => *duration,
             Self::CountWithTimeout(count, duration) => {
                 let duration_from_count =
-                    Duration::from_millis((*count as f64 / execs_per_milli).ceil() as u64);
+                    Duration::from_secs_f64((*count as f64 / (execs_per_milli * 1000.0)));
                 *duration.min(&duration_from_count)
             }
         }
@@ -196,7 +198,7 @@ impl BenchCfg {
             adj_status_run_length,
             adj_exec_run_length,
         ];
-        debug!("run_lengths[warmup, status, exec]={run_lengths:?}");
+        debug!("execs_per_milli_budget >>> run_lengths[warmup, status, exec]={run_lengths:?}");
 
         let counts = run_lengths
             .iter()
@@ -226,7 +228,7 @@ impl BenchCfg {
             (None, None) => unreachable!("impossible"),
         };
 
-        debug!("budget={budget:?}");
+        debug!("execs_per_milli_budget >>> budget={budget:?}");
         budget
     }
 
@@ -249,7 +251,7 @@ impl BenchCfg {
         exec_run_length: RunLength,
     ) -> f64 {
         let budget = self.execs_per_milli_budget(exec_run_length);
-        debug!("execs_per_milli_budget={budget:?}");
+        debug!("execs_per_milli_budget >>> execs_per_milli_budget={budget:?}");
         latency::ltn_src_executions_per_milli(src.map(|arr| arr.iter().sum()), budget)
     }
 

@@ -261,8 +261,8 @@ mod long {
 
 #[cfg(test)]
 #[cfg(feature = "_bench")]
-// cargo test -r --package bench_utils --lib --all-features -- bench_run::status --nocapture--test-threads=1 --skip multi
-mod status {
+// cargo test -r --package bench_utils --lib --all-features -- bench_run::status_with_fn --nocapture --test-threads=1 --skip multi
+mod status_with_fn {
     use super::*;
     use crate::{
         BusyWork, LatencyUnit, RunLength, status::DefaultStatus, test_support::StringWriter,
@@ -278,6 +278,8 @@ mod status {
         target_latency: Duration,
         epsilon: f64,
     ) {
+        _ = env_logger::try_init();
+
         println!(
             "\n***** Testing: warmup_millis={warmup_millis}, exec_run_length={exec_run_length:?}, status_millis={status_millis}, target_latency={target_latency:?}, epsilon={epsilon}"
         );
@@ -455,6 +457,257 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
     }
 
     #[test]
+    fn test_1_10_1_300() {
+        const EPSILON: f64 = 0.10;
+
+        let warmup_millis: u64 = 1;
+        let target_latency = Duration::from_micros(10);
+        let status_millis: u64 = 1;
+        let exec_run_length = RunLength::Count(300);
+
+        run_test(
+            warmup_millis,
+            exec_run_length,
+            status_millis,
+            target_latency,
+            EPSILON,
+        );
+    }
+
+    #[test]
+    fn test_1_10_1_2000() {
+        const EPSILON: f64 = 0.10;
+
+        let warmup_millis: u64 = 1;
+        let target_latency = Duration::from_micros(10);
+        let status_millis: u64 = 1;
+        let exec_run_length = RunLength::CountWithTimeout(300, Duration::from_micros(2000));
+
+        run_test(
+            warmup_millis,
+            exec_run_length,
+            status_millis,
+            target_latency,
+            EPSILON,
+        );
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "_test")]
+// cargo test -r --lib --all-features -- bench_run::status_with_src --test-threads=1 --skip multi
+mod status_with_src {
+    use super::*;
+    use crate::{
+        LatencyUnit, RunLength,
+        multi::{
+            LatencySrc,
+            test_support::{ConstLatencySrc, LognormalLatencySrc},
+        },
+        status::DefaultStatus,
+        test_support::StringWriter,
+    };
+    use basic_stats::rel_approx_eq;
+    use regex::Regex;
+    use std::time::Duration;
+
+    // fn latency_src(target_latency: Duration) -> impl LatencySrc<1> {
+    //     let sigma = 1.10_f64.ln() / 2.0;
+
+    //     LognormalLatencySrc::new([(target_latency, sigma)])
+    // }
+
+    fn latency_src(target_latency: Duration) -> impl LatencySrc<1> {
+        ConstLatencySrc::new([target_latency])
+    }
+
+    fn run_test(
+        warmup_millis: u64,
+        exec_run_length: RunLength,
+        status_millis: u64,
+        target_latency: Duration,
+        epsilon: f64,
+    ) {
+        _ = env_logger::try_init();
+
+        println!(
+            "\n***** Testing: warmup_millis={warmup_millis}, exec_run_length={exec_run_length:?}, status_millis={status_millis}, target_latency={target_latency:?}, epsilon={epsilon}"
+        );
+
+        let warmup_run_length = RunLength::Time(Duration::from_millis(warmup_millis));
+
+        let cfg = BenchCfg::default()
+            .with_warmup_millis(warmup_millis)
+            .with_status_millis(status_millis)
+            .with_recording_unit(LatencyUnit::Nano);
+
+        let mut w = StringWriter::new();
+        let status = DefaultStatus::new(
+            &mut w,
+            "Warming up".to_owned(),
+            "\nExecuting bench_run".to_owned(),
+        );
+
+        let mut src = latency_src(target_latency);
+
+        let execs_per_milli = cfg.ltn_src_execs_per_milli(&mut src, exec_run_length);
+
+        let out = multi::bench_run_x(&cfg, src, exec_run_length, status);
+
+        let status_str = w.as_str().expect("StringWriter doesn't contain string");
+        println!("** {status_str}");
+
+        let re = Regex::new(
+            r"Warming up for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) executions.
+Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) executions.",
+        )
+        .expect("invalid regex");
+
+        let caps = re
+            .captures_iter(status_str)
+            .next()
+            .expect("no captures in regex");
+
+        for i in 1..=6 {
+            print!("&caps[{i}]={}, ", &caps[i]);
+        }
+        println!();
+
+        {
+            assert_eq!(caps[1], warmup_millis.to_string());
+            let warmup_last = caps[2].parse::<u64>().unwrap();
+            let warmup_est_count = caps[3].parse::<u64>().unwrap();
+            rel_approx_eq!(
+                warmup_est_count as f64,
+                warmup_run_length.estimated_count(execs_per_milli) as f64,
+                epsilon
+            );
+            rel_approx_eq!(warmup_last as f64, warmup_est_count as f64, epsilon);
+        }
+
+        {
+            rel_approx_eq!(
+                caps[4].parse::<u64>().unwrap() as f64,
+                exec_run_length
+                    .estimated_duration(execs_per_milli)
+                    .as_millis() as f64,
+                epsilon
+            );
+            let exec_last = caps[5].parse::<u64>().unwrap();
+            let exec_est_count = caps[6].parse::<u64>().unwrap();
+            rel_approx_eq!(
+                exec_est_count as f64,
+                exec_run_length.estimated_count(execs_per_milli) as f64,
+                epsilon
+            );
+            rel_approx_eq!(exec_last as f64, exec_est_count as f64, epsilon);
+            assert_eq!(out.n(), exec_last);
+        }
+    }
+
+    #[test]
+    fn test_0_10_0_200() {
+        const EPSILON: f64 = 2.0;
+
+        let warmup_millis: u64 = 0;
+        let target_latency = Duration::from_micros(10);
+        let status_millis: u64 = 0;
+        let exec_run_length = RunLength::Count(200);
+
+        run_test(
+            warmup_millis,
+            exec_run_length,
+            status_millis,
+            target_latency,
+            EPSILON,
+        );
+    }
+
+    #[test]
+    fn test_0_10_0_0() {
+        const EPSILON: f64 = f64::NAN;
+
+        let warmup_millis: u64 = 0;
+        let target_latency = Duration::from_micros(10);
+        let status_millis: u64 = 0;
+        let exec_run_length = RunLength::Count(0);
+
+        // exec_count must be > 0 but exec_run_length makes it 0
+        let result = {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                run_test(
+                    warmup_millis,
+                    exec_run_length,
+                    status_millis,
+                    target_latency,
+                    EPSILON,
+                );
+            }))
+        };
+        println!("RECOVERED");
+
+        assert!(
+            result.is_err(),
+            "expected panic because exec_count must be > 0"
+        );
+    }
+
+    #[test]
+    fn test_0_10_1_200() {
+        const EPSILON: f64 = 2.0;
+
+        let warmup_millis: u64 = 0;
+        let target_latency = Duration::from_micros(10);
+        let status_millis: u64 = 1;
+        let exec_run_length = RunLength::Count(200);
+
+        run_test(
+            warmup_millis,
+            exec_run_length,
+            status_millis,
+            target_latency,
+            EPSILON,
+        );
+    }
+
+    #[test]
+    fn test_1_10_0_200() {
+        const EPSILON: f64 = 0.50;
+
+        let warmup_millis: u64 = 1;
+        let target_latency = Duration::from_micros(10);
+        let status_millis: u64 = 0;
+        let exec_run_length = RunLength::Count(200);
+
+        run_test(
+            warmup_millis,
+            exec_run_length,
+            status_millis,
+            target_latency,
+            EPSILON,
+        );
+    }
+
+    #[test]
+    fn test_1_10_1_200() {
+        const EPSILON: f64 = 0.50;
+
+        let warmup_millis: u64 = 1;
+        let target_latency = Duration::from_micros(10);
+        let status_millis: u64 = 1;
+        let exec_run_length = RunLength::Count(200);
+
+        run_test(
+            warmup_millis,
+            exec_run_length,
+            status_millis,
+            target_latency,
+            EPSILON,
+        );
+    }
+
+    #[test]
+    // cargo test --package bench_utils --lib --all-features -- bench_run::status_with_src::test_1_10_1_300 --exact --nocapture --include-ignored
     fn test_1_10_1_300() {
         const EPSILON: f64 = 0.10;
 

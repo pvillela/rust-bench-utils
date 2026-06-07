@@ -97,21 +97,21 @@ pub mod test_support {
     impl<const K: usize> LognormalLatencySrc<K> {
         /// Instantiates `Self`.
         ///
-        /// The argument is an array of pairs of medians and sigmas that determine the probability distributions of the
+        /// The argument is an array of pairs of targets and sigmas that determine the probability distributions of the
         /// `K` component iterators:
-        /// - each median is the median latency for the component;
+        /// - each target is the target median latency for the component;
         /// - each sigma is the standard deviation for the natural logarithm of the component's probability distribution.
-        pub fn new(medians_sigmas: [(Duration, f64); K]) -> Self {
+        pub fn new(targets_sigmas: [(Duration, f64); K]) -> Self {
             assert!(
-                medians_sigmas
+                targets_sigmas
                     .iter()
                     .all(|(m, s)| *m > Duration::ZERO && *s > 0.0),
                 "all medians and sigmas must be positive"
             );
 
-            let generators = medians_sigmas.map(|(mu, sigma)| {
-                let gen_f64 = lognormal_detm_gen(mu.as_secs_f64(), sigma)
-                    .expect("mus must be finite and sigmas must be positve");
+            let generators = targets_sigmas.map(|(target, sigma)| {
+                let gen_f64 = lognormal_detm_gen(target.as_secs_f64().ln(), sigma)
+                    .expect("`target medians` and `sigmas` must all be `> 0`");
                 let gen_dur = gen_f64.map(|v| Duration::from_secs_f64(v));
                 let boxed_gen: Box<dyn Iterator<Item = Duration>> = Box::new(gen_dur);
                 boxed_gen
@@ -122,19 +122,20 @@ pub mod test_support {
 
         /// Instantiates `Self` with default sigmas for the underlying lognormal distributions.
         ///
-        /// The argument is an array of the medians of the probability distributions of the `K` component iterators.
+        /// The argument is an array of the target medians of the `K` component iterators.
         /// The distributions' sigmas are set to a default value.
-        pub fn new_with_default_sigmas(medians: [Duration; K]) -> Self {
-            // At 2 standard deviations of the underlying normal distribution, the latency is 1.15 times the median latency.
-            let default_sigma = 1.15_f64.ln() / 2.;
+        pub fn new_with_default_sigmas(targets: [Duration; K]) -> Self {
+            // At 2 standard deviations of the underlying normal distribution, the latency is `multiplier` times the median latency.
+            let multiplier: f64 = 1.10;
+            let default_sigma = multiplier.ln() / 2.;
 
             assert!(
-                medians.iter().all(|m| *m > Duration::ZERO),
-                "all medians must be positive"
+                targets.iter().all(|m| *m > Duration::ZERO),
+                "all `target medians` must be positive"
             );
 
-            let medians_sigmas = medians.map(|m| (m, default_sigma));
-            Self::new(medians_sigmas)
+            let targets_sigmas = targets.map(|m| (m, default_sigma));
+            Self::new(targets_sigmas)
         }
     }
 
@@ -152,4 +153,37 @@ pub mod test_support {
     }
 
     impl<const K: usize> LatencySrc<K> for LognormalLatencySrc<K> {}
+
+    mod test {
+        use super::*;
+        use crate::{BenchCfg, multi::BenchOut, rel_approx_eq_dur};
+
+        const EPSILON: f64 = 0.002;
+        const SAMP_SIZE: usize = 100;
+
+        #[test]
+        // cargo test --package bench_utils --lib --all-features -- multi::latency_src::test_support::test::test_lognormal_src --exact --nocapture --include-ignored
+        fn test_lognormal_src() {
+            let cfg = BenchCfg::default();
+            let targets = [
+                Duration::from_nanos(10),
+                Duration::from_micros(20),
+                Duration::from_millis(30),
+            ];
+            let src = LognormalLatencySrc::new_with_default_sigmas(targets);
+            let out = BenchOut::from_iter(&cfg, src.take(SAMP_SIZE));
+            let out_medians = out.medians();
+
+            println!(
+                "*** src[0]={:?}",
+                LognormalLatencySrc::new_with_default_sigmas(targets)
+                    .take(20)
+                    .collect::<Vec<_>>()
+            );
+
+            rel_approx_eq_dur!(targets[0], out_medians[0], EPSILON);
+            rel_approx_eq_dur!(targets[1], out_medians[1], EPSILON);
+            rel_approx_eq_dur!(targets[2], out_medians[2], EPSILON);
+        }
+    }
 }

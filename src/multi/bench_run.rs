@@ -65,6 +65,9 @@ impl<const K: usize> BenchState<K> {
                 }
 
                 if finished {
+                    debug!(
+                        "execute >>> i={i}, elapsed={elapsed:?}, exec_count={exec_count}, est_remaining_iters={est_remaining_iters}, acc_latency={acc_latency:?}, run_time={run_time:?}, iter_finished={iter_finished}"
+                    );
                     break;
                 }
 
@@ -97,12 +100,12 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     exec_run_length: RunLength,
     mut s: S,
 ) -> BenchOut<K> {
-    debug!("bench_run_x -- exec_run_length={exec_run_length:?}");
+    debug!("bench_run_x >>> exec_run_length={exec_run_length:?}");
     let mut state = BenchOut::new(cfg);
     let execs_per_milli = cfg.ltn_src_execs_per_milli(&mut src, exec_run_length);
-    debug!("execs_per_milli={execs_per_milli}");
+    debug!("bench_run_x >>> execs_per_milli={execs_per_milli}");
     let status_freq = cfg.status_freq(execs_per_milli);
-    debug!("status_freq={status_freq}");
+    debug!("bench_run_x >>> status_freq={status_freq}");
 
     let warmup_run_length = RunLength::Time(Duration::from_millis(cfg.warmup_millis()));
     let warmup_est_dur = warmup_run_length.estimated_duration(execs_per_milli);
@@ -271,8 +274,9 @@ mod long {
             Src: LatencySrc<K>,
             R: FnOnce(&BenchCfg, Src, RunLength) -> BenchOut<K>,
         {
-            assert!(1 <= K && K <= 2, "K={K} must be 1 or 2");
             _ = env_logger::try_init();
+
+            assert!(1 <= K && K <= 2, "K={K} must be 1 or 2");
             let start = Instant::now();
 
             let FnsLatencySrc {
@@ -578,7 +582,7 @@ mod long {
 
 #[cfg(test)]
 #[cfg(feature = "_bench")]
-// cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::status --nocapture
+// RUST_LOG=trace cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::status --nocapture --test-threads=1
 mod status {
     use super::*;
     use crate::{
@@ -596,6 +600,8 @@ mod status {
         target_latency: Duration,
         epsilon: f64,
     ) {
+        _ = env_logger::try_init();
+
         // Scale certain arguments to align with status tests in non-multi `bench_run`,
         // because we have two functions here.
         let warmup_millis2 = warmup_millis * 2;
