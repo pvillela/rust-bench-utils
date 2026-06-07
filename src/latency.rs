@@ -66,19 +66,19 @@ impl LatencyUnit {
     }
 }
 
-/// Estimates how many executions of `f` fit in one millisecond by executing the function one or more times
+/// Estimates how many executions of `f` fit in one second by executing the function one or more times
 /// and doing a proportionality calculation.
 ///
 /// # Arguments
 ///
 /// `f` - the target function.
 /// `budget` - the budget for the estimation process, in terms of duration and/or iterations.
-pub fn fn_executions_per_milli(f: impl FnMut(), budget: RunLength) -> f64 {
+pub fn fn_execs_per_sec(f: impl FnMut(), budget: RunLength) -> f64 {
     let src = LatencySrc1(f).map(|arr| arr[0]);
-    ltn_src_executions_per_milli(src, budget)
+    src_execs_per_sec(src, budget)
 }
 
-/// Estimates how many iterations of `src` can be done in one millisecond by iterating one or more times
+/// Estimates how many iterations of `src` can be done in one second by iterating one or more times
 /// and doing a proportionality calculation.
 /// The iterator `src` is expected to encapsulate closure invocations such that each
 /// invocation of `next()` yields the latency observed for a closure invocation.
@@ -87,10 +87,7 @@ pub fn fn_executions_per_milli(f: impl FnMut(), budget: RunLength) -> f64 {
 ///
 /// `src` - the latency source.
 /// `budget` - the budget for the estimation process, in terms of duration and/or iterations.
-pub fn ltn_src_executions_per_milli(
-    mut src: impl Iterator<Item = Duration>,
-    budget: RunLength,
-) -> f64 {
+pub fn src_execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: RunLength) -> f64 {
     let mut acc_latency = Duration::from_nanos(0);
     let mut acc_execs: u64 = 0;
 
@@ -104,13 +101,13 @@ pub fn ltn_src_executions_per_milli(
         trace!("ltn_src_executions_per_milli: i={i}");
         if iter_latency >= budget_dur / 2 || acc_latency >= budget_dur || acc_execs >= budget_count
         {
-            let iter_execs_per_milli = iter_execs as f64 / (iter_latency.as_secs_f64() * 1000.0);
-            let acc_execs_per_milli = acc_execs as f64 / (acc_latency.as_secs_f64() * 1000.0);
+            let iter_execs_per_sec = iter_execs as f64 / iter_latency.as_secs_f64();
+            let acc_execs_per_sec = acc_execs as f64 / acc_latency.as_secs_f64();
             trace!(
                 "ltn_src_executions_per_milli={}",
-                iter_execs_per_milli.max(acc_execs_per_milli)
+                iter_execs_per_sec.max(acc_execs_per_sec)
             );
-            return iter_execs_per_milli.max(acc_execs_per_milli);
+            return iter_execs_per_sec.max(acc_execs_per_sec);
         }
     }
 
@@ -261,35 +258,35 @@ mod test {
 #[cfg(test)]
 #[cfg(feature = "_test")]
 // cargo test --package bench_utils --lib --all-features -- latency::test_executions_per_milli --nocapture
-mod test_executions_per_milli {
+mod test_executions_per_second {
     use crate::test_support::SyntheticDurationIterator;
 
     use super::*;
     use basic_stats::rel_approx_eq;
 
     #[test]
-    fn test_ltn_src_executions_per_milli() {
+    fn test_src_execs_per_second() {
         const EPSILON: f64 = 0.01;
 
         let target_latency = Duration::from_millis(10);
-        let exp_epm = 0.1;
+        let exp_eps = 100.0;
         let src = SyntheticDurationIterator::new(target_latency);
-        let epm = ltn_src_executions_per_milli(src, RunLength::Count(1000));
+        let eps = src_execs_per_sec(src, RunLength::Count(1000));
 
-        rel_approx_eq!(exp_epm, epm, EPSILON);
+        rel_approx_eq!(exp_eps, eps, EPSILON);
     }
 
     #[test]
-    fn no_op_yields_positive_finite_estimate() {
-        let e = fn_executions_per_milli(|| {}, RunLength::Count(1000));
+    fn no_op_fn_yields_positive_finite_estimate() {
+        let e = fn_execs_per_sec(|| {}, RunLength::Count(1000));
         assert!(e > 0.0, "no-op should yield positive: {}", e);
         assert!(e.is_finite(), "no-op estimate should be finite: {}", e);
     }
 
     #[test]
-    fn ltn_src_no_op_yields_positive_finite_estimate() {
+    fn no_op_src_yields_positive_finite_estimate() {
         let src = LatencySrc1(|| {}).map(|arr| arr[0]);
-        let e = ltn_src_executions_per_milli(src, RunLength::Count(1000));
+        let e = src_execs_per_sec(src, RunLength::Count(1000));
         assert!(e > 0.0, "ltn_src no-op should yield positive: {}", e);
         assert!(
             e.is_finite(),
@@ -299,12 +296,9 @@ mod test_executions_per_milli {
     }
 
     #[test]
-    fn fn_and_ltn_src_agree_for_no_op() {
-        let fn_e = fn_executions_per_milli(|| {}, RunLength::Count(1000));
-        let src_e = ltn_src_executions_per_milli(
-            LatencySrc1(|| {}).map(|arr| arr[0]),
-            RunLength::Count(1000),
-        );
+    fn fn_and_src_agree_for_no_op() {
+        let fn_e = fn_execs_per_sec(|| {}, RunLength::Count(1000));
+        let src_e = src_execs_per_sec(LatencySrc1(|| {}).map(|arr| arr[0]), RunLength::Count(1000));
         let ratio = fn_e / src_e;
         assert!(
             ratio > 0.5 && ratio < 2.0,

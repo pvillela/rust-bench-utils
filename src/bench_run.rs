@@ -300,7 +300,7 @@ mod status_with_fn {
 
         let f = BusyWork::new(target_latency).fun();
 
-        let execs_per_milli = cfg.fn_execs_per_milli(&f, exec_run_length);
+        let execs_per_second = cfg.fn_execs_per_sec(&f, exec_run_length);
 
         let out = bench_run_x(&cfg, f, exec_run_length, status);
 
@@ -329,7 +329,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_est_count = caps[3].parse::<u64>().unwrap();
             rel_approx_eq!(
                 warmup_est_count as f64,
-                warmup_run_length.estimated_count(execs_per_milli) as f64,
+                warmup_run_length.estimated_count(execs_per_second) as f64,
                 epsilon
             );
             rel_approx_eq!(warmup_last as f64, warmup_est_count as f64, epsilon);
@@ -339,7 +339,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             rel_approx_eq!(
                 caps[4].parse::<u64>().unwrap() as f64,
                 exec_run_length
-                    .estimated_duration(execs_per_milli)
+                    .estimated_duration(execs_per_second)
                     .as_millis() as f64,
                 epsilon
             );
@@ -347,7 +347,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let exec_est_count = caps[6].parse::<u64>().unwrap();
             rel_approx_eq!(
                 exec_est_count as f64,
-                exec_run_length.estimated_count(execs_per_milli) as f64,
+                exec_run_length.estimated_count(execs_per_second) as f64,
                 epsilon
             );
             rel_approx_eq!(exec_last as f64, exec_est_count as f64, epsilon);
@@ -550,7 +550,7 @@ mod status_with_src {
 
         let mut src = latency_src(target_latency);
 
-        let execs_per_milli = cfg.ltn_src_execs_per_milli(&mut src, exec_run_length);
+        let execs_per_second = cfg.src_execs_per_sec(&mut src, exec_run_length);
 
         let out = multi::bench_run_x(&cfg, src, exec_run_length, status);
 
@@ -579,7 +579,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_est_count = caps[3].parse::<u64>().unwrap();
             rel_approx_eq!(
                 warmup_est_count as f64,
-                warmup_run_length.estimated_count(execs_per_milli) as f64,
+                warmup_run_length.estimated_count(execs_per_second) as f64,
                 epsilon
             );
             rel_approx_eq!(warmup_last as f64, warmup_est_count as f64, epsilon);
@@ -589,7 +589,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             rel_approx_eq!(
                 caps[4].parse::<u64>().unwrap() as f64,
                 exec_run_length
-                    .estimated_duration(execs_per_milli)
+                    .estimated_duration(execs_per_second)
                     .as_millis() as f64,
                 epsilon
             );
@@ -597,7 +597,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let exec_est_count = caps[6].parse::<u64>().unwrap();
             rel_approx_eq!(
                 exec_est_count as f64,
-                exec_run_length.estimated_count(execs_per_milli) as f64,
+                exec_run_length.estimated_count(execs_per_second) as f64,
                 epsilon
             );
             rel_approx_eq!(exec_last as f64, exec_est_count as f64, epsilon);

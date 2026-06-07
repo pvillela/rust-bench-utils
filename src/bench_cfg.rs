@@ -33,30 +33,26 @@ impl RunLength {
     }
 
     /// Estimated number of iterations.
-    pub fn estimated_count(&self, execs_per_milli: f64) -> u64 {
+    pub fn estimated_count(&self, execs_per_second: f64) -> u64 {
+        assert!(execs_per_second > 0.0, "execs_per_second must be positive");
         match self {
             Self::Count(count) => *count,
-            Self::Time(duration) => {
-                (duration.as_secs_f64() * 1000.0 * execs_per_milli).round() as u64
-            }
+            Self::Time(duration) => (duration.as_secs_f64() * execs_per_second).round() as u64,
             Self::CountWithTimeout(count, duration) => {
                 let count_from_duration =
-                    (duration.as_secs_f64() * 1000.0 * execs_per_milli).round() as u64;
+                    (duration.as_secs_f64() * execs_per_second).round() as u64;
                 *count.min(&count_from_duration)
             }
         }
     }
 
     /// Estimated run duration.
-    pub fn estimated_duration(&self, execs_per_milli: f64) -> Duration {
+    pub fn estimated_duration(&self, execs_per_second: f64) -> Duration {
         match self {
-            Self::Count(count) => {
-                Duration::from_secs_f64((*count as f64 / (execs_per_milli * 1000.0)))
-            }
+            Self::Count(count) => Duration::from_secs_f64(*count as f64 / execs_per_second),
             Self::Time(duration) => *duration,
             Self::CountWithTimeout(count, duration) => {
-                let duration_from_count =
-                    Duration::from_secs_f64((*count as f64 / (execs_per_milli * 1000.0)));
+                let duration_from_count = Duration::from_secs_f64(*count as f64 / execs_per_second);
                 *duration.min(&duration_from_count)
             }
         }
@@ -162,7 +158,7 @@ impl BenchCfg {
         self
     }
 
-    fn execs_per_milli_budget(&self, exec_run_length: RunLength) -> RunLength {
+    fn execs_per_second_budget(&self, exec_run_length: RunLength) -> RunLength {
         const WARMUP_DIVISOR: u32 = 3;
         const EXEC_DIVISOR: u32 = 30;
 
@@ -198,7 +194,7 @@ impl BenchCfg {
             adj_status_run_length,
             adj_exec_run_length,
         ];
-        debug!("execs_per_milli_budget >>> run_lengths[warmup, status, exec]={run_lengths:?}");
+        debug!("execs_per_second_budget >>> run_lengths[warmup, status, exec]={run_lengths:?}");
 
         let counts = run_lengths
             .iter()
@@ -228,37 +224,37 @@ impl BenchCfg {
             (None, None) => unreachable!("impossible"),
         };
 
-        debug!("execs_per_milli_budget >>> budget={budget:?}");
+        debug!("execs_per_second_budget >>> budget={budget:?}");
         budget
     }
 
-    /// Estimates how many executions of `f` fit in one millisecond.
+    /// Estimates how many executions of `f` fit in one second.
     ///
     /// Used in status reporting as well as in execution loop termination logic (to ensure adherence to the
     /// run length specified when the benchmark is executed).
-    pub fn fn_execs_per_milli(&self, f: impl FnMut(), exec_run_length: RunLength) -> f64 {
-        let budget = self.execs_per_milli_budget(exec_run_length);
-        latency::fn_executions_per_milli(f, budget)
+    pub fn fn_execs_per_sec(&self, f: impl FnMut(), exec_run_length: RunLength) -> f64 {
+        let budget = self.execs_per_second_budget(exec_run_length);
+        latency::fn_execs_per_sec(f, budget)
     }
 
-    /// Estimates how many iterations of `src` can be done in one millisecond.
+    /// Estimates how many iterations of `src` can be done in one second.
     ///
     /// Used in status reporting as well as in execution loop termination logic (to ensure adherence to the
     /// run length specified when the benchmark is executed).
-    pub fn ltn_src_execs_per_milli<const K: usize>(
+    pub fn src_execs_per_sec<const K: usize>(
         &self,
         src: &mut impl LatencySrc<K>,
         exec_run_length: RunLength,
     ) -> f64 {
-        let budget = self.execs_per_milli_budget(exec_run_length);
-        debug!("execs_per_milli_budget >>> execs_per_milli_budget={budget:?}");
-        latency::ltn_src_executions_per_milli(src.map(|arr| arr.iter().sum()), budget)
+        let budget = self.execs_per_second_budget(exec_run_length);
+        debug!("execs_per_second_budget >>> execs_per_second_budget={budget:?}");
+        latency::src_execs_per_sec(src.map(|arr| arr.iter().sum()), budget)
     }
 
-    /// Number of executions between status updates, derived from `execs_per_milli`.
-    pub fn status_freq(&self, execs_per_milli: f64) -> u64 {
-        let status_freq = self.status_millis as f64 * execs_per_milli;
-        1.max(status_freq.ceil() as u64)
+    /// Number of executions between status updates, derived from `execs_per_second`.
+    pub fn status_count(&self, execs_per_second: f64) -> u64 {
+        let status_count = self.status_millis as f64 / 1000.0 * execs_per_second;
+        1.max(status_count.ceil() as u64)
     }
 }
 
@@ -344,53 +340,55 @@ mod test {
 
     #[test]
     fn test_run_length_estimated_count() {
-        let execs_per_milli = 1000.0; // 1 execution per microsecond
+        let execs_per_second = 1_000_000.0; // 1 execution per microsecond
 
         // Count: estimated count is just the count
-        assert_eq!(RunLength::Count(50).estimated_count(execs_per_milli), 50);
+        assert_eq!(RunLength::Count(50).estimated_count(execs_per_second), 50);
 
         // Duration: count derived from time
-        // 3 seconds * 1000 execs/milli = 3_000_000
-        let est = RunLength::Time(Duration::from_secs(3)).estimated_count(execs_per_milli);
+        // 3 seconds * 1_000_000 execs/sec = 3_000_000
+        let est = RunLength::Time(Duration::from_secs(3)).estimated_count(execs_per_second);
         assert_eq!(est, 3_000_000);
 
         // CountWithTimeout: min of count and time-based estimate
-        // Time: 1_000ms * 1000/milli = 1_000_000. Count = 10. Min = 10
+        // Time: 1s * 1_000_000/s = 1_000_000. Count = 10. Min = 10
         assert_eq!(
             RunLength::CountWithTimeout(10, Duration::from_secs(1))
-                .estimated_count(execs_per_milli),
+                .estimated_count(execs_per_second),
             10
         );
 
         // CountWithTimeout: timeout is shorter
-        // Time: 1ms * 1000/milli = 1000. Count = 10_000. Min = 1000
+        // Time: 0.001s * 1_000_000/s = 1000. Count = 10_000. Min = 1000
         assert_eq!(
             RunLength::CountWithTimeout(10_000, Duration::from_millis(1))
-                .estimated_count(execs_per_milli),
+                .estimated_count(execs_per_second),
             1000
         );
 
-        // Zero executions per milli
-        assert_eq!(RunLength::Count(5).estimated_count(0.0), 5);
-
-        // Zero executions per milli with Duration: 0 * 10 = 0
-        let est = RunLength::Time(Duration::from_millis(10)).estimated_count(0.0);
-        assert_eq!(est, 0);
+        // Zero executions per second panics
+        let result = std::panic::catch_unwind(|| {
+            RunLength::Count(5).estimated_count(0.0);
+        });
+        assert!(
+            result.is_err(),
+            "estimated_count should panic for execs_per_second == 0"
+        );
     }
 
     #[test]
     fn test_run_length_estimated_duration() {
-        let execs_per_milli = 1000.0;
+        let execs_per_second = 1_000_000.0;
 
         // Count: duration derived from count
         assert_eq!(
-            RunLength::Count(5000).estimated_duration(execs_per_milli),
-            Duration::from_millis(5) // 5000 / 1000 = 5ms
+            RunLength::Count(5000).estimated_duration(execs_per_second),
+            Duration::from_millis(5) // 5000 / 1_000_000/s = 5ms
         );
 
         // Duration: just the duration
         assert_eq!(
-            RunLength::Time(Duration::from_secs(2)).estimated_duration(execs_per_milli),
+            RunLength::Time(Duration::from_secs(2)).estimated_duration(execs_per_second),
             Duration::from_secs(2)
         );
 
@@ -398,7 +396,7 @@ mod test {
         // Count: 1000/1000 = 1ms. Timeout: 10ms. Min = 1ms
         assert_eq!(
             RunLength::CountWithTimeout(1000, Duration::from_millis(10))
-                .estimated_duration(execs_per_milli),
+                .estimated_duration(execs_per_second),
             Duration::from_millis(1)
         );
 
@@ -406,42 +404,45 @@ mod test {
         // Count: 50000/1000 = 50ms. Timeout: 10ms. Min = 10ms
         assert_eq!(
             RunLength::CountWithTimeout(50_000, Duration::from_millis(10))
-                .estimated_duration(execs_per_milli),
+                .estimated_duration(execs_per_second),
             Duration::from_millis(10)
         );
 
-        // Zero execs_per_milli results in large duration (division by zero treated as inf -> u64 max milliseconds)
-        let zero_est = RunLength::Count(5000).estimated_duration(0.0);
-        assert_eq!(zero_est, Duration::from_millis(u64::MAX));
+        // Zero execs_per_second results in panic
+        let result = std::panic::catch_unwind(|| RunLength::Count(5000).estimated_duration(0.0));
+        assert!(
+            result.is_err(),
+            "should panic when execs_per_second is zero"
+        );
 
         // Large count
-        let huge = RunLength::Count(1_000_000_000).estimated_duration(1.0);
-        assert_eq!(huge, Duration::from_millis(1_000_000_000));
+        let huge = RunLength::Count(1_000_000_000).estimated_duration(1000.0);
+        assert_eq!(huge, Duration::from_secs(1_000_000));
     }
 
     #[test]
-    fn test_bench_cfg_status_freq() {
-        let cfg = BenchCfg::default();
+    fn test_bench_cfg_status_count() {
+        let cfg = BenchCfg::default().with_status_millis(2000);
         println!("cfg={cfg:?}");
 
-        // 1000ms interval, 500 execs/milli => 500_000 status freq
-        let freq = cfg.status_freq(500.0);
-        assert_eq!(freq, 500_000);
+        // 2000ms interval, 500_000 execs/s => 500_000 status count
+        let count = cfg.status_count(500_000.0);
+        assert_eq!(count, 1_000_000);
 
-        // 1000ms interval, 1.5 execs/milli => ceil(1500) = 1500
-        let freq = cfg.status_freq(1.5);
-        assert_eq!(freq, 1500);
+        // 2000ms interval, 1_5000 execs/s => ceil(3000) = 3000
+        let count = cfg.status_count(1500.0);
+        assert_eq!(count, 3000);
 
-        // Zero execs_per_milli => 1
-        let freq = cfg.status_freq(0.0);
-        assert_eq!(freq, 1);
+        // Zero execs_per_second => 1
+        let count = cfg.status_count(0.0);
+        assert_eq!(count, 1);
     }
 
     #[test]
-    fn test_bench_cfg_executions_per_milli() {
+    fn test_bench_cfg_execs_per_second() {
         let cfg = BenchCfg::default();
         // Using a no-op closure, the calibration should return a reasonable positive value
-        let epms = cfg.fn_execs_per_milli(|| {}, RunLength::Count(10));
+        let epms = cfg.fn_execs_per_sec(|| {}, RunLength::Count(10));
         assert!(epms.is_finite());
     }
 

@@ -47,7 +47,7 @@ Six builder methods and one setter lack docs:
 
 #### `BenchCfg` calibration methods (bench_cfg.rs:146-177)
 - `executions_per_milli()` at line 146
-- `status_freq()` at line 174
+- `status_count()` at line 174
 
 #### `RunLength` estimation methods (bench_cfg.rs:31-53)
 Two methods have regular `//` comments instead of `///` doc comments:
@@ -73,7 +73,7 @@ Six methods behind feature gates with no doc comments:
 ### Warnings -- Inaccurate or Stale Documentation
 
 #### `bench_run_x` -- parameter names mismatch (bench_run.rs:63-76)
-Doc says parameters `warmup_execs` and `exec_count` but the actual signature has `warmup_millis: u64` and `exec_run_length: RunLength`. The doc also fails to document the `execs_per_milli: f64` parameter entirely.
+Doc says parameters `warmup_execs` and `exec_count` but the actual signature has `warmup_millis: u64` and `exec_run_length: RunLength`. The doc also fails to document the `execs_per_second: f64` parameter entirely.
 
 #### `bench_run_x`, `bench_run`, `bench_run_with_status` -- broken intra-doc link (bench_run.rs:67,106,132)
 All three doc comments link to `` [`get_warmup_millis`] `` which does not exist as a function. The correct reference is `BenchCfg::warmup_millis()`.

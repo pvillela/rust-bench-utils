@@ -15,18 +15,18 @@ type BenchState<const K: usize> = BenchOut<K>;
 
 impl<const K: usize> BenchState<K> {
     /// Executes target closures repeatedly and captures latencies.
-    /// `exec_status` is invoked once for every `status_freq` invocations of the closures.
+    /// `exec_status` is invoked once for every `status_count` invocations of the closures.
     fn execute(
         &mut self,
         src: &mut impl LatencySrc<K>,
         run_length: RunLength,
-        status_freq: u64,
-        // Used in control of the exit from the iteration loop when both `status_freq` and `exec_count` are too high
+        status_count: u64,
+        // Used in control of the exit from the iteration loop when both `status_count` and `exec_count` are too high
         // compared to `run_length` duration.
         est_count: u64,
         status: &mut Option<impl FnMut(u64)>,
     ) {
-        assert!(status_freq > 0, "status_freq must be > 0");
+        assert!(status_count > 0, "status_count must be > 0");
 
         let (exec_count, run_time) = run_length.get_exec_count_and_duration();
         assert!(exec_count > 0, "exec_count must be > 0");
@@ -46,7 +46,7 @@ impl<const K: usize> BenchState<K> {
 
             est_remaining_iters = est_remaining_iters.saturating_sub(1);
 
-            if i % status_freq == 0
+            if i % status_count == 0
                 || i == exec_count
                 || est_remaining_iters == 0
                 || acc_latency >= run_time
@@ -58,7 +58,7 @@ impl<const K: usize> BenchState<K> {
                     || acc_latency >= run_time
                     || iter_finished;
 
-                if (i % status_freq == 0 || finished)
+                if (i % status_count == 0 || finished)
                     && let Some(exec_status) = status
                 {
                     exec_status(i);
@@ -102,23 +102,23 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
 ) -> BenchOut<K> {
     debug!("bench_run_x >>> exec_run_length={exec_run_length:?}");
     let mut state = BenchOut::new(cfg);
-    let execs_per_milli = cfg.ltn_src_execs_per_milli(&mut src, exec_run_length);
-    debug!("bench_run_x >>> execs_per_milli={execs_per_milli}");
-    let status_freq = cfg.status_freq(execs_per_milli);
-    debug!("bench_run_x >>> status_freq={status_freq}");
+    let execs_per_second = cfg.src_execs_per_sec(&mut src, exec_run_length);
+    debug!("bench_run_x >>> execs_per_second={execs_per_second}");
+    let status_count = cfg.status_count(execs_per_second);
+    debug!("bench_run_x >>> status_count={status_count}");
 
     let warmup_run_length = RunLength::Time(Duration::from_millis(cfg.warmup_millis()));
-    let warmup_est_dur = warmup_run_length.estimated_duration(execs_per_milli);
-    let warmup_est_count = warmup_run_length.estimated_count(execs_per_milli);
-    let exec_est_dur = exec_run_length.estimated_duration(execs_per_milli);
-    let exec_est_count = exec_run_length.estimated_count(execs_per_milli);
+    let warmup_est_dur = warmup_run_length.estimated_duration(execs_per_second);
+    let warmup_est_count = warmup_run_length.estimated_count(execs_per_second);
+    let exec_est_dur = exec_run_length.estimated_duration(execs_per_second);
+    let exec_est_count = exec_run_length.estimated_count(execs_per_second);
 
     // Warm-up.
     let mut warmup_status = S::part_apply(s.warmup_status(), warmup_est_dur, warmup_est_count);
     state.execute(
         &mut src,
         warmup_run_length,
-        status_freq,
+        status_count,
         warmup_est_count,
         &mut warmup_status,
     );
@@ -130,7 +130,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     state.execute(
         &mut src,
         exec_run_length,
-        status_freq,
+        status_count,
         exec_est_count,
         &mut exec_status,
     );
@@ -641,7 +641,7 @@ mod status {
             BusyWork::new(target_latency).fun(),
         );
 
-        let execs_per_milli = cfg.ltn_src_execs_per_milli(&mut src, exec_run_length2);
+        let execs_per_second = cfg.src_execs_per_sec(&mut src, exec_run_length2);
 
         let out = bench_run_x(&cfg, src, exec_run_length2, status);
 
@@ -670,7 +670,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_est_count = caps[3].parse::<u64>().unwrap();
             rel_approx_eq!(
                 warmup_est_count as f64,
-                warmup_run_length.estimated_count(execs_per_milli) as f64,
+                warmup_run_length.estimated_count(execs_per_second) as f64,
                 epsilon
             );
             rel_approx_eq!(warmup_last as f64, warmup_est_count as f64, epsilon);
@@ -680,7 +680,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             rel_approx_eq!(
                 caps[4].parse::<u64>().unwrap() as f64,
                 exec_run_length2
-                    .estimated_duration(execs_per_milli)
+                    .estimated_duration(execs_per_second)
                     .as_millis() as f64,
                 epsilon
             );
@@ -688,7 +688,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let exec_est_count = caps[6].parse::<u64>().unwrap();
             rel_approx_eq!(
                 exec_est_count as f64,
-                exec_run_length2.estimated_count(execs_per_milli) as f64,
+                exec_run_length2.estimated_count(execs_per_second) as f64,
                 epsilon
             );
             rel_approx_eq!(exec_last as f64, exec_est_count as f64, epsilon);
