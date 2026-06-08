@@ -500,10 +500,7 @@ mod status_with_src {
     use super::*;
     use crate::{
         LatencyUnit, RunLength,
-        multi::{
-            LatencySrc,
-            test_support::{ConstLatencySrc, LognormalLatencySrc},
-        },
+        multi::{LatencySrc, test_support::LognormalLatencySrc},
         status::DefaultStatus,
         test_support::StringWriter,
     };
@@ -511,14 +508,8 @@ mod status_with_src {
     use regex::Regex;
     use std::time::Duration;
 
-    // fn latency_src(target_latency: Duration) -> impl LatencySrc<1> {
-    //     let sigma = 1.10_f64.ln() / 2.0;
-
-    //     LognormalLatencySrc::new([(target_latency, sigma)])
-    // }
-
     fn latency_src(target_latency: Duration) -> impl LatencySrc<1> {
-        ConstLatencySrc::new([target_latency])
+        LognormalLatencySrc::new_with_default_sigmas([(target_latency)])
     }
 
     fn run_test(

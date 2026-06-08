@@ -58,6 +58,7 @@ _test = ["_test_support"]
 _test_support = [
     "basic_stats/_dev_utils",
     "basic_stats/detm_samp",
+    "basic_stats/rand_samp",
     "dep:regex",
 ] # used only for gating non-test items
 _experimental = [

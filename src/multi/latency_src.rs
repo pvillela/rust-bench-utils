@@ -50,9 +50,10 @@ impl<F0: FnMut(), F1: FnMut()> LatencySrc<2> for LatencySrc2<F0, F1> {}
 #[cfg(feature = "_test")]
 pub mod test_support {
     use super::*;
-    use basic_stats::normal::lognormal_detm_gen;
+    use basic_stats::normal::lognormal_rand_gen;
     use std::array;
 
+    /// Empty latency source.
     pub struct EmptyLatencySrc<const K: usize>;
 
     impl<const K: usize> Iterator for EmptyLatencySrc<K> {
@@ -65,6 +66,7 @@ pub mod test_support {
 
     impl<const K: usize> LatencySrc<K> for EmptyLatencySrc<K> {}
 
+    /// Infinite source that always yields the same value. Useful for troubleshooting.
     pub struct ConstLatencySrc<const K: usize> {
         latencies: [Duration; K],
     }
@@ -110,7 +112,7 @@ pub mod test_support {
             );
 
             let generators = targets_sigmas.map(|(target, sigma)| {
-                let gen_f64 = lognormal_detm_gen(target.as_secs_f64().ln(), sigma)
+                let gen_f64 = lognormal_rand_gen(target.as_secs_f64().ln(), sigma)
                     .expect("`target medians` and `sigmas` must all be `> 0`");
                 let gen_dur = gen_f64.map(|v| Duration::from_secs_f64(v));
                 let boxed_gen: Box<dyn Iterator<Item = Duration>> = Box::new(gen_dur);
@@ -126,8 +128,8 @@ pub mod test_support {
         /// The distributions' sigmas are set to a default value.
         pub fn new_with_default_sigmas(targets: [Duration; K]) -> Self {
             // At 2 standard deviations of the underlying normal distribution, the latency is `multiplier` times the median latency.
-            let multiplier: f64 = 1.10;
-            let default_sigma = multiplier.ln() / 2.;
+            const MULTIPLIER: f64 = 1.15;
+            let default_sigma = MULTIPLIER.ln() / 2.;
 
             assert!(
                 targets.iter().all(|m| *m > Duration::ZERO),
