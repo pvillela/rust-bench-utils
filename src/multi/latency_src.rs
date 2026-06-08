@@ -156,6 +156,67 @@ pub mod test_support {
 
     impl<const K: usize> LatencySrc<K> for LognormalLatencySrc<K> {}
 
+    /// Infinite iterator that genearates durations that converge to a `target_latency`.
+    pub struct ConvergingDurationIterator {
+        target_latency: Duration,
+        iteration: u64,
+    }
+
+    impl ConvergingDurationIterator {
+        pub fn new(target_latency: Duration) -> Self {
+            Self {
+                target_latency,
+                iteration: 0,
+            }
+        }
+    }
+
+    impl Iterator for ConvergingDurationIterator {
+        type Item = Duration;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.iteration += 1;
+            let sign = if self.iteration % 2 == 1 { 1.0 } else { -1.0 };
+            let value = self
+                .target_latency
+                .mul_f64(1.0 + sign / self.iteration as f64);
+            Some(value)
+        }
+    }
+
+    /// Latency source that encapsulates an array of [`ConvergingLatencyIterator`]s.
+    pub struct ConvergingLatencySrc<const K: usize> {
+        iters: [ConvergingDurationIterator; K],
+    }
+
+    impl<const K: usize> ConvergingLatencySrc<K> {
+        pub fn new(target_latencies: [Duration; K]) -> Self {
+            Self {
+                iters: target_latencies.map(|ltn| ConvergingDurationIterator::new(ltn)),
+            }
+        }
+
+        pub fn target_latencies(&self) -> [Duration; K] {
+            array::from_fn(|k| self.iters[k].target_latency)
+        }
+    }
+
+    impl<const K: usize> Iterator for ConvergingLatencySrc<K> {
+        type Item = [Duration; K];
+
+        fn next(&mut self) -> Option<Self::Item> {
+            let opts = array::from_fn(|k| self.iters[k].next());
+            if opts.iter().all(|v| v.is_some()) {
+                let res = opts.map(|v| v.expect("must be Some"));
+                Some(res)
+            } else {
+                None
+            }
+        }
+    }
+
+    impl<const K: usize> LatencySrc<K> for ConvergingLatencySrc<K> {}
+
     mod test {
         use super::*;
         use crate::{BenchCfg, multi::BenchOut, rel_approx_eq_dur};

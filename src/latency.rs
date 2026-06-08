@@ -258,7 +258,8 @@ mod test {
 #[cfg(feature = "_test")]
 // cargo test --package bench_utils --lib --all-features -- latency::test_executions_per_second --nocapture
 mod test_executions_per_second {
-    use crate::test_support::SyntheticDurationIterator;
+
+    use crate::multi::test_support::LognormalLatencySrc;
 
     use super::*;
     use basic_stats::rel_approx_eq;
@@ -269,7 +270,7 @@ mod test_executions_per_second {
 
         let target_latency = Duration::from_millis(10);
         let exp_eps = 100.0;
-        let src = SyntheticDurationIterator::new(target_latency);
+        let src = LognormalLatencySrc::new_with_default_sigmas([target_latency]).map(|v| v[0]);
         let eps = src_execs_per_sec(src, RunLength::Count(1000));
 
         rel_approx_eq!(exp_eps, eps, EPSILON);
