@@ -55,13 +55,11 @@ Beyond per-function coverage, identify systematic testing gaps:
 
 1. **Error/panic path tests**: Methods documented with `# Panics` sections should have tests that exercise those panics.
 
-2. **Feature-gated code tests**: Check if tests exist for code behind non-default features (`_test_support`, `_bench_diff`, `criterion`). Check `./test-features.sh` to see which feature combinations are tested.
+2. **Edge case tests**.
 
-3. **Edge case tests**.
+3. **Integration/roundtrip tests**: an end-to-end test would catch integration issues that unit tests miss.
 
-4. **Integration/roundtrip tests**: an end-to-end test would catch integration issues that unit tests miss.
-
-5. **Regression tests**: Are there tests for bugs that were previously fixed? If not, flag that previously-fixed bugs (visible in `git log`) lack regression coverage.
+4. **Regression tests**: Are there tests for bugs that were previously fixed? If not, flag that previously-fixed bugs (visible in `git log`) lack regression coverage.
 
 ### Phase 5: Recommend Improvements
 
