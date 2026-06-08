@@ -9,9 +9,6 @@ if ! command -v cargo-llvm-cov &> /dev/null; then
     exit 1
 fi
 
-cargo llvm-cov clean
-
-rm -rf coverage
 mkdir -p coverage
 
 export RUSTFLAGS="-Awarnings"
@@ -19,7 +16,7 @@ export RUSTFLAGS="-Awarnings"
 # Coverage instrumentation adds overhead that can cause timing-sensitive tests
 # to fail. Use --no-fail-fast so all tests run and profile data is collected.
 echo "***** Running tests with coverage instrumentation"
-cargo llvm-cov test --tests --features _ALL_NON_TEST,_test \
+cargo llvm-cov test --tests --features _ALL_NON_TEST,_bench \
     --ignore-run-fail --no-report \
     || echo "(some tests may have failed due to instrumentation overhead; continuing)"
 
