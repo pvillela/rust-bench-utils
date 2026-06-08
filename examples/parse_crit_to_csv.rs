@@ -17,7 +17,6 @@ fn cmd_line_args() -> Option<String> {
 fn main() {
     let infile = cmd_line_args().expect("input file must be specified as command line argument");
     let sections = parse_file(&infile);
-    // println!("{sections:?}");
     for s in sections {
         print_section_to_csv(&s);
     }

@@ -167,7 +167,6 @@ impl Write for StringWriter {
             }
         }
 
-        // self.buf.write_all(buf).unwrap();
         Ok(buf.len())
     }
 
