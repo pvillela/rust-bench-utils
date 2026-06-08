@@ -1,10 +1,13 @@
-use bench_utils::{Comp, RunLength, bench_run};
+#![cfg(feature = "_test")]
+
+use bench_utils::{BenchCfg, Comp, RunLength, bench_run_arg_cfg};
 
 #[test]
 fn test_bench_run_to_comp_roundtrip() {
+    let cfg = BenchCfg::default().with_warmup_millis(10);
     // Run benchmark for f1 and f2 separately
-    let out1 = bench_run(|| {}, RunLength::Count(10));
-    let out2 = bench_run(|| {}, RunLength::Count(10));
+    let out1 = bench_run_arg_cfg(&cfg, || {}, RunLength::Count(10));
+    let out2 = bench_run_arg_cfg(&cfg, || {}, RunLength::Count(10));
 
     assert_eq!(out1.n(), 10);
     assert_eq!(out2.n(), 10);

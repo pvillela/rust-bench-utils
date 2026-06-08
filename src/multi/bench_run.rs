@@ -233,396 +233,399 @@ pub fn bench_run_with_status_arg_cfg<const K: usize>(
 }
 
 #[cfg(test)]
-#[cfg(feature = "_bench_long_test")]
-mod long {
-    // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::validate --nocapture --test-threads=1
-    mod validate {
-        use crate::{
-            BenchCfg, BusyWork, RunLength, latency,
-            multi::{
-                BenchOut, LatencySrc, LatencySrc1, LatencySrc2, bench_run_arg_cfg,
-                bench_run_with_status_arg_cfg,
-            },
-            rel_approx_eq_dur,
-            test_support::AbsRelDiffDur,
-        };
-        use std::time::{Duration, Instant};
+#[cfg(feature = "_bench")]
+// cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::validate --nocapture --test-threads=1
+mod validate {
+    use crate::{
+        BenchCfg, BusyWork, LatencyUnit, RunLength, latency,
+        multi::{
+            BenchOut, LatencySrc, LatencySrc1, LatencySrc2, bench_run_arg_cfg,
+            bench_run_with_status_arg_cfg,
+        },
+        rel_approx_eq_dur,
+        test_support::AbsRelDiffDur,
+    };
+    use std::time::{Duration, Instant};
 
-        struct FnsLatencySrc<F0, F1, Src> {
-            f0: F0,
-            f1: F1,
-            src: Src,
+    struct FnsLatencySrc<F0, F1, Src> {
+        f0: F0,
+        f1: F1,
+        src: Src,
+    }
+
+    impl<F0, F1, Src> FnsLatencySrc<F0, F1, Src> {
+        fn new(f0: F0, f1: F1, src: Src) -> Self {
+            Self { f0, f1, src }
+        }
+    }
+
+    fn run<const K: usize, R, F0, F1, Src>(
+        runner: R,
+        fsrc: FnsLatencySrc<F0, F1, Src>,
+        base_warmup_millis: u64,
+        base_status_millis: u64,
+        base_bench_time: Duration,
+        base_target_latency: Duration,
+        epsilon: f64,
+    ) where
+        F0: FnMut(),
+        F1: FnMut(),
+        Src: LatencySrc<K>,
+        R: FnOnce(&BenchCfg, Src, RunLength) -> BenchOut<K>,
+    {
+        _ = env_logger::try_init();
+
+        assert!(1 <= K && K <= 2, "K={K} must be 1 or 2");
+        let start = Instant::now();
+
+        let FnsLatencySrc {
+            mut f0,
+            mut f1,
+            src,
+        } = fsrc;
+
+        let warmup_millis = base_warmup_millis * K as u64;
+        let bench_time = base_bench_time * K as u32;
+        let status_millis = base_status_millis * K as u64;
+
+        println!(
+            "validate_bench_run: K={K}, base_target_latency={base_target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}"
+        );
+
+        let exec_count =
+            (bench_time.as_secs_f64() / (base_target_latency * K as u32).as_secs_f64()) as u64;
+        let cfg = BenchCfg::default()
+            .with_warmup_millis(warmup_millis)
+            .with_status_millis(status_millis)
+            .with_recording_unit(LatencyUnit::Nano);
+        let out = runner(&cfg, src, RunLength::Count(exec_count));
+
+        let mut raw_latencies = Vec::<Duration>::new();
+        if K >= 1 {
+            raw_latencies.push(latency(|| {
+                for _ in 0..exec_count {
+                    f0();
+                }
+            }));
+        }
+        if K == 2 {
+            raw_latencies.push(latency(|| {
+                for _ in 0..exec_count {
+                    f1();
+                }
+            }));
         }
 
-        impl<F0, F1, Src> FnsLatencySrc<F0, F1, Src> {
-            fn new(f0: F0, f1: F1, src: Src) -> Self {
-                Self { f0, f1, src }
+        let raw_means = raw_latencies
+            .iter()
+            .map(|lat| *lat / exec_count as u32)
+            .collect::<Vec<_>>();
+
+        for i in 0..K {
+            let out_mean = out[i].mean();
+            let raw_mean = raw_means[i];
+
+            println!(
+                "target_mean={base_target_latency:?}, out[{i}].mean()={out_mean:?}, rel_diff={}",
+                base_target_latency.abs_rel_diff(out_mean)
+            );
+
+            println!(
+                "target_mean={base_target_latency:?}, raw_mean[{i}]={raw_mean:?}, rel_diff={}",
+                base_target_latency.abs_rel_diff(raw_mean)
+            );
+
+            println!(
+                "raw_mean[{i}]={raw_mean:?}, out[{i}].mean()={out_mean:?}, rel_diff={}",
+                raw_mean.abs_rel_diff(out_mean)
+            );
+        }
+
+        let aggregate_raw_mean = raw_latencies.iter().sum::<Duration>() / exec_count as u32;
+        let aggregate_out_mean = out.iter().map(|x| x.mean()).sum();
+
+        if K >= 2 {
+            println!(
+                "aggregate_raw_mean={aggregate_raw_mean:?}, aggregate_out_mean={aggregate_out_mean:?}, rel_diff={}",
+                aggregate_raw_mean.abs_rel_diff(aggregate_out_mean)
+            );
+        }
+
+        println!("test total elapsed time = {:?}", start.elapsed());
+
+        // Assertions
+        {
+            for i in 0..K {
+                rel_approx_eq_dur!(raw_means[i], out[i].mean(), epsilon);
+            }
+
+            if K >= 2 {
+                rel_approx_eq_dur!(
+                    aggregate_raw_mean,
+                    aggregate_out_mean,
+                    epsilon / (K as f64).sqrt()
+                );
             }
         }
+    }
 
-        fn run<const K: usize, R, F0, F1, Src>(
-            runner: R,
-            fsrc: FnsLatencySrc<F0, F1, Src>,
+    fn fsrc1(
+        base_target_latency: Duration,
+    ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
+        let f = BusyWork::new(base_target_latency).fun();
+        let src = LatencySrc1(f.clone());
+        FnsLatencySrc::new(f, || (), src)
+    }
+
+    fn fsrc2(
+        base_target_latency: Duration,
+    ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<2>> {
+        let bw0 = BusyWork::new(base_target_latency);
+        let effort0 = bw0.effort();
+        let effort_delta = effort0 / 10;
+
+        let f0 = bw0.fun();
+        let f1a = BusyWork::from_effort(effort0 - effort_delta).fun();
+        let f1b = BusyWork::from_effort(effort_delta).fun();
+        let f1 = move || {
+            f1a();
+            f1b()
+        };
+
+        let src = LatencySrc2(f0.clone(), f1.clone());
+        FnsLatencySrc::new(f0, f1, src)
+    }
+
+    // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::long::validate::with_status1 --nocapture --test-threads=1
+    mod with_status1 {
+        use super::*;
+
+        fn run_bench(
             base_warmup_millis: u64,
             base_status_millis: u64,
             base_bench_time: Duration,
             base_target_latency: Duration,
             epsilon: f64,
-        ) where
-            F0: FnMut(),
-            F1: FnMut(),
-            Src: LatencySrc<K>,
-            R: FnOnce(&BenchCfg, Src, RunLength) -> BenchOut<K>,
-        {
-            _ = env_logger::try_init();
-
-            assert!(1 <= K && K <= 2, "K={K} must be 1 or 2");
-            let start = Instant::now();
-
-            let FnsLatencySrc {
-                mut f0,
-                mut f1,
-                src,
-            } = fsrc;
-
-            let warmup_millis = base_warmup_millis * K as u64;
-            let bench_time = base_bench_time * K as u32;
-            let status_millis = base_status_millis * K as u64;
-
-            println!(
-                "validate_bench_run: K={K}, base_target_latency={base_target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}"
+        ) {
+            run(
+                bench_run_with_status_arg_cfg,
+                fsrc1(base_target_latency),
+                base_warmup_millis,
+                base_status_millis,
+                base_bench_time,
+                base_target_latency,
+                epsilon,
             );
-
-            let exec_count =
-                (bench_time.as_secs_f64() / (base_target_latency * K as u32).as_secs_f64()) as u64;
-            let cfg = BenchCfg::default()
-                .with_warmup_millis(warmup_millis)
-                .with_status_millis(status_millis);
-            let out = runner(&cfg, src, RunLength::Count(exec_count));
-
-            let mut raw_latencies = Vec::<Duration>::new();
-            if K >= 1 {
-                raw_latencies.push(latency(|| {
-                    for _ in 0..exec_count {
-                        f0();
-                    }
-                }));
-            }
-            if K == 2 {
-                raw_latencies.push(latency(|| {
-                    for _ in 0..exec_count {
-                        f1();
-                    }
-                }));
-            }
-
-            let raw_means = raw_latencies
-                .iter()
-                .map(|lat| *lat / exec_count as u32)
-                .collect::<Vec<_>>();
-
-            for i in 0..K {
-                let out_mean = out[i].mean();
-                let raw_mean = raw_means[i];
-
-                println!(
-                    "target_mean={base_target_latency:?}, out[{i}].mean()={out_mean:?}, rel_diff={}",
-                    base_target_latency.abs_rel_diff(out_mean)
-                );
-
-                println!(
-                    "target_mean={base_target_latency:?}, raw_mean[{i}]={raw_mean:?}, rel_diff={}",
-                    base_target_latency.abs_rel_diff(raw_mean)
-                );
-
-                println!(
-                    "raw_mean[{i}]={raw_mean:?}, out[{i}].mean()={out_mean:?}, rel_diff={}",
-                    raw_mean.abs_rel_diff(out_mean)
-                );
-            }
-
-            let aggregate_raw_mean = raw_latencies.iter().sum::<Duration>() / exec_count as u32;
-            let aggregate_out_mean = out.iter().map(|x| x.mean()).sum();
-
-            if K >= 2 {
-                println!(
-                    "aggregate_raw_mean={aggregate_raw_mean:?}, aggregate_out_mean={aggregate_out_mean:?}, rel_diff={}",
-                    aggregate_raw_mean.abs_rel_diff(aggregate_out_mean)
-                );
-            }
-
-            println!("test total elapsed time = {:?}", start.elapsed());
-
-            // Assertions
-            {
-                for i in 0..K {
-                    rel_approx_eq_dur!(raw_means[i], out[i].mean(), epsilon);
-                }
-
-                if K >= 2 {
-                    rel_approx_eq_dur!(
-                        aggregate_raw_mean,
-                        aggregate_out_mean,
-                        epsilon / (K as f64).sqrt()
-                    );
-                }
-            }
         }
 
-        fn fsrc1(
+        #[test]
+        fn test_millis() {
+            const EPSILON: f64 = 0.02;
+            run_bench(
+                1000,
+                100,
+                Duration::from_millis(2000),
+                Duration::from_millis(10),
+                EPSILON,
+            );
+        }
+
+        #[test]
+        fn test_micros() {
+            const EPSILON: f64 = 0.02;
+            run_bench(
+                100,
+                10,
+                Duration::from_millis(200),
+                Duration::from_micros(50),
+                EPSILON,
+            );
+        }
+    }
+
+    // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::long::validate::without_status1 --nocapture --test-threads=1
+    mod without_status1 {
+        use super::*;
+
+        fn run_bench(
+            base_warmup_millis: u64,
+            base_bench_time: Duration,
             base_target_latency: Duration,
-        ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
-            let f = BusyWork::new(base_target_latency).fun();
-            let src = LatencySrc1(f.clone());
-            FnsLatencySrc::new(f, || (), src)
+            epsilon: f64,
+        ) {
+            run(
+                bench_run_arg_cfg,
+                fsrc1(base_target_latency),
+                base_warmup_millis,
+                0,
+                base_bench_time,
+                base_target_latency,
+                epsilon,
+            );
         }
 
-        fn fsrc2(
+        #[test]
+        fn test_millis() {
+            const EPSILON: f64 = 0.02;
+            run_bench(
+                1000,
+                Duration::from_millis(2000),
+                Duration::from_millis(10),
+                EPSILON,
+            );
+        }
+
+        #[test]
+        fn test_micros() {
+            const EPSILON: f64 = 0.02;
+            run_bench(
+                100,
+                Duration::from_millis(200),
+                Duration::from_micros(50),
+                EPSILON,
+            );
+        }
+    }
+
+    // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::long::validate::with_status2 --nocapture --test-threads=1
+    mod with_status2 {
+        use super::*;
+
+        fn run_bench(
+            base_warmup_millis: u64,
+            base_status_millis: u64,
+            base_bench_time: Duration,
             base_target_latency: Duration,
-        ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<2>> {
-            let bw0 = BusyWork::new(base_target_latency);
-            let effort0 = bw0.effort();
-            let effort_delta = effort0 / 10;
-
-            let f0 = bw0.fun();
-            let f1a = BusyWork::from_effort(effort0 - effort_delta).fun();
-            let f1b = BusyWork::from_effort(effort_delta).fun();
-            let f1 = move || {
-                f1a();
-                f1b()
-            };
-
-            let src = LatencySrc2(f0.clone(), f1.clone());
-            FnsLatencySrc::new(f0, f1, src)
+            epsilon: f64,
+        ) {
+            run(
+                bench_run_with_status_arg_cfg,
+                fsrc2(base_target_latency),
+                base_warmup_millis,
+                base_status_millis,
+                base_bench_time,
+                base_target_latency,
+                epsilon,
+            );
         }
 
-        // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::long::validate::with_status1 --nocapture --test-threads=1
-        mod with_status1 {
-            use super::*;
-
-            fn run_bench(
-                base_warmup_millis: u64,
-                base_status_millis: u64,
-                base_bench_time: Duration,
-                base_target_latency: Duration,
-                epsilon: f64,
-            ) {
-                run(
-                    bench_run_with_status_arg_cfg,
-                    fsrc1(base_target_latency),
-                    base_warmup_millis,
-                    base_status_millis,
-                    base_bench_time,
-                    base_target_latency,
-                    epsilon,
-                );
-            }
-
-            #[test]
-            fn test_millis() {
-                const EPSILON: f64 = 0.02;
-                run_bench(
-                    1000,
-                    100,
-                    Duration::from_millis(2000),
-                    Duration::from_millis(10),
-                    EPSILON,
-                );
-            }
-
-            #[test]
-            fn test_micros() {
-                const EPSILON: f64 = 0.02;
-                run_bench(
-                    100,
-                    10,
-                    Duration::from_millis(200),
-                    Duration::from_micros(50),
-                    EPSILON,
-                );
-            }
+        #[test]
+        fn test_millis() {
+            const EPSILON: f64 = 0.02;
+            run_bench(
+                1000,
+                100,
+                Duration::from_millis(2000),
+                Duration::from_millis(10),
+                EPSILON,
+            );
         }
 
-        // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::long::validate::without_status1 --nocapture --test-threads=1
-        mod without_status1 {
-            use super::*;
+        #[test]
+        fn test_micros() {
+            const EPSILON: f64 = 0.02;
+            run_bench(
+                100,
+                10,
+                Duration::from_millis(200),
+                Duration::from_micros(50),
+                EPSILON,
+            );
+        }
+    }
 
-            fn run_bench(
-                base_warmup_millis: u64,
-                base_bench_time: Duration,
-                base_target_latency: Duration,
-                epsilon: f64,
-            ) {
-                run(
-                    bench_run_arg_cfg,
-                    fsrc1(base_target_latency),
-                    base_warmup_millis,
-                    0,
-                    base_bench_time,
-                    base_target_latency,
-                    epsilon,
-                );
-            }
+    // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::long::validate::without_status2 --nocapture --test-threads=1
+    mod without_status2 {
+        use super::*;
 
-            #[test]
-            fn test_millis() {
-                const EPSILON: f64 = 0.02;
-                run_bench(
-                    1000,
-                    Duration::from_millis(2000),
-                    Duration::from_millis(10),
-                    EPSILON,
-                );
-            }
-
-            #[test]
-            fn test_micros() {
-                const EPSILON: f64 = 0.02;
-                run_bench(
-                    100,
-                    Duration::from_millis(200),
-                    Duration::from_micros(50),
-                    EPSILON,
-                );
-            }
+        fn run_bench(
+            base_warmup_millis: u64,
+            base_bench_time: Duration,
+            base_target_latency: Duration,
+            epsilon: f64,
+        ) {
+            run(
+                bench_run_arg_cfg,
+                fsrc2(base_target_latency),
+                base_warmup_millis,
+                0,
+                base_bench_time,
+                base_target_latency,
+                epsilon,
+            );
         }
 
-        // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::long::validate::with_status2 --nocapture --test-threads=1
-        mod with_status2 {
-            use super::*;
-
-            fn run_bench(
-                base_warmup_millis: u64,
-                base_status_millis: u64,
-                base_bench_time: Duration,
-                base_target_latency: Duration,
-                epsilon: f64,
-            ) {
-                run(
-                    bench_run_with_status_arg_cfg,
-                    fsrc2(base_target_latency),
-                    base_warmup_millis,
-                    base_status_millis,
-                    base_bench_time,
-                    base_target_latency,
-                    epsilon,
-                );
-            }
-
-            #[test]
-            fn test_millis() {
-                const EPSILON: f64 = 0.02;
-                run_bench(
-                    1000,
-                    100,
-                    Duration::from_millis(2000),
-                    Duration::from_millis(10),
-                    EPSILON,
-                );
-            }
-
-            #[test]
-            fn test_micros() {
-                const EPSILON: f64 = 0.02;
-                run_bench(
-                    100,
-                    10,
-                    Duration::from_millis(200),
-                    Duration::from_micros(50),
-                    EPSILON,
-                );
-            }
+        #[test]
+        fn test_millis() {
+            const EPSILON: f64 = 0.02;
+            run_bench(
+                1000,
+                Duration::from_millis(2000),
+                Duration::from_millis(10),
+                EPSILON,
+            );
         }
 
-        // cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::long::validate::without_status2 --nocapture --test-threads=1
-        mod without_status2 {
-            use super::*;
-
-            fn run_bench(
-                base_warmup_millis: u64,
-                base_bench_time: Duration,
-                base_target_latency: Duration,
-                epsilon: f64,
-            ) {
-                run(
-                    bench_run_arg_cfg,
-                    fsrc2(base_target_latency),
-                    base_warmup_millis,
-                    0,
-                    base_bench_time,
-                    base_target_latency,
-                    epsilon,
-                );
-            }
-
-            #[test]
-            fn test_millis() {
-                const EPSILON: f64 = 0.02;
-                run_bench(
-                    1000,
-                    Duration::from_millis(2000),
-                    Duration::from_millis(10),
-                    EPSILON,
-                );
-            }
-
-            #[test]
-            fn test_micros() {
-                const EPSILON: f64 = 0.02;
-                run_bench(
-                    100,
-                    Duration::from_millis(200),
-                    Duration::from_micros(50),
-                    EPSILON,
-                );
-            }
+        #[test]
+        fn test_micros() {
+            const EPSILON: f64 = 0.02;
+            run_bench(
+                100,
+                Duration::from_millis(200),
+                Duration::from_micros(50),
+                EPSILON,
+            );
         }
     }
 }
 
 #[cfg(test)]
-#[cfg(feature = "_bench")]
-// RUST_LOG=trace cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::status --nocapture --test-threads=1
+#[cfg(feature = "_test")]
+// cargo test -r --package bench_utils --lib --all-features -- multi::bench_run::status --nocapture --test-threads=1
 mod status {
     use super::*;
     use crate::{
-        BusyWork, LatencyUnit, RunLength, multi::LatencySrc2, status::DefaultStatus,
+        LatencyUnit, RunLength, multi::test_support::LognormalLatencySrc, status::DefaultStatus,
         test_support::StringWriter,
     };
     use basic_stats::rel_approx_eq;
     use regex::Regex;
     use std::time::Duration;
 
-    fn run_test(
-        warmup_millis: u64,
-        exec_run_length: RunLength,
-        status_millis: u64,
-        target_latency: Duration,
+    fn run<const K: usize, Src>(
+        mut src: Src,
+        base_warmup_millis: u64,
+        base_exec_run_length: RunLength,
+        base_status_millis: u64,
+        base_target_latency: Duration,
         epsilon: f64,
-    ) {
+    ) where
+        Src: LatencySrc<K>,
+    {
         _ = env_logger::try_init();
 
-        // Scale certain arguments to align with status tests in non-multi `bench_run`,
-        // because we have two functions here.
-        let warmup_millis2 = warmup_millis * 2;
-        let exec_run_length2 = match exec_run_length {
-            RunLength::Count(_) => exec_run_length,
+        assert!(1 <= K && K <= 2, "K={K} must be 1 or 2");
+
+        // Scale certain arguments to align with status tests between K = 1 and 2.
+        let warmup_millis = base_warmup_millis * K as u64;
+        let status_millis = base_status_millis * K as u64;
+        let exec_run_length = match base_exec_run_length {
+            RunLength::Count(_) => base_exec_run_length,
             RunLength::Time(duration) => RunLength::Time(duration * 2),
             RunLength::CountWithTimeout(count, duration) => {
                 RunLength::CountWithTimeout(count, duration * 2)
             }
         };
-        let status_millis2 = status_millis * 2;
 
         println!(
-            "\n***** Testing: warmup_millis={warmup_millis2}, exec_run_length={exec_run_length2:?}, status_millis={status_millis2}, target_latency={target_latency:?}, epsilon={epsilon}"
+            "\n***** Testing: warmup_millis={warmup_millis}, exec_run_length={exec_run_length:?}, status_millis={status_millis}, target_latency={base_target_latency:?}, epsilon={epsilon}"
         );
 
-        let warmup_run_length = RunLength::Time(Duration::from_millis(warmup_millis2));
+        let warmup_run_length = RunLength::Time(Duration::from_millis(warmup_millis));
 
         let cfg = BenchCfg::default()
-            .with_warmup_millis(warmup_millis2)
-            .with_status_millis(status_millis2)
+            .with_warmup_millis(warmup_millis)
+            .with_status_millis(status_millis)
             .with_recording_unit(LatencyUnit::Nano);
 
         let mut w = StringWriter::new();
@@ -632,18 +635,9 @@ mod status {
             "\nExecuting bench_run".to_owned(),
         );
 
-        let latency_delta = target_latency / 10;
-        let mut src = LatencySrc2(
-            || {
-                BusyWork::new(target_latency - latency_delta).fun()();
-                BusyWork::new(latency_delta).fun()();
-            },
-            BusyWork::new(target_latency).fun(),
-        );
+        let execs_per_second = cfg.src_execs_per_sec(&mut src, exec_run_length);
 
-        let execs_per_second = cfg.src_execs_per_sec(&mut src, exec_run_length2);
-
-        let out = bench_run_x(&cfg, src, exec_run_length2, status);
+        let out = bench_run_x(&cfg, src, exec_run_length, status);
 
         let status_str = w.as_str().expect("StringWriter doesn't contain string");
         println!("** {status_str}");
@@ -665,7 +659,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
         println!();
 
         {
-            assert_eq!(caps[1], warmup_millis2.to_string());
+            assert_eq!(caps[1], warmup_millis.to_string());
             let warmup_last = caps[2].parse::<u64>().unwrap();
             let warmup_est_count = caps[3].parse::<u64>().unwrap();
             rel_approx_eq!(
@@ -679,16 +673,14 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
         {
             rel_approx_eq!(
                 caps[4].parse::<u64>().unwrap() as f64,
-                exec_run_length2
-                    .estimated_time(execs_per_second)
-                    .as_millis() as f64,
+                exec_run_length.estimated_time(execs_per_second).as_millis() as f64,
                 epsilon
             );
             let exec_last = caps[5].parse::<u64>().unwrap();
             let exec_est_count = caps[6].parse::<u64>().unwrap();
             rel_approx_eq!(
                 exec_est_count as f64,
-                exec_run_length2.estimated_count(execs_per_second) as f64,
+                exec_run_length.estimated_count(execs_per_second) as f64,
                 epsilon
             );
             rel_approx_eq!(exec_last as f64, exec_est_count as f64, epsilon);
@@ -696,141 +688,332 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
         }
     }
 
-    #[test]
-    fn test_0_10_0_200() {
-        const EPSILON: f64 = 2.0;
-
-        let warmup_millis: u64 = 0;
-        let target_latency = Duration::from_micros(10);
-        let status_millis: u64 = 0;
-        let exec_run_length = RunLength::Count(200);
-
-        run_test(
-            warmup_millis,
-            exec_run_length,
-            status_millis,
-            target_latency,
-            EPSILON,
-        );
+    fn src1(base_target_latency: Duration) -> impl LatencySrc<1> {
+        LognormalLatencySrc::new_with_default_sigmas([base_target_latency])
     }
 
-    #[test]
-    fn test_0_10_0_0() {
-        const EPSILON: f64 = f64::NAN;
-
-        let warmup_millis: u64 = 0;
-        let target_latency = Duration::from_micros(10);
-        let status_millis: u64 = 0;
-        let exec_run_length = RunLength::Count(0);
-
-        // exec_count must be > 0 but exec_run_length makes it 0
-        let result = {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                run_test(
-                    warmup_millis,
-                    exec_run_length,
-                    status_millis,
-                    target_latency,
-                    EPSILON,
-                );
-            }))
-        };
-        println!("RECOVERED");
-
-        assert!(
-            result.is_err(),
-            "expected panic because exec_count must be > 0"
-        );
+    fn src2(base_target_latency: Duration) -> impl LatencySrc<2> {
+        let delta = base_target_latency / 10;
+        LognormalLatencySrc::new_with_default_sigmas([
+            base_target_latency + delta,
+            base_target_latency - delta,
+        ])
     }
 
-    #[test]
-    fn test_0_10_1_200() {
-        const EPSILON: f64 = 2.0;
+    mod status1 {
+        use super::*;
 
-        let warmup_millis: u64 = 0;
-        let target_latency = Duration::from_micros(10);
-        let status_millis: u64 = 1;
-        let exec_run_length = RunLength::Count(200);
+        fn run_test(
+            base_warmup_millis: u64,
+            base_exec_run_length: RunLength,
+            base_status_millis: u64,
+            base_target_latency: Duration,
+            epsilon: f64,
+        ) {
+            run(
+                src1(base_target_latency),
+                base_warmup_millis,
+                base_exec_run_length,
+                base_status_millis,
+                base_target_latency,
+                epsilon,
+            )
+        }
 
-        run_test(
-            warmup_millis,
-            exec_run_length,
-            status_millis,
-            target_latency,
-            EPSILON,
-        );
+        #[test]
+        fn test_0_10_0_200() {
+            const EPSILON: f64 = 2.0;
+
+            let warmup_millis: u64 = 0;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 0;
+            let exec_run_length = RunLength::Count(200);
+
+            run_test(
+                warmup_millis,
+                exec_run_length,
+                status_millis,
+                target_latency,
+                EPSILON,
+            );
+        }
+
+        #[test]
+        fn test_0_10_0_0() {
+            const EPSILON: f64 = f64::NAN;
+
+            let warmup_millis: u64 = 0;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 0;
+            let exec_run_length = RunLength::Count(0);
+
+            // exec_count must be > 0 but exec_run_length makes it 0
+            let result = {
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    run_test(
+                        warmup_millis,
+                        exec_run_length,
+                        status_millis,
+                        target_latency,
+                        EPSILON,
+                    );
+                }))
+            };
+            println!("RECOVERED");
+
+            assert!(
+                result.is_err(),
+                "expected panic because exec_count must be > 0"
+            );
+        }
+
+        #[test]
+        fn test_0_10_1_200() {
+            const EPSILON: f64 = 2.0;
+
+            let warmup_millis: u64 = 0;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 1;
+            let exec_run_length = RunLength::Count(200);
+
+            run_test(
+                warmup_millis,
+                exec_run_length,
+                status_millis,
+                target_latency,
+                EPSILON,
+            );
+        }
+
+        #[test]
+        fn test_1_10_0_200() {
+            const EPSILON: f64 = 0.50;
+
+            let warmup_millis: u64 = 1;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 0;
+            let exec_run_length = RunLength::Count(200);
+
+            run_test(
+                warmup_millis,
+                exec_run_length,
+                status_millis,
+                target_latency,
+                EPSILON,
+            );
+        }
+
+        #[test]
+        fn test_1_10_1_200() {
+            const EPSILON: f64 = 0.50;
+
+            let warmup_millis: u64 = 1;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 1;
+            let exec_run_length = RunLength::Count(200);
+
+            run_test(
+                warmup_millis,
+                exec_run_length,
+                status_millis,
+                target_latency,
+                EPSILON,
+            );
+        }
+
+        #[test]
+        fn test_1_10_1_300() {
+            const EPSILON: f64 = 0.10;
+
+            let warmup_millis: u64 = 1;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 1;
+            let exec_run_length = RunLength::Count(300);
+
+            run_test(
+                warmup_millis,
+                exec_run_length,
+                status_millis,
+                target_latency,
+                EPSILON,
+            );
+        }
+
+        #[test]
+        fn test_1_10_1_2000() {
+            const EPSILON: f64 = 0.10;
+
+            let warmup_millis: u64 = 1;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 1;
+            let exec_run_length = RunLength::CountWithTimeout(300, Duration::from_micros(2000));
+
+            run_test(
+                warmup_millis,
+                exec_run_length,
+                status_millis,
+                target_latency,
+                EPSILON,
+            );
+        }
     }
 
-    #[test]
-    fn test_1_10_0_200() {
-        const EPSILON: f64 = 0.50;
+    mod status2 {
+        use super::*;
 
-        let warmup_millis: u64 = 1;
-        let target_latency = Duration::from_micros(10);
-        let status_millis: u64 = 0;
-        let exec_run_length = RunLength::Count(200);
+        fn run_test(
+            base_warmup_millis: u64,
+            base_exec_run_length: RunLength,
+            base_status_millis: u64,
+            base_target_latency: Duration,
+            epsilon: f64,
+        ) {
+            run(
+                src2(base_target_latency),
+                base_warmup_millis,
+                base_exec_run_length,
+                base_status_millis,
+                base_target_latency,
+                epsilon,
+            )
+        }
 
-        run_test(
-            warmup_millis,
-            exec_run_length,
-            status_millis,
-            target_latency,
-            EPSILON,
-        );
-    }
+        #[test]
+        fn test_0_10_0_200() {
+            const EPSILON: f64 = 2.0;
 
-    #[test]
-    fn test_1_10_1_200() {
-        const EPSILON: f64 = 0.50;
+            let warmup_millis: u64 = 0;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 0;
+            let exec_run_length = RunLength::Count(200);
 
-        let warmup_millis: u64 = 1;
-        let target_latency = Duration::from_micros(10);
-        let status_millis: u64 = 1;
-        let exec_run_length = RunLength::Count(200);
+            run_test(
+                warmup_millis,
+                exec_run_length,
+                status_millis,
+                target_latency,
+                EPSILON,
+            );
+        }
 
-        run_test(
-            warmup_millis,
-            exec_run_length,
-            status_millis,
-            target_latency,
-            EPSILON,
-        );
-    }
+        #[test]
+        fn test_0_10_0_0() {
+            const EPSILON: f64 = f64::NAN;
 
-    #[test]
-    fn test_1_10_1_300() {
-        const EPSILON: f64 = 0.10;
+            let warmup_millis: u64 = 0;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 0;
+            let exec_run_length = RunLength::Count(0);
 
-        let warmup_millis: u64 = 1;
-        let target_latency = Duration::from_micros(10);
-        let status_millis: u64 = 1;
-        let exec_run_length = RunLength::Count(300);
+            // exec_count must be > 0 but exec_run_length makes it 0
+            let result = {
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    run_test(
+                        warmup_millis,
+                        exec_run_length,
+                        status_millis,
+                        target_latency,
+                        EPSILON,
+                    );
+                }))
+            };
+            println!("RECOVERED");
 
-        run_test(
-            warmup_millis,
-            exec_run_length,
-            status_millis,
-            target_latency,
-            EPSILON,
-        );
-    }
+            assert!(
+                result.is_err(),
+                "expected panic because exec_count must be > 0"
+            );
+        }
 
-    #[test]
-    fn test_1_10_1_2000() {
-        const EPSILON: f64 = 0.10;
+        #[test]
+        fn test_0_10_1_200() {
+            const EPSILON: f64 = 2.0;
 
-        let warmup_millis: u64 = 1;
-        let target_latency = Duration::from_micros(10);
-        let status_millis: u64 = 1;
-        let exec_run_length = RunLength::CountWithTimeout(300, Duration::from_micros(2000));
+            let warmup_millis: u64 = 0;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 1;
+            let exec_run_length = RunLength::Count(200);
 
-        run_test(
-            warmup_millis,
-            exec_run_length,
-            status_millis,
-            target_latency,
-            EPSILON,
-        );
+            run_test(
+                warmup_millis,
+                exec_run_length,
+                status_millis,
+                target_latency,
+                EPSILON,
+            );
+        }
+
+        #[test]
+        fn test_1_10_0_200() {
+            const EPSILON: f64 = 0.50;
+
+            let warmup_millis: u64 = 1;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 0;
+            let exec_run_length = RunLength::Count(200);
+
+            run_test(
+                warmup_millis,
+                exec_run_length,
+                status_millis,
+                target_latency,
+                EPSILON,
+            );
+        }
+
+        #[test]
+        fn test_1_10_1_200() {
+            const EPSILON: f64 = 0.50;
+
+            let warmup_millis: u64 = 1;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 1;
+            let exec_run_length = RunLength::Count(200);
+
+            run_test(
+                warmup_millis,
+                exec_run_length,
+                status_millis,
+                target_latency,
+                EPSILON,
+            );
+        }
+
+        #[test]
+        fn test_1_10_1_300() {
+            const EPSILON: f64 = 0.10;
+
+            let warmup_millis: u64 = 1;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 1;
+            let exec_run_length = RunLength::Count(300);
+
+            run_test(
+                warmup_millis,
+                exec_run_length,
+                status_millis,
+                target_latency,
+                EPSILON,
+            );
+        }
+
+        #[test]
+        fn test_1_10_1_2000() {
+            const EPSILON: f64 = 0.10;
+
+            let warmup_millis: u64 = 1;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 1;
+            let exec_run_length = RunLength::CountWithTimeout(300, Duration::from_micros(2000));
+
+            run_test(
+                warmup_millis,
+                exec_run_length,
+                status_millis,
+                target_latency,
+                EPSILON,
+            );
+        }
     }
 }
 

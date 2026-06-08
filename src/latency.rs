@@ -115,9 +115,9 @@ pub fn src_execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: RunLen
 }
 
 #[cfg(test)]
-#[cfg(feature = "_bench_long_test")]
+#[cfg(feature = "_bench")]
 /// cargo test -r --package bench_utils --lib --all-features -- latency::test --nocapture
-mod test {
+mod validate {
     use super::*;
     use crate::{BenchCfg, bench_support::validate_latency_overhead, rel_approx_eq_dur};
     use basic_stats::approx_eq;
@@ -257,7 +257,7 @@ mod test {
 #[cfg(test)]
 #[cfg(feature = "_test")]
 // cargo test --package bench_utils --lib --all-features -- latency::test_executions_per_second --nocapture
-mod test_executions_per_second {
+mod test_execs_per_second {
 
     use crate::multi::{LatencySrc, test_support::LognormalLatencySrc};
 

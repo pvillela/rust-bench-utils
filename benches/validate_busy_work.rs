@@ -3,7 +3,7 @@ use bench_utils::{BusyWork, latency};
 use std::time::Duration;
 
 fn main() {
-    validate_core();
+    validate_latency();
     validate_ratio();
 }
 
@@ -19,7 +19,7 @@ fn run_core(dur: Duration) -> (f64, f64) {
     (dur_secs, latency_secs)
 }
 
-fn validate_core() {
+fn validate_latency() {
     // test_busy_work_new_zero()
     {
         const EPSILON: f64 = 0.005;

@@ -143,8 +143,8 @@ impl BusyWork {
 
 #[cfg(test)]
 #[cfg(feature = "_bench")]
-/// cargo test --package bench_utils --lib --all-features -- busy_work::test --nocapture
-mod core_tests {
+/// cargo test --package bench_utils --lib --all-features -- busy_work::validate_latency --nocapture
+mod validate_latency {
     use super::*;
     use crate::latency;
     use basic_stats::{approx_eq, dev_utils::ApproxEq, rel_approx_eq};
@@ -204,11 +204,11 @@ mod core_tests {
 
 #[cfg(test)]
 #[cfg(feature = "_bench")]
-// cargo test -r --package bench_utils --lib --all-features -- busy_work::ratio_tests --nocapture
+// cargo test -r --package bench_utils --lib --all-features -- busy_work::validate_ratio --nocapture
 //
 /// Test whether two busy work functions produce latencies that are proportional to the ratio of their
 /// `effort` attributes. Checking is based on the cumulative latencies over a number of `repeats`.
-mod ratio_tests {
+mod validate_ratio {
     use super::*;
     use crate::latency;
     use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};

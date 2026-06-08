@@ -9,7 +9,7 @@ pub fn fake_work(target_latency: Duration) {
 #[cfg(test)]
 #[cfg(feature = "_bench")]
 /// cargo test --package bench_utils --lib --all-features -- fake_work::test --nocapture
-mod test {
+mod validate {
     use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
 
     use crate::latency;
