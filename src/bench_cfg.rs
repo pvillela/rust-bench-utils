@@ -47,7 +47,7 @@ impl RunLength {
     }
 
     /// Estimated run duration.
-    pub fn estimated_duration(&self, execs_per_second: f64) -> Duration {
+    pub fn estimated_time(&self, execs_per_second: f64) -> Duration {
         match self {
             Self::Count(count) => Duration::from_secs_f64(*count as f64 / execs_per_second),
             Self::Time(duration) => *duration,
@@ -320,7 +320,7 @@ mod test {
     }
 
     #[test]
-    fn test_run_length_get_exec_count_and_duration() {
+    fn test_run_length_get_exec_count_and_time() {
         // Count variant
         let (count, dur) = RunLength::Count(100).get_exec_count_and_duration();
         assert_eq!(count, 100);
@@ -377,18 +377,18 @@ mod test {
     }
 
     #[test]
-    fn test_run_length_estimated_duration() {
+    fn test_run_length_estimated_time() {
         let execs_per_second = 1_000_000.0;
 
         // Count: duration derived from count
         assert_eq!(
-            RunLength::Count(5000).estimated_duration(execs_per_second),
+            RunLength::Count(5000).estimated_time(execs_per_second),
             Duration::from_millis(5) // 5000 / 1_000_000/s = 5ms
         );
 
         // Duration: just the duration
         assert_eq!(
-            RunLength::Time(Duration::from_secs(2)).estimated_duration(execs_per_second),
+            RunLength::Time(Duration::from_secs(2)).estimated_time(execs_per_second),
             Duration::from_secs(2)
         );
 
@@ -396,7 +396,7 @@ mod test {
         // Count: 1000/1000 = 1ms. Timeout: 10ms. Min = 1ms
         assert_eq!(
             RunLength::CountWithTimeout(1000, Duration::from_millis(10))
-                .estimated_duration(execs_per_second),
+                .estimated_time(execs_per_second),
             Duration::from_millis(1)
         );
 
@@ -404,19 +404,19 @@ mod test {
         // Count: 50000/1000 = 50ms. Timeout: 10ms. Min = 10ms
         assert_eq!(
             RunLength::CountWithTimeout(50_000, Duration::from_millis(10))
-                .estimated_duration(execs_per_second),
+                .estimated_time(execs_per_second),
             Duration::from_millis(10)
         );
 
         // Zero execs_per_second results in panic
-        let result = std::panic::catch_unwind(|| RunLength::Count(5000).estimated_duration(0.0));
+        let result = std::panic::catch_unwind(|| RunLength::Count(5000).estimated_time(0.0));
         assert!(
             result.is_err(),
             "should panic when execs_per_second is zero"
         );
 
         // Large count
-        let huge = RunLength::Count(1_000_000_000).estimated_duration(1000.0);
+        let huge = RunLength::Count(1_000_000_000).estimated_time(1000.0);
         assert_eq!(huge, Duration::from_secs(1_000_000));
     }
 

@@ -338,9 +338,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
         {
             rel_approx_eq!(
                 caps[4].parse::<u64>().unwrap() as f64,
-                exec_run_length
-                    .estimated_duration(execs_per_second)
-                    .as_millis() as f64,
+                exec_run_length.estimated_time(execs_per_second).as_millis() as f64,
                 epsilon
             );
             let exec_last = caps[5].parse::<u64>().unwrap();
@@ -579,9 +577,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
         {
             rel_approx_eq!(
                 caps[4].parse::<u64>().unwrap() as f64,
-                exec_run_length
-                    .estimated_duration(execs_per_second)
-                    .as_millis() as f64,
+                exec_run_length.estimated_time(execs_per_second).as_millis() as f64,
                 epsilon
             );
             let exec_last = caps[5].parse::<u64>().unwrap();
@@ -763,7 +759,7 @@ mod simple_tests {
     }
 
     #[test]
-    fn test_bench_run_with_duration() {
+    fn test_bench_run_with_time() {
         let cfg = quick_cfg();
 
         // Use a very short timeout that should be exceeded immediately

@@ -10,8 +10,8 @@ use std::{io::Write, time::Duration};
 pub trait Status<'a> {
     /// Returns an optional status closure for the warm-up phase.
     ///
-    /// The closure receives `(est_dur, est_count, i)` where:
-    /// - `est_dur` is the estimated warm-up duration.
+    /// The closure receives `(est_time, est_count, i)` where:
+    /// - `est_time` is the estimated warm-up duration.
     /// - `est_count` is the estimated number of warm-up iterations.
     /// - `i` is the current warm-up iteration.
     fn warmup_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, u64, u64) + 'b>
@@ -20,25 +20,25 @@ pub trait Status<'a> {
 
     /// Returns an optional status closure for the execution phase.
     ///
-    /// The closure receives `(est_dur, est_count, i)` where:
-    /// - `est_dur` is the estimated execution duration.
+    /// The closure receives `(est_time, est_count, i)` where:
+    /// - `est_time` is the estimated execution duration.
     /// - `est_count` is the estimated number of execution iterations.
     /// - `i` is the current execution iteration.
     fn exec_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, u64, u64) + 'b>
     where
         'a: 'b;
 
-    /// Partially applies `(est_dur, est_count, i)` to a status closure,
+    /// Partially applies `(est_time, est_count, i)` to a status closure,
     /// yielding an `FnMut(u64)` closure
     ///
     /// The returned closure only receives the iteration index `i`; the estimated duration
     /// and count are captured at construction time.
     fn part_apply(
         status: Option<impl FnMut(Duration, u64, u64)>,
-        est_dur: Duration,
+        est_time: Duration,
         est_count: u64,
     ) -> Option<impl FnMut(u64)> {
-        status.map(|mut s| move |i| s(est_dur, est_count, i))
+        status.map(|mut s| move |i| s(est_time, est_count, i))
     }
 }
 
@@ -96,13 +96,13 @@ impl<'a, W: Write> DefaultStatus<'a, W> {
     {
         let mut status_len: usize = 0;
 
-        move |est_dur: Duration, est_count: u64, i: u64| {
+        move |est_time: Duration, est_count: u64, i: u64| {
             if status_len == 0 {
                 write!(
                     w,
                     "{} for (approx.) {} millis: ",
                     preamble.clone(),
-                    est_dur.as_millis()
+                    est_time.as_millis()
                 )
                 .expect("unexpected error writing to `Write` object `w`");
                 w.flush().expect("unexpected I/O error");

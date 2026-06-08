@@ -52,7 +52,7 @@ Six builder methods and one setter lack docs:
 #### `RunLength` estimation methods (bench_cfg.rs:31-53)
 Two methods have regular `//` comments instead of `///` doc comments:
 - `estimated_count()` at line 31
-- `estimated_duration()` at line 43
+- `estimated_time()` at line 43
 
 #### `BenchCfg::get()` free function (bench_run.rs:21)
 The primary way users access the global benchmark config -- no doc comment.

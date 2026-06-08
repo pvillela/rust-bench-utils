@@ -108,13 +108,13 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     debug!("bench_run_x >>> status_count={status_count}");
 
     let warmup_run_length = RunLength::Time(Duration::from_millis(cfg.warmup_millis()));
-    let warmup_est_dur = warmup_run_length.estimated_duration(execs_per_second);
+    let warmup_est_time = warmup_run_length.estimated_time(execs_per_second);
     let warmup_est_count = warmup_run_length.estimated_count(execs_per_second);
-    let exec_est_dur = exec_run_length.estimated_duration(execs_per_second);
+    let exec_est_time = exec_run_length.estimated_time(execs_per_second);
     let exec_est_count = exec_run_length.estimated_count(execs_per_second);
 
     // Warm-up.
-    let mut warmup_status = S::part_apply(s.warmup_status(), warmup_est_dur, warmup_est_count);
+    let mut warmup_status = S::part_apply(s.warmup_status(), warmup_est_time, warmup_est_count);
     state.execute(
         &mut src,
         warmup_run_length,
@@ -126,7 +126,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     drop(warmup_status);
 
     // Execute.
-    let mut exec_status = S::part_apply(s.exec_status(), exec_est_dur, exec_est_count);
+    let mut exec_status = S::part_apply(s.exec_status(), exec_est_time, exec_est_count);
     state.execute(
         &mut src,
         exec_run_length,
@@ -680,7 +680,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             rel_approx_eq!(
                 caps[4].parse::<u64>().unwrap() as f64,
                 exec_run_length2
-                    .estimated_duration(execs_per_second)
+                    .estimated_time(execs_per_second)
                     .as_millis() as f64,
                 epsilon
             );
@@ -859,7 +859,7 @@ mod simple_tests {
     }
 
     #[test]
-    fn test_bench_run_with_duration() {
+    fn test_bench_run_with_time() {
         let cfg = quick_cfg();
 
         // Use a very short timeout that should be exceeded immediately
