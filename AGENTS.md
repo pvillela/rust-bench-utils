@@ -27,7 +27,6 @@ This crate has complex feature gating with several tiers:
 - **Internal features**:
   - `_test_support` (= `basic_stats/_dev_utils` + `dep:regex`) — test-only utilities for this crate and friend crates
   - `_bench` (= `_test_support` + `busy_work` + `dep:criterion`) — used by some benches and some tests
-  - `_bench_long_test` (= `_bench`) — long-running validation tests excluded from normal test runs
   - `_test` (= `_test_support`) — used only by tests
   - `_experimental` (= `basic_stats/wilcoxon`) — functionality developed but not intended for public clients
   - `_bench_diff` (= `_experimental`) — bundles what the sibling `bench_diff` crate needs
@@ -65,7 +64,7 @@ The library supports benchmarking multiple functions simultaneously via const-ge
 - **Log-normal assumption**: Latency distributions are treated as approximately log-normal. Statistics on `ln(latency)` are central to the API (Student's t on one sample, Welch's t for two-sample comparison).
 - **HDR histogram**: Latencies are recorded into a resizable `hdrhistogram::Histogram<u64>`, which provides quantile/percentile queries.
 - **Const-generic K-arity**: `bench_run` functions accept `[impl FnMut(); K]` and produce `BenchOut<K>`, allowing simultaneous benchmarking of `K` functions with interleaved execution to reduce time-dependent noise.
-- **Feature-gated API surface**: Some `Comp` methods are gated behind `_experimental` (Wilcoxon). `test_support` is gated behind `_test_support`. `bench_support` is gated behind `_bench`. `_bench_long_test` gates long-running validation tests.
+- **Feature-gated API surface**: Some `Comp` methods are gated behind `_experimental` (Wilcoxon). `test_support` is gated behind `_test_support`. `bench_support` is gated behind `_bench`.
 - **[`LatencySrc`] trait**: Abstracts latency measurement into iterators that yield `[Duration; K]`. Concrete implementations [`LatencySrc1`] and [`LatencySrc2`] wrap closures and measure their wall-clock latency on each `next()` call. The `bench_run` module in `src/bench_run.rs` wraps single closures via `LatencySrc1(f)` and delegates to the `multi` module, keeping the K=1 path uniform with K>1.
 - **[`Status`] trait**: Benchmarks accept an owned `impl Status<'a>` that provides optional warm-up and execution progress callbacks. [`NoStatus`] is a no-op; [`DefaultStatus<W: Write>`] prints backspace-overwriting progress lines. The trait method `part_apply` partially applies `(est_time, est_count)` so the inner execution loop only receives the iteration index.
 - **`panic_on_error` config**: [`BenchCfg::panic_on_error`] controls whether library functions that don't return `Result` should panic on error or return tainted (non-finite) values. The [`PanicIfNeeded`] extension trait bridges this flag to the `AokValue` pattern from `basic_stats`.
@@ -80,7 +79,7 @@ The library supports benchmarking multiple functions simultaneously via const-ge
 
 Tests in this crate that call the `latency::latency` function or call `Duration::elapsed()` to compute latencies should be executed with `cargo test -r` because latency measurements can be highly unreliable when the code is not compiled with release optimization.
 
-Long-running validation tests are tagged with `_bench_long_test` and excluded from `./test.sh`. Run them with `./test-long.sh`.
+Long-running validation tests are tagged with `_bench` and excluded from `./test.sh`. They can be run with `./validate.sh`, but you should NOT execute `./validate.sh` unless explicitly requested by the user.
 
 To test the entire crate, use the `./test.sh` script.
 
