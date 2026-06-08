@@ -248,7 +248,7 @@ impl BenchCfg {
     ) -> f64 {
         let budget = self.execs_per_second_budget(exec_run_length);
         debug!("execs_per_second_budget >>> execs_per_second_budget={budget:?}");
-        latency::src_execs_per_sec(src.map(|arr| arr.iter().sum()), budget)
+        latency::src_execs_per_sec(src.aggregate(), budget)
     }
 
     /// Number of executions between status updates, derived from `execs_per_second`.
