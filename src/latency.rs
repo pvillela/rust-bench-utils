@@ -172,9 +172,16 @@ mod validate {
         rel_approx_eq_dur!(solo_median_20 * 20, group_median_20, EPSILON);
         rel_approx_eq_dur!(solo_median_100 * 100, group_median_100, EPSILON);
     }
+}
+
+#[cfg(test)]
+#[cfg(feature = "_test")]
+mod test_latency_unit {
+    use super::*;
+    use basic_stats::approx_eq;
 
     #[test]
-    fn test_latency_unit_as_u64() {
+    fn latency_unit_as_u64() {
         let dur = Duration::new(1, 500_000_000); // 1.5 seconds
         assert_eq!(1500, LatencyUnit::Milli.latency_as_u64(dur));
         assert_eq!(1_500_000, LatencyUnit::Micro.latency_as_u64(dur));
@@ -187,7 +194,7 @@ mod validate {
     }
 
     #[test]
-    fn test_latency_unit_from_u64_roundtrip() {
+    fn latency_unit_from_u64_roundtrip() {
         // Milli round-trip
         let dur = LatencyUnit::Milli.latency_from_u64(42);
         assert_eq!(42, LatencyUnit::Milli.latency_as_u64(dur));
@@ -211,7 +218,7 @@ mod validate {
     }
 
     #[test]
-    fn test_latency_unit_as_f64() {
+    fn latency_unit_as_f64() {
         let dur = Duration::from_nanos(2_001_001);
         approx_eq!(2_001_001.0, LatencyUnit::Nano.latency_as_f64(dur), 1e-6);
         approx_eq!(2_001.001, LatencyUnit::Micro.latency_as_f64(dur), 1e-9);
@@ -223,9 +230,9 @@ mod validate {
     }
 
     #[test]
-    fn test_latency_unit_from_f64() {
+    fn latency_unit_from_f64() {
         assert_eq!(
-            LatencyUnit::Nano.latency_from_f64(500.7),
+            LatencyUnit::Nano.latency_from_f64(500.45),
             Duration::from_nanos(500),
         );
         assert_eq!(
@@ -243,7 +250,7 @@ mod validate {
     }
 
     #[test]
-    fn test_latency_round_trip_f64() {
+    fn latency_unit_round_trip_f64() {
         let nanos_u64 = 999_u64;
         let dur = Duration::from_nanos(nanos_u64);
 
@@ -260,6 +267,7 @@ mod validate {
         assert_eq!(dur, dur_mil);
     }
 }
+
 #[cfg(test)]
 #[cfg(feature = "_test")]
 // cargo test --package bench_utils --lib --all-features -- latency::test_executions_per_second --nocapture
