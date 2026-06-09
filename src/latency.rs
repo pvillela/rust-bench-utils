@@ -59,9 +59,9 @@ impl LatencyUnit {
     pub fn latency_from_f64(&self, elapsed: f64) -> Duration {
         // self.latency_from_u64(elapsed as u64)
         match self {
-            Self::Nano => Duration::from_nanos(elapsed as u64),
-            Self::Micro => Duration::from_nanos((elapsed * 1_000.0) as u64),
-            Self::Milli => Duration::from_nanos((elapsed * 1_000_000.0) as u64),
+            Self::Nano => Duration::from_nanos(elapsed.round() as u64),
+            Self::Micro => Duration::from_nanos((elapsed * 1_000.0).round() as u64),
+            Self::Milli => Duration::from_nanos((elapsed * 1_000_000.0).round() as u64),
         }
     }
 }

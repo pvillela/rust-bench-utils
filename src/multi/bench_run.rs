@@ -292,8 +292,8 @@ mod validate {
             "validate_bench_run: K={K}, base_target_latency={base_target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}"
         );
 
-        let exec_count =
-            (bench_time.as_secs_f64() / (base_target_latency * K as u32).as_secs_f64()) as u64;
+        let exec_count = (bench_time.as_secs_f64() / (base_target_latency * K as u32).as_secs_f64())
+            .round() as u64;
         let cfg = BenchCfg::default()
             .with_warmup_millis(warmup_millis)
             .with_status_millis(status_millis)

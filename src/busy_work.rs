@@ -221,15 +221,15 @@ mod validate_ratio {
         let f1 = bw1.fun();
         let f2 = BusyWork::from_effort(effort2).fun();
 
-        let mut latency_secs1 = 0.0;
-        let mut latency_secs2 = 0.0;
+        let mut latency1 = Duration::ZERO;
+        let mut latency2 = Duration::ZERO;
 
         for _ in 0..repeats {
-            latency_secs1 += latency(&f1).as_secs_f64();
-            latency_secs2 += latency(&f2).as_secs_f64();
+            latency1 += latency(&f1);
+            latency2 += latency(&f2);
         }
 
-        let latency_ratio = latency_secs2 / latency_secs1;
+        let latency_ratio = latency2.as_secs_f64() / latency1.as_secs_f64();
         let rel_diff = latency_ratio.abs_rel_diff(ratio);
 
         println!(
