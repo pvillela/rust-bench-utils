@@ -36,7 +36,6 @@ statrs = "0.18"
 ## Public
 default = [
     "basic_stats/normal",
-    "basic_stats/aok",
 ] # should always be enabled for public use
 busy_work = ["dep:sha2"]
 

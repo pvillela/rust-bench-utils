@@ -139,10 +139,6 @@ impl<const K: usize> BenchOut<K> {
         self.first().recording_unit()
     }
 
-    /// The value of [`BenchCfg::panic_on_error`] at the time `self` was constructed.
-    pub fn panic_on_error(&self) -> bool {
-        self.first().panic_on_error()
-    }
 
     /// Number of observations (sample size) for a function, as an integer.
     #[inline(always)]
@@ -166,7 +162,7 @@ impl<const K: usize> BenchOut<K> {
     /// Sample means of latencies.
     ///
     /// # Panics
-    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
+    /// Panics if the number of observations is zero.
     pub fn means(&self) -> [Duration; K] {
         array::from_fn(|k| self.arr[k].mean())
     }
@@ -174,7 +170,7 @@ impl<const K: usize> BenchOut<K> {
     /// Sample standard deviations of latencies.
     ///
     /// # Panics
-    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
+    /// Panics if the number of observations is zero.
     pub fn stdevs(&self) -> [Duration; K] {
         array::from_fn(|k| self.arr[k].stdev())
     }
@@ -187,7 +183,7 @@ impl<const K: usize> BenchOut<K> {
     /// Sample means of the natural logarithms of latencies.
     ///
     /// # Panics
-    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
+    /// Panics if the number of observations is zero.
     pub fn mean_lns(&self) -> [f64; K] {
         array::from_fn(|k| self.arr[k].mean_ln())
     }
@@ -195,7 +191,7 @@ impl<const K: usize> BenchOut<K> {
     /// Sample standard deviations of the natural logarithms of latencies.
     ///
     /// # Panics
-    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
+    /// Panics if the number of observations is zero.
     pub fn stdev_lns(&self) -> [f64; K] {
         array::from_fn(|k| self.arr[k].stdev_ln())
     }
@@ -259,7 +255,7 @@ impl<const K: usize> BenchOut<K> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `Sample size <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_ln_cis(&self, alpha: f64) -> [Ci; K] {
@@ -275,7 +271,7 @@ impl<const K: usize> BenchOut<K> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `Sample size <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_median_cis(&self, alpha: f64) -> [(Duration, Duration); K] {
@@ -292,7 +288,7 @@ impl<const K: usize> BenchOut<K> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `Sample size <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_value_position_wrt_median_cis(
@@ -318,7 +314,7 @@ impl<const K: usize> BenchOut<K> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `Sample size <= 1`.
     /// - `self.stdev_ln()` == 0.
     /// - `alpha` not in open interval `(0, 1)`.
@@ -629,7 +625,7 @@ mod test {
 
     #[test]
     fn test_bench_out_2_panics_on_empty() {
-        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let cfg = BenchCfg::default();
         let out = BenchOut::<2>::from_iter(&cfg, std::iter::empty::<[Duration; 2]>());
 
         assert_eq!(out.n(), 0);

@@ -3,10 +3,9 @@
 use std::{fmt::Debug, time::Duration};
 
 use crate::{
-    BenchCfg, LatencyUnit, PanicIfNeeded, SummaryStats, Timing, multi, new_timing, summary_stats,
+    BenchCfg, LatencyUnit, SummaryStats, Timing, multi, new_timing, summary_stats,
 };
 use basic_stats::{
-    aok::Aok,
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean, sample_stdev},
     normal::{student_1samp_ci, student_1samp_p, student_1samp_t, student_1samp_test},
 };
@@ -59,7 +58,6 @@ pub struct BenchOut {
     pub(crate) n_ln: u64,
     pub(crate) sum_ln: f64,
     pub(crate) sum2_ln: f64,
-    panic_on_error: bool,
 }
 
 impl BenchOut {
@@ -81,7 +79,6 @@ impl BenchOut {
             n_ln,
             sum_ln,
             sum2_ln,
-            panic_on_error: cfg.panic_on_error(),
         }
     }
 
@@ -164,10 +161,6 @@ impl BenchOut {
         self.recording_unit
     }
 
-    /// The value of [`BenchCfg::panic_on_error`] at the time `self` was constructed.
-    pub fn panic_on_error(&self) -> bool {
-        self.panic_on_error
-    }
 
     /// Number of observations (sample size) for a function, as an integer.
     #[inline(always)]
@@ -186,7 +179,7 @@ impl BenchOut {
     /// Includes sample size, mean, standard deviation, median, several percentiles, min, and max.
     ///
     /// # Panics
-    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
+    /// Panics if the number of observations is zero.
     pub fn summary(&self) -> SummaryStats {
         summary_stats(self)
     }
@@ -194,29 +187,27 @@ impl BenchOut {
     /// Sample mean of latencies.
     ///
     /// # Panics
-    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
+    /// Panics if the number of observations is zero.
     pub fn mean(&self) -> Duration {
         let mean_rec = sample_mean(self.n(), self.sum)
-            .aok()
-            .panic_if_needed(self.panic_on_error(), "number of observations is zero");
+            .expect("number of observations is zero");
         self.recording_unit.latency_from_f64(mean_rec)
     }
 
     /// Sample standard deviation of latencies.
     ///
     /// # Panics
-    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
+    /// Panics if the number of observations is zero.
     pub fn stdev(&self) -> Duration {
         let stdev_rec = sample_stdev(self.n(), self.sum, self.sum2)
-            .aok()
-            .panic_if_needed(self.panic_on_error(), "number of observations is zero");
+            .expect("number of observations is zero");
         self.recording_unit.latency_from_f64(stdev_rec)
     }
 
     /// Sample median of latencies.
     ///
     /// # Panics
-    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
+    /// Panics if the number of observations is zero.
     pub fn median(&self) -> Duration {
         self.summary().median
     }
@@ -224,21 +215,19 @@ impl BenchOut {
     /// Sample mean of the natural logarithms of latencies (in the recording unit).
     ///
     /// # Panics
-    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
+    /// Panics if the number of observations is zero.
     pub fn mean_ln(&self) -> f64 {
         sample_mean(self.n_ln, self.sum_ln)
-            .aok()
-            .panic_if_needed(self.panic_on_error(), "number of observations is zero")
+            .expect("number of observations is zero")
     }
 
     /// Sample standard deviation of the natural logarithms of latencies.
     ///
     /// # Panics
-    /// Panics if `self.panic_on_error() == true` **and** the number of observations is zero.
+    /// Panics if the number of observations is zero.
     pub fn stdev_ln(&self) -> f64 {
         sample_stdev(self.n_ln, self.sum_ln, self.sum2_ln)
-            .aok()
-            .panic_if_needed(self.panic_on_error(), "number of observations is zero")
+            .expect("number of observations is zero")
     }
 
     /// Student's one-sample t statistic for
@@ -254,15 +243,12 @@ impl BenchOut {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `number of observations <= 1`.
     /// - `self.stdev_ln() == 0`.
     pub fn student_ln_t(&self, ln_mu0: f64) -> f64 {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        student_1samp_t(&moments, ln_mu0).aok().panic_if_needed(
-            self.panic_on_error(),
-            "`number of observations <= 1` or `self.stdev_ln() == 0`",
-        )
+        student_1samp_t(&moments, ln_mu0).expect("`number of observations <= 1` or `self.stdev_ln() == 0`")
     }
 
     /// Degrees of freedom for Student's t statistic for `mean(ln(latency(f)))` (where `ln` is the natural logarithm,
@@ -288,17 +274,13 @@ impl BenchOut {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - Sample size <= 1.
     /// - `self.stdev_ln()` == 0.
     pub fn student_ln_p(&self, ln_mu0: f64, alt_hyp: AltHyp) -> f64 {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
         student_1samp_p(&moments, ln_mu0, alt_hyp)
-            .aok()
-            .panic_if_needed(
-                self.panic_on_error(),
-                "`number of observations <= 1` or `self.stdev_ln() == 0`",
-            )
+            .expect("`number of observations <= 1` or `self.stdev_ln() == 0`")
     }
 
     /// Student's one-sample confidence interval for
@@ -310,15 +292,12 @@ impl BenchOut {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `Sample size <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_ln_ci(&self, alpha: f64) -> Ci {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        student_1samp_ci(&moments, alpha).aok().panic_if_needed(
-            self.panic_on_error(),
-            "`number of observations <= 1` or `alpha` not in open interval `(0, 1)`",
-        )
+        student_1samp_ci(&moments, alpha).expect("`number of observations <= 1` or `alpha` not in open interval `(0, 1)`")
     }
 
     /// Student's one-sample confidence interval for
@@ -333,7 +312,7 @@ impl BenchOut {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `Sample size <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_median_ci(&self, alpha: f64) -> (Duration, Duration) {
@@ -353,7 +332,7 @@ impl BenchOut {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `Sample size <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_value_position_wrt_median_ci(
@@ -386,13 +365,13 @@ impl BenchOut {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `Sample size <= 1`.
     /// - `self.stdev_ln()` == 0.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_ln_test(&self, ln_mu0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
         let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        student_1samp_test(&moments, ln_mu0, alt_hyp, alpha).aok()
+        student_1samp_test(&moments, ln_mu0, alt_hyp, alpha).expect("`number of observations <= 1` or `self.stdev_ln() == 0` or `alpha` not in open interval `(0, 1)`")
     }
 
     #[cfg(feature = "_bench_diff")]
@@ -440,9 +419,8 @@ impl BenchOut {
 
 impl Debug for BenchOut {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("BenchOut {{ recording_unit={:?}, panic_on_error={}, sigfig={}, n={}, sum={}, sum2={}, n_ln={}, sum_ln={}, sum2_ln={}, summary={:?} }}",
+        f.write_str(&format!("BenchOut {{ recording_unit={:?}, sigfig={}, n={}, sum={}, sum2={}, n_ln={}, sum_ln={}, sum2_ln={}, summary={:?} }}",
             self.recording_unit,
-            self.panic_on_error,
             self.hist.sigfig(),
             self.n(),
             self.sum,
@@ -686,7 +664,7 @@ mod test {
 
     #[test]
     fn test_bench_out_mean_panics_on_empty() {
-        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let cfg = BenchCfg::default();
         let out = BenchOut::from_iter(&cfg, std::iter::empty());
         let result = std::panic::catch_unwind(|| out.mean());
         assert!(result.is_err());
@@ -694,7 +672,7 @@ mod test {
 
     #[test]
     fn test_bench_out_stdev_panics_on_empty() {
-        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let cfg = BenchCfg::default();
         let out = BenchOut::from_iter(&cfg, std::iter::empty());
         let result = std::panic::catch_unwind(|| out.stdev());
         assert!(result.is_err());
@@ -702,7 +680,7 @@ mod test {
 
     #[test]
     fn test_bench_out_median_panics_on_empty() {
-        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let cfg = BenchCfg::default();
         let out = BenchOut::from_iter(&cfg, std::iter::empty());
         let result = std::panic::catch_unwind(|| out.median());
         assert!(result.is_err());
@@ -710,7 +688,7 @@ mod test {
 
     #[test]
     fn test_bench_out_mean_ln_panics_on_empty() {
-        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let cfg = BenchCfg::default();
         let out = BenchOut::from_iter(&cfg, std::iter::empty());
         let result = std::panic::catch_unwind(|| out.mean_ln());
         assert!(result.is_err());
@@ -718,7 +696,7 @@ mod test {
 
     #[test]
     fn test_bench_out_stdev_ln_panics_on_empty() {
-        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let cfg = BenchCfg::default();
         let out = BenchOut::from_iter(&cfg, std::iter::empty());
         let result = std::panic::catch_unwind(|| out.stdev_ln());
         assert!(result.is_err());
@@ -726,7 +704,7 @@ mod test {
 
     #[test]
     fn test_bench_out_student_ln_t_panics_on_single() {
-        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let cfg = BenchCfg::default();
         let out = BenchOut::from_iter(&cfg, [Duration::from_millis(1)].into_iter());
         let result = std::panic::catch_unwind(|| out.student_ln_t(0.0));
         assert!(result.is_err());

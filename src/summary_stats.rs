@@ -56,7 +56,7 @@ pub struct SummaryStats {
 ///
 /// # Panics
 ///
-/// Panics if the current value of [`crate::BenchCfg::panic_on_error`] is `true` **and** the number of observations is zero.
+/// Panics if the number of observations is zero.
 pub fn summary_stats(out: &BenchOut) -> SummaryStats {
     let hist = &out.hist;
     let ru = out.recording_unit();
@@ -91,7 +91,7 @@ mod test {
 
     #[test]
     fn test_summary_stats_panics_on_empty() {
-        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let cfg = BenchCfg::default();
         let out = crate::BenchOut::from_iter(&cfg, std::iter::empty::<std::time::Duration>());
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| summary_stats(&out)));
         assert!(result.is_err(), "expected panic on empty sample");
@@ -143,29 +143,4 @@ mod test {
         assert!(summary.max > summary.p99);
     }
 
-    #[test]
-    fn test_summary_stats_no_panic_on_empty_with_panic_off() {
-        let cfg = BenchCfg::default(); // panic_on_error is false by default
-        let out = BenchOut::from_iter(&cfg, std::iter::empty::<Duration>());
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| summary_stats(&out)));
-        assert!(
-            result.is_ok(),
-            "should not panic when panic_on_error is false"
-        );
-        let summary = result.unwrap();
-        assert_eq!(summary.count, 0);
-        assert_eq!(summary.mean, Duration::ZERO);
-        assert_eq!(summary.stdev, Duration::ZERO);
-        assert_eq!(summary.min, Duration::ZERO);
-        assert_eq!(summary.max, Duration::ZERO);
-        assert_eq!(summary.p1, Duration::ZERO);
-        assert_eq!(summary.p5, Duration::ZERO);
-        assert_eq!(summary.p10, Duration::ZERO);
-        assert_eq!(summary.p25, Duration::ZERO);
-        assert_eq!(summary.median, Duration::ZERO);
-        assert_eq!(summary.p75, Duration::ZERO);
-        assert_eq!(summary.p90, Duration::ZERO);
-        assert_eq!(summary.p95, Duration::ZERO);
-        assert_eq!(summary.p99, Duration::ZERO);
-    }
 }

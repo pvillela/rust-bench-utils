@@ -1,5 +1,4 @@
 use crate::{LatencyUnit, latency, multi::LatencySrc};
-use basic_stats::aok::AokValue;
 use log::debug;
 use std::{
     ops::{Add, Div},
@@ -68,21 +67,12 @@ impl RunLength {
 ///   this is the number of significant decimal digits (of `recording_unit`) to which the histogram will maintain
 ///   value resolution and separation
 /// - `status_millis`: milliseconds between status reports during bench execution
-/// - `panic_on_error`: determins whether library functions that don't return a [`Result`] should panic upon
-///   encountering an error condition:
-///   - when `true` and an error occurs, the function panics;
-///   - when `false` and an error occurs:
-///     - functions returning a floating point value (or a struct with a floating point field) return a
-///       tainted value, i.e., a non-finite value such as `NaN` (or a data structure that has non-finite values in
-///       one or more fields);
-///     - functions returning `Duration` values return zero durations.
 #[derive(Debug, Clone)]
 pub struct BenchCfg {
     warmup_millis: u64,
     recording_unit: LatencyUnit,
     sigfig: u8,
     status_millis: u64,
-    panic_on_error: bool,
 }
 
 impl BenchCfg {
@@ -94,8 +84,6 @@ impl BenchCfg {
     pub const DEFAULT_SIGFIG: u8 = 3;
     /// Default status reporting interval in milliseconds.
     pub const DEFAULT_STATUS_MILLIS: u64 = 1000;
-    /// Default error behavior: do not panic on error, return NaN/tainted values instead.
-    pub const DEFAULT_PANIC_ON_ERROR: bool = false;
 
     /// The number of milliseconds used to "warm-up" the benchmark.
     pub fn warmup_millis(&self) -> u64 {
@@ -119,13 +107,6 @@ impl BenchCfg {
         self.status_millis
     }
 
-    /// Flag determining error behavior of library functions that don't return a [`Result`].
-    ///
-    /// See [`BenchCfg`] struct documentation.
-    pub fn panic_on_error(&self) -> bool {
-        self.panic_on_error
-    }
-
     /// Changes the number of milliseconds used to "warm-up" the benchmark.
     pub fn with_warmup_millis(mut self, warmup_millis: u64) -> Self {
         self.warmup_millis = warmup_millis;
@@ -147,14 +128,6 @@ impl BenchCfg {
     /// Sets the status reporting interval in milliseconds.
     pub fn with_status_millis(mut self, status_millis: u64) -> Self {
         self.status_millis = status_millis;
-        self
-    }
-
-    /// Flag determining error behavior of library functions that don't return a [`Result`].
-    ///
-    /// See [`BenchCfg`] struct documentation.
-    pub fn with_panic_on_error(mut self, panic_on_error: bool) -> Self {
-        self.panic_on_error = panic_on_error;
         self
     }
 
@@ -265,32 +238,16 @@ impl Default for BenchCfg {
             recording_unit: Self::DEFAULT_RECORDING_UNIT,
             sigfig: Self::DEFAULT_SIGFIG,
             status_millis: Self::DEFAULT_STATUS_MILLIS,
-            panic_on_error: Self::DEFAULT_PANIC_ON_ERROR,
         }
     }
 }
-
-#[doc(hidden)]
-/// Extends [`AokValue`].
-pub trait PanicIfNeeded: AokValue + Sized {
-    /// Panics if `panic == true` and the receiver is tainted. Used only internally by this crate and `bench_diff`.
-    fn panic_if_needed(self, panic: bool, msg: &str) -> Self {
-        if panic && self.is_tainted() {
-            panic!("{msg}")
-        }
-        self
-    }
-}
-
-impl<T> PanicIfNeeded for T where T: AokValue + Sized {}
 
 #[cfg(test)]
 #[cfg(feature = "_test")]
 mod test {
     use crate::multi::test_support::LognormalLatencySrc;
-    use crate::{BenchCfg, LatencyUnit, PanicIfNeeded, RunLength};
+    use crate::{BenchCfg, LatencyUnit, RunLength};
     use basic_stats::rel_approx_eq;
-    use std::panic::catch_unwind;
     use std::time::Duration;
 
     #[test]
@@ -310,15 +267,12 @@ mod test {
             .with_recording_unit(LatencyUnit::Micro)
             .with_warmup_millis(100)
             .with_sigfig(5)
-            .with_status_millis(200)
-            .with_panic_on_error(true);
-        println!("cfg={cfg:?}");
+            .with_status_millis(200);
 
         assert_eq!(cfg.warmup_millis(), 100);
         assert_eq!(cfg.recording_unit(), LatencyUnit::Micro);
         assert_eq!(cfg.sigfig(), 5);
         assert_eq!(200, cfg.status_millis);
-        assert!(cfg.panic_on_error);
     }
 
     #[test]
@@ -479,25 +433,5 @@ mod test {
         assert!(eps > 0.0);
         // Expected: ~200 (1000ms / 5ms)
         rel_approx_eq!(200.0, eps, 0.50);
-    }
-
-    #[test]
-    fn test_panic_if_needed_not_panics_on_normal() {
-        let val: f64 = 42.0;
-        assert_eq!(val.panic_if_needed(true, "msg"), 42.0);
-    }
-
-    #[test]
-    fn test_panic_if_needed_not_panics_when_disabled() {
-        let nan = f64::NAN;
-        assert!(nan.panic_if_needed(false, "msg").is_nan());
-    }
-
-    #[test]
-    fn test_panic_if_needed_panics_when_enabled() {
-        let result = catch_unwind(|| {
-            f64::NAN.panic_if_needed(true, "expected");
-        });
-        assert!(result.is_err());
     }
 }

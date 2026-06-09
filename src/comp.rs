@@ -1,6 +1,5 @@
-use crate::{BenchOut, PanicIfNeeded};
+use crate::BenchOut;
 use basic_stats::{
-    aok::Aok,
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments},
     normal::{welch_ci, welch_df, welch_p, welch_t, welch_test},
 };
@@ -39,11 +38,6 @@ impl<'a> Comp<'a> {
         Self(f1_out, f2_out)
     }
 
-    /// The value of [`BenchCfg::panic_on_error`](crate::BenchCfg::panic_on_error) at the time `self` was constructed.
-    pub fn panic_on_error(&self) -> bool {
-        self.out_f1().panic_on_error()
-    }
-
     /// Reference to the first benchmark output.
     pub fn out_f1(&self) -> &BenchOut {
         self.0
@@ -67,16 +61,8 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** `self.out_f1().n() == 0` or
-    /// `self.out_f2().n() == 0`, since [`BenchOut::median`] panics on empty samples
-    /// when `panic_on_error` is enabled.
+    /// Panics if `self.out_f1().n() == 0` or `self.out_f2().n() == 0`, since
     pub fn ratio_medians_f1_f2(&self) -> f64 {
-        if self.panic_on_error() {
-            assert!(
-                self.out_f1().n() == 0 || self.out_f2().n() == 0,
-                "`self.out_f1()` and `self.out_f2()` must both be positive"
-            );
-        }
         self.0.median().as_secs_f64() / self.1.median().as_secs_f64()
     }
 
@@ -85,7 +71,7 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** `self.out_f1().n() == 0` or `self.out_f2().n() == 0`.
+    /// Panics if `self.out_f1().n() == 0` or `self.out_f2().n() == 0`.
     pub fn mean_diff_f1_f2(&self) -> f64 {
         self.0.mean().as_secs_f64() - self.1.mean().as_secs_f64()
     }
@@ -95,7 +81,7 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** `self.out_f1().n_ln == 0` or `self.out_f2().n_ln == 0`.
+    /// Panics if `self.out_f1().n_ln == 0` or `self.out_f2().n_ln == 0`.
     pub fn mean_diff_ln_f1_f2(&self) -> f64 {
         self.0.mean_ln() - self.1.mean_ln()
     }
@@ -105,7 +91,7 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** `self.out_f1().n_ln == 0` or `self.out_f2().n_ln == 0`.
+    /// Panics if `self.out_f1().n_ln == 0` or `self.out_f2().n_ln == 0`.
     pub fn ratio_medians_f1_f2_from_lns(&self) -> f64 {
         self.mean_diff_ln_f1_f2().exp()
     }
@@ -131,13 +117,12 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `self.out_f1().n_ln <= 1`.
     /// - `self.out_f2().n_ln <= 1`.
     /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
     pub fn welch_ln_t(&self, ln_d0: f64) -> f64 {
-        welch_t(&self.moments_ln_f1(), &self.moments_ln_f2(), ln_d0).aok().panic_if_needed(
-            self.panic_on_error(),
+        welch_t(&self.moments_ln_f1(), &self.moments_ln_f2(), ln_d0).expect(
             "`number of observations <= 1` for either sample or `both standard deviations == 0`",
         )
     }
@@ -151,13 +136,12 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `self.out_f1().n_ln <= 1`.
     /// - `self.out_f2().n_ln <= 1`.
     /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
     pub fn welch_ln_df(&self) -> f64 {
-        welch_df(&self.moments_ln_f1(), &self.moments_ln_f2()).aok().panic_if_needed(
-            self.panic_on_error(),
+        welch_df(&self.moments_ln_f1(), &self.moments_ln_f2()).expect(
             "`number of observations <= 1` for either sample or `both standard deviations == 0`",
         )
     }
@@ -175,17 +159,14 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `self.out_f1().n_ln <= 1`.
     /// - `self.out_f2().n_ln <= 1`.
     /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
     pub fn welch_ln_p(&self, ln_d0: f64, alt_hyp: AltHyp) -> f64 {
-        welch_p(&self.moments_ln_f1(), &self.moments_ln_f2(), ln_d0, alt_hyp)
-            .aok()
-            .panic_if_needed(
-                self.panic_on_error(),
-                "`number of observations <= 1` for either sample or `both standard deviations == 0`",
-            )
+        welch_p(&self.moments_ln_f1(), &self.moments_ln_f2(), ln_d0, alt_hyp).expect(
+            "`number of observations <= 1` for either sample or `both standard deviations == 0`",
+        )
     }
 
     /// Welch confidence interval for
@@ -199,18 +180,13 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `self.out_f1().n_ln <= 1`.
     /// - `self.out_f2().n_ln <= 1`.
     /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn welch_ln_ci(&self, alpha: f64) -> Ci {
-        welch_ci(&self.moments_ln_f1(), &self.moments_ln_f2(), alpha)
-            .aok()
-            .panic_if_needed(
-                self.panic_on_error(),
-                "`number of observations <= 1` for either sample, `both standard deviations == 0`, or `alpha` not in open interval `(0, 1)`",
-            )
+        welch_ci(&self.moments_ln_f1(), &self.moments_ln_f2(), alpha).expect("`number of observations <= 1` for either sample, `both standard deviations == 0`, or `alpha` not in open interval `(0, 1)`")
     }
 
     /// Welch confidence interval for
@@ -222,7 +198,7 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `self.out_f1().n_ln <= 1`.
     /// - `self.out_f2().n_ln <= 1`.
     /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
@@ -244,7 +220,7 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `self.out_f1().n_ln <= 1`.
     /// - `self.out_f2().n_ln <= 1`.
     /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
@@ -269,7 +245,7 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - `self.out_f1().n_ln <= 1`.
     /// - `self.out_f2().n_ln <= 1`.
     /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
@@ -281,12 +257,7 @@ impl<'a> Comp<'a> {
             ln_d0,
             alt_hyp,
             alpha,
-        )
-        .aok()
-        .panic_if_needed(
-            self.panic_on_error(),
-            "`number of observations <= 1` for either sample, `both standard deviations == 0`, or `alpha` not in open interval `(0, 1)`",
-        )
+        ).expect("`number of observations <= 1` for either sample, `both standard deviations == 0`, or `alpha` not in open interval `(0, 1)`")
     }
 
     #[cfg(feature = "_experimental")]
@@ -304,13 +275,10 @@ impl<'a> Comp<'a> {
             (value as f64, count)
         });
 
-        RankSum::from_iters_with_counts(iter_f1, iter_f2)
-            .aok()
-            .panic_if_needed(
-                self.panic_on_error(),
-                // samples not in increasing order is impossible due to use of HdrHistogram
-                "either sample is empty",
-            )
+        RankSum::from_iters_with_counts(iter_f1, iter_f2).expect(
+            // samples not in increasing order is impossible due to use of HdrHistogram
+            "either sample is empty",
+        )
     }
 
     #[cfg(feature = "_experimental")]
@@ -326,14 +294,13 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - either sample is empty.
     /// - there are too many rank ties between the two samples.
     pub fn wilcoxon_rank_sum_z(&self) -> f64 {
-        self.rank_sum().z().aok().panic_if_needed(
-            self.panic_on_error(),
-            "either sample is empty or too many rank ties",
-        )
+        self.rank_sum()
+            .z()
+            .expect("either sample is empty or too many rank ties")
     }
 
     #[cfg(feature = "_experimental")]
@@ -342,14 +309,13 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - either sample is empty.
     /// - there are too many rank ties between the two samples.
     pub fn wilcoxon_rank_sum_p(&self, alt_hyp: AltHyp) -> f64 {
-        self.rank_sum().z_p(alt_hyp).aok().panic_if_needed(
-            self.panic_on_error(),
-            "either sample is empty or too many rank ties",
-        )
+        self.rank_sum()
+            .z_p(alt_hyp)
+            .expect("either sample is empty or too many rank ties")
     }
 
     #[cfg(feature = "_experimental")]
@@ -359,18 +325,14 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
+    /// Panics if any of the following conditions is true:
     /// - either sample is empty.
     /// - there are too many rank ties between the two samples.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn wilcoxon_rank_sum_test(&self, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
-        self.rank_sum()
-            .z_test(alt_hyp, alpha)
-            .aok()
-            .panic_if_needed(
-                self.panic_on_error(),
-                "either sample is empty or too many rank ties or `alpha` not in open interval `(0, 1)`",
-            )
+        self.rank_sum().z_test(alt_hyp, alpha).expect(
+            "either sample is empty or too many rank ties or `alpha` not in open interval `(0, 1)`",
+        )
     }
 }
 
@@ -648,7 +610,7 @@ mod test {
 
     #[test]
     fn test_comp_panics_on_empty_sample() {
-        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let cfg = BenchCfg::default();
         let out1 = BenchOut::from_iter(&cfg, std::iter::empty::<Duration>());
         let mut src2 = ConstLatencySrc::new([Duration::from_millis(3)]);
         let out2 = BenchOut::from_iter(&cfg, src2.aggregate().take(10));
@@ -681,7 +643,7 @@ mod test {
 
     #[test]
     fn test_comp_panics_on_singleton_sample() {
-        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let cfg = BenchCfg::default();
         let mut src1 = ConstLatencySrc::new([Duration::from_millis(3)]);
         let out1 = BenchOut::from_iter(&cfg, src1.aggregate().take(10));
         let out2 = BenchOut::from_iter(&cfg, [Duration::from_millis(1)].into_iter());
@@ -714,7 +676,7 @@ mod test {
 
     #[test]
     fn test_comp_panics_on_both_stdev_zero() {
-        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let cfg = BenchCfg::default();
         let out1 = BenchOut::from_iter(
             &cfg,
             [Duration::from_millis(5), Duration::from_millis(5)].into_iter(),
@@ -753,7 +715,7 @@ mod test {
     #[cfg(feature = "_experimental")]
     #[test]
     fn test_wilcoxon_empty_sample_panic() {
-        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let cfg = BenchCfg::default();
         let out1 = BenchOut::from_iter(&cfg, std::iter::empty::<Duration>());
         let mut src2 = ConstLatencySrc::new([Duration::from_millis(3)]);
         let out2 = BenchOut::from_iter(&cfg, src2.aggregate().take(10));
