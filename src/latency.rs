@@ -87,6 +87,12 @@ pub fn fn_execs_per_sec(f: impl FnMut(), budget: RunLength) -> f64 {
 ///
 /// `src` - the latency source.
 /// `budget` - the budget for the estimation process, in terms of duration and/or iterations.
+///
+/// # Panics
+///
+/// Panics if the measured latency for any iteration is zero,
+/// which would cause a division by zero. In practice, wall-clock latency
+/// measurements should always be non-zero for any non-trivial target function.
 pub fn src_execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: RunLength) -> f64 {
     let mut acc_latency = Duration::from_nanos(0);
     let mut acc_execs: u64 = 0;

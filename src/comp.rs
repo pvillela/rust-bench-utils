@@ -61,7 +61,22 @@ impl<'a> Comp<'a> {
     }
 
     /// Ratio of the median of `f1`'s latencies to the median of `f2`'s latencies.
+    ///
+    /// Returns `f64::INFINITY` if the median of `f2` is zero, and `f64::NAN` if both
+    /// medians are zero.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.panic_on_error() == true` **and** `self.out_f1().n() == 0` or
+    /// `self.out_f2().n() == 0`, since [`BenchOut::median`] panics on empty samples
+    /// when `panic_on_error` is enabled.
     pub fn ratio_medians_f1_f2(&self) -> f64 {
+        if self.panic_on_error() {
+            assert!(
+                self.out_f1().n() == 0 || self.out_f2().n() == 0,
+                "`self.out_f1()` and `self.out_f2()` must both be positive"
+            );
+        }
         self.0.median().as_secs_f64() / self.1.median().as_secs_f64()
     }
 

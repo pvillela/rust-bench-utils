@@ -10,12 +10,23 @@ use crate::{
 use std::time::Duration;
 
 /// Compares latency outputs for `n` executions of a function `f` with `n/group_size` executions of `f` grouped `group_size` times.
+///
+/// # Panics
+///
+/// Panics if any of the following conditions is true:
+/// - `target_latency` is zero
+/// - `group_size` is zero.
+/// the estimated execution count.
 pub fn validate_latency_overhead(
     cfg: &BenchCfg,
     bench_duration: Duration,
     target_latency: Duration,
     group_size: u64,
 ) -> (Duration, Duration) {
+    assert!(
+        target_latency > Duration::ZERO && group_size > 0,
+        "`target_latency` and `group_size` must both be positive"
+    );
     let name = "Group of ".to_owned() + &group_size.to_string();
     let solo_f = BusyWork::new(target_latency).fun();
     let group_f = || {
@@ -27,10 +38,6 @@ pub fn validate_latency_overhead(
     let target_group_latency = target_latency * group_size as u32;
     let exec_count_group =
         (bench_duration.as_secs_f64() / target_group_latency.as_secs_f64()).round() as u64;
-    // Guard against integer truncation to 0 when target_median_group is larger than
-    // bench_duration. Fall back to 1 execution so the benchmark still produces
-    // meaningful data and the assertion doesn't fire on an empty sample.
-    let exec_count_group = exec_count_group.max(1);
     let exec_count_solo = exec_count_group * group_size;
 
     println!("running solo_f: {name}");

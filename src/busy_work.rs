@@ -97,6 +97,13 @@ impl BusyWork {
     /// Estimates the `effort` required for the resulting closure to have the `target_latency`, using a
     /// one-shot process that executes a work function with `effort = calibration_effort` and does a
     /// proportionality calculation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the measured latency of the calibration work is zero, which would
+    /// cause a division-by-zero panic. This should not occur under normal conditions since
+    /// [`BusyWork::work`] performs SHA-256 hashing and always consumes measurable wall-clock time
+    /// when `calibration_effort > 0`.
     fn effort_from_latency_and_calibration_effort(
         target_latency: Duration,
         calibration_effort: u32,
@@ -109,6 +116,13 @@ impl BusyWork {
     /// Estimates the `effort` required for the resulting closure to have the `target_latency`, using
     /// an iterative process.
     /// `calibration_budget` limits the duration of the iterative process.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the measured latency of any iteration is zero,
+    /// which would cause a division-by-zero panic. This should not occur under
+    /// normal conditions since [`BusyWork::work`] performs SHA-256 hashing and always consumes
+    /// measurable wall-clock time.
     fn effort_from_latency_and_budget(
         target_latency: Duration,
         calibration_budget: Duration,
