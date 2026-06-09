@@ -228,13 +228,12 @@ pub mod test_support {
         use basic_stats::rel_approx_eq;
         use std::panic::catch_unwind;
 
-
-        const EPSILON: f64 = 0.002;
-        const SAMP_SIZE: usize = 100;
-
         #[test]
         // cargo test --package bench_utils --lib --all-features -- multi::latency_src::test_support::test::test_lognormal_src --exact --nocapture --include-ignored
         fn test_lognormal_src() {
+            const EPSILON: f64 = 0.002;
+            const SAMP_SIZE: usize = 1000;
+
             let cfg = BenchCfg::default();
             let targets = [
                 Duration::from_nanos(10),
@@ -259,7 +258,8 @@ pub mod test_support {
 
         #[test]
         fn test_const_latency_src() {
-            let mut src = ConstLatencySrc::<2>::new([Duration::from_millis(1), Duration::from_millis(2)]);
+            let mut src =
+                ConstLatencySrc::<2>::new([Duration::from_millis(1), Duration::from_millis(2)]);
             for _ in 0..5 {
                 assert_eq!(
                     src.next(),
@@ -267,7 +267,8 @@ pub mod test_support {
                 );
             }
 
-            let mut src2 = ConstLatencySrc::<2>::new([Duration::from_millis(1), Duration::from_millis(2)]);
+            let mut src2 =
+                ConstLatencySrc::<2>::new([Duration::from_millis(1), Duration::from_millis(2)]);
             let sum: Duration = src2.aggregate().take(3).sum();
             assert_eq!(sum, Duration::from_millis(9));
         }
