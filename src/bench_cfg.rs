@@ -287,7 +287,9 @@ impl<T> PanicIfNeeded for T where T: AokValue + Sized {}
 #[cfg(test)]
 #[cfg(feature = "_test")]
 mod test {
+    use crate::multi::test_support::LognormalLatencySrc;
     use crate::{BenchCfg, LatencyUnit, PanicIfNeeded, RunLength};
+    use basic_stats::rel_approx_eq;
     use std::panic::catch_unwind;
     use std::time::Duration;
 
@@ -444,6 +446,39 @@ mod test {
         // Using a no-op closure, the calibration should return a reasonable positive value
         let eps = cfg.fn_execs_per_sec(|| {}, RunLength::Count(10));
         assert!(eps.is_finite());
+    }
+
+    #[test]
+    fn test_src_execs_per_sec_estimation() {
+        let cfg = BenchCfg::default();
+        let mut src =
+            LognormalLatencySrc::<1>::new_with_default_sigmas([Duration::from_millis(10)]);
+        let eps = cfg.src_execs_per_sec(&mut src, RunLength::Count(500));
+        // Expected: 1000ms / 10ms = 100.0
+        rel_approx_eq!(100.0, eps, 0.05);
+    }
+
+    #[test]
+    fn test_src_execs_per_sec_time_run_length() {
+        let cfg = BenchCfg::default();
+        let mut src = LognormalLatencySrc::<1>::new_with_default_sigmas([Duration::from_millis(1)]);
+        let eps = cfg.src_execs_per_sec(&mut src, RunLength::Time(Duration::from_millis(5)));
+        assert!(eps.is_finite() && eps > 0.0);
+        // Rough check: should be close to 1000 (1000ms / 1ms)
+        rel_approx_eq!(1000.0, eps, 0.30);
+    }
+
+    #[test]
+    fn test_src_execs_per_sec_count_with_timeout() {
+        let cfg = BenchCfg::default();
+        let mut src = LognormalLatencySrc::<1>::new_with_default_sigmas([Duration::from_millis(5)]);
+        let eps = cfg.src_execs_per_sec(
+            &mut src,
+            RunLength::CountWithTimeout(200, Duration::from_millis(5)),
+        );
+        assert!(eps > 0.0);
+        // Expected: ~200 (1000ms / 5ms)
+        rel_approx_eq!(200.0, eps, 0.50);
     }
 
     #[test]

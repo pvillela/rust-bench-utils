@@ -345,6 +345,7 @@ mod test {
         rel_approx_eq,
     };
     use statrs::distribution::{ContinuousCDF, Normal};
+    use std::panic::catch_unwind;
 
     const ALPHA: f64 = 0.05;
 
@@ -624,5 +625,21 @@ mod test {
         assert!(out.n() > 0);
         out.reset();
         assert_eq!(out.n(), 0);
+    }
+
+    #[test]
+    fn test_bench_out_2_panics_on_empty() {
+        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let out = BenchOut::<2>::from_iter(&cfg, std::iter::empty::<[Duration; 2]>());
+
+        assert_eq!(out.n(), 0);
+        assert_eq!(out[0].n(), 0);
+
+        assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].mean())).is_err());
+        assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].stdev())).is_err());
+        assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].median())).is_err());
+        assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].mean_ln())).is_err());
+        assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].stdev_ln())).is_err());
+        assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].student_ln_t(0.0))).is_err());
     }
 }

@@ -135,3 +135,113 @@ impl<'a, W: Write> Status<'a> for DefaultStatus<'a, W> {
         Some(Self::make_status::<'b>(self.w, self.exec_preamble.clone()))
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "_test")]
+mod test {
+    use super::*;
+    use crate::test_support::StringWriter;
+    use std::time::Duration;
+
+    #[test]
+    fn test_no_status_returns_none() {
+        let mut ns = NoStatus;
+        assert!(ns.warmup_status().is_none());
+        assert!(ns.exec_status().is_none());
+    }
+
+    #[test]
+    fn test_part_apply() {
+        // None case
+        assert!(
+            NoStatus::part_apply(None::<fn(Duration, u64, u64)>, Duration::from_secs(1), 100,)
+                .is_none()
+        );
+
+        // Some case: verify captured values are forwarded correctly
+        let mut captured = (Duration::ZERO, 0, 0);
+        let result = NoStatus::part_apply(
+            Some(|t, c, i| captured = (t, c, i)),
+            Duration::from_secs(1),
+            100,
+        );
+        assert!(result.is_some());
+        let mut closure = result.unwrap();
+        closure(42);
+        drop(closure);
+        assert_eq!(captured, (Duration::from_secs(1), 100, 42));
+    }
+
+    #[test]
+    fn test_default_status_new() {
+        let mut w = StringWriter::new();
+        let ds = DefaultStatus::new(&mut w, "Warm".to_owned(), "Exec".to_owned());
+        assert_eq!(ds.warmup_preamble, "Warm");
+        assert_eq!(ds.exec_preamble, "Exec");
+    }
+
+    #[test]
+    fn test_default_status_returns_some() {
+        let mut w = StringWriter::new();
+        let mut ds = DefaultStatus::new(&mut w, "Warm".to_owned(), "Exec".to_owned());
+        assert!(ds.warmup_status().is_some());
+        assert!(ds.exec_status().is_some());
+    }
+
+    #[test]
+    fn test_default_status_output() {
+        // Test warmup status
+        {
+            let mut w = StringWriter::new();
+            {
+                let mut ds = DefaultStatus::new(&mut w, "Warm".to_owned(), "Exec".to_owned());
+                let mut warmup_fn = ds.warmup_status().unwrap();
+                warmup_fn(Duration::from_millis(500), 1000, 600);
+            }
+            let output = w.as_str().unwrap();
+            assert!(
+                output.contains("Warm"),
+                "output should contain 'Warm': {output}"
+            );
+            assert!(
+                output.contains("500 millis"),
+                "output should contain '500 millis': {output}"
+            );
+            assert!(
+                output.contains("600 of"),
+                "output should contain '600 of': {output}"
+            );
+            assert!(
+                output.contains("1000 executions"),
+                "output should contain '1000 executions': {output}"
+            );
+        }
+
+        // Test exec_status
+        {
+            let mut w = StringWriter::new();
+            {
+                let mut ds = DefaultStatus::new(&mut w, "Warm".to_owned(), "Exec".to_owned());
+                let mut exec_fn = ds.exec_status().unwrap();
+                exec_fn(Duration::from_millis(5000), 10000, 6000);
+            }
+            let output = w.as_str().unwrap();
+            assert!(
+                output.contains("Exec"),
+                "output should contain 'Exec': {output}"
+            );
+            assert!(
+                output.contains("5000 millis"),
+                "output should contain '5000 millis': {output}"
+            );
+            assert!(
+                output.contains("6000 of"),
+                "output should contain '6000 of': {output}"
+            );
+            assert!(
+                output.contains("10000 executions"),
+                "output should contain '10000 executions': {output}"
+            );
+        }
+    }
+}

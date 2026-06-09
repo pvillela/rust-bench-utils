@@ -84,6 +84,10 @@ pub fn summary_stats(out: &BenchOut) -> SummaryStats {
 mod test {
     use super::*;
     use crate::BenchCfg;
+    use crate::multi::{LatencySrc, test_support::LognormalLatencySrc};
+    use crate::rel_approx_eq_dur;
+    use statrs::distribution::{ContinuousCDF, Normal};
+    use std::time::Duration;
 
     #[test]
     fn test_summary_stats_panics_on_empty() {
@@ -91,5 +95,77 @@ mod test {
         let out = crate::BenchOut::from_iter(&cfg, std::iter::empty::<std::time::Duration>());
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| summary_stats(&out)));
         assert!(result.is_err(), "expected panic on empty sample");
+    }
+
+    #[test]
+    fn test_summary_stats_value_correctness() {
+        const SAMPLE_SIZE: usize = 50_000;
+        const EPSILON: f64 = 0.01;
+
+        let target = Duration::from_millis(10);
+        let sigma = 1.15_f64.ln() / 2.0;
+        let mu = target.as_secs_f64().ln();
+
+        let mut src = LognormalLatencySrc::<1>::new([(target, sigma)]);
+        let cfg = BenchCfg::default();
+        let out = BenchOut::from_iter(&cfg, src.aggregate().take(SAMPLE_SIZE));
+        let summary = summary_stats(&out);
+
+        let normal = Normal::new(mu, sigma).unwrap();
+
+        let exp_mean = (mu + 0.5 * sigma.powi(2)).exp();
+        let exp_stdev = exp_mean * ((sigma.powi(2).exp() - 1.).sqrt());
+        let exp_p1 = normal.inverse_cdf(0.01).exp();
+        let exp_p5 = normal.inverse_cdf(0.05).exp();
+        let exp_p10 = normal.inverse_cdf(0.10).exp();
+        let exp_p25 = normal.inverse_cdf(0.25).exp();
+        let exp_median = normal.inverse_cdf(0.5).exp();
+        let exp_p75 = normal.inverse_cdf(0.75).exp();
+        let exp_p90 = normal.inverse_cdf(0.90).exp();
+        let exp_p95 = normal.inverse_cdf(0.95).exp();
+        let exp_p99 = normal.inverse_cdf(0.99).exp();
+
+        rel_approx_eq_dur!(Duration::from_secs_f64(exp_mean), summary.mean, EPSILON);
+        rel_approx_eq_dur!(Duration::from_secs_f64(exp_stdev), summary.stdev, EPSILON);
+        rel_approx_eq_dur!(Duration::from_secs_f64(exp_median), summary.median, EPSILON);
+        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p1), summary.p1, EPSILON);
+        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p5), summary.p5, EPSILON);
+        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p10), summary.p10, EPSILON);
+        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p25), summary.p25, EPSILON);
+        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p75), summary.p75, EPSILON);
+        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p90), summary.p90, EPSILON);
+        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p95), summary.p95, EPSILON);
+        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p99), summary.p99, EPSILON);
+
+        assert_eq!(out.n(), SAMPLE_SIZE as u64);
+        assert_eq!(summary.count, SAMPLE_SIZE as u64);
+        assert!(summary.min > Duration::ZERO);
+        assert!(summary.max > summary.p99);
+    }
+
+    #[test]
+    fn test_summary_stats_no_panic_on_empty_with_panic_off() {
+        let cfg = BenchCfg::default(); // panic_on_error is false by default
+        let out = BenchOut::from_iter(&cfg, std::iter::empty::<Duration>());
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| summary_stats(&out)));
+        assert!(
+            result.is_ok(),
+            "should not panic when panic_on_error is false"
+        );
+        let summary = result.unwrap();
+        assert_eq!(summary.count, 0);
+        assert_eq!(summary.mean, Duration::ZERO);
+        assert_eq!(summary.stdev, Duration::ZERO);
+        assert_eq!(summary.min, Duration::ZERO);
+        assert_eq!(summary.max, Duration::ZERO);
+        assert_eq!(summary.p1, Duration::ZERO);
+        assert_eq!(summary.p5, Duration::ZERO);
+        assert_eq!(summary.p10, Duration::ZERO);
+        assert_eq!(summary.p25, Duration::ZERO);
+        assert_eq!(summary.median, Duration::ZERO);
+        assert_eq!(summary.p75, Duration::ZERO);
+        assert_eq!(summary.p90, Duration::ZERO);
+        assert_eq!(summary.p95, Duration::ZERO);
+        assert_eq!(summary.p99, Duration::ZERO);
     }
 }

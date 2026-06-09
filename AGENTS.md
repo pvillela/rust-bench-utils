@@ -26,7 +26,7 @@ This crate has complex feature gating with several tiers:
 - **Helper features**: `__null` enables the `basic_stats` dependency
 - **Internal features**:
   - `_test_support` (= `basic_stats/_dev_utils` + `dep:regex`) — test-only utilities for this crate and friend crates
-  - `_bench` (= `_test_support` + `busy_work` + `dep:criterion`) — used by some benches and some tests
+  - `_bench` (= `_test_support` + `busy_work` + `dep:criterion`) — used by some benches and long-running validation tests
   - `_test` (= `_test_support`) — used only by tests
   - `_experimental` (= `basic_stats/wilcoxon`) — functionality developed but not intended for public clients
   - `_bench_diff` (= `_experimental`) — bundles what the sibling `bench_diff` crate needs

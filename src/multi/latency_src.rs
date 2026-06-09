@@ -51,7 +51,6 @@ impl<F0: FnMut(), F1: FnMut()> Iterator for LatencySrc2<F0, F1> {
 
 impl<F0: FnMut(), F1: FnMut()> LatencySrc<2> for LatencySrc2<F0, F1> {}
 
-#[cfg(test)]
 #[cfg(feature = "_test")]
 pub mod test_support {
     use super::*;
@@ -222,9 +221,13 @@ pub mod test_support {
 
     impl<const K: usize> LatencySrc<K> for ConvergingLatencySrc<K> {}
 
+    #[cfg(test)]
     mod test {
         use super::*;
         use crate::{BenchCfg, multi::BenchOut, rel_approx_eq_dur};
+        use basic_stats::rel_approx_eq;
+        use std::panic::catch_unwind;
+
 
         const EPSILON: f64 = 0.002;
         const SAMP_SIZE: usize = 100;
@@ -252,6 +255,86 @@ pub mod test_support {
             rel_approx_eq_dur!(targets[0], out_medians[0], EPSILON);
             rel_approx_eq_dur!(targets[1], out_medians[1], EPSILON);
             rel_approx_eq_dur!(targets[2], out_medians[2], EPSILON);
+        }
+
+        #[test]
+        fn test_const_latency_src() {
+            let mut src = ConstLatencySrc::<2>::new([Duration::from_millis(1), Duration::from_millis(2)]);
+            for _ in 0..5 {
+                assert_eq!(
+                    src.next(),
+                    Some([Duration::from_millis(1), Duration::from_millis(2)])
+                );
+            }
+
+            let mut src2 = ConstLatencySrc::<2>::new([Duration::from_millis(1), Duration::from_millis(2)]);
+            let sum: Duration = src2.aggregate().take(3).sum();
+            assert_eq!(sum, Duration::from_millis(9));
+        }
+
+        #[test]
+        fn test_empty_latency_src() {
+            let mut src = EmptyLatencySrc::<1>;
+            assert_eq!(src.next(), None);
+
+            let mut src2 = EmptyLatencySrc::<1>;
+            assert_eq!(src2.aggregate().next(), None);
+
+            let cfg = BenchCfg::default();
+            let out = BenchOut::from_iter(&cfg, EmptyLatencySrc::<1>);
+            assert_eq!(out.n(), 0);
+        }
+
+        #[test]
+        fn test_converging_latency_src() {
+            let target = Duration::from_millis(10);
+            let src = ConvergingLatencySrc::<1>::new([target]);
+            assert_eq!(src.target_latencies(), [target]);
+
+            let items: Vec<[Duration; 1]> = src.take(10).collect();
+            let mut prev_gap = f64::MAX;
+            for (i, item) in items.iter().enumerate() {
+                let dur = item[0];
+                let above = dur > target;
+                assert!(
+                    above == (i % 2 == 0),
+                    "iteration {i}: {dur:?} should be {} target",
+                    if i % 2 == 0 { "above" } else { "below" }
+                );
+                let gap = if above { dur - target } else { target - dur };
+                let gap_secs = gap.as_secs_f64();
+                assert!(
+                    gap_secs < prev_gap,
+                    "iteration {i}: gap {gap_secs} not smaller than prev {prev_gap}"
+                );
+                prev_gap = gap_secs;
+            }
+
+            let src2 = ConvergingLatencySrc::<1>::new([target]);
+            let total: Duration = src2.take(1000).map(|arr| arr[0]).sum();
+            let mean_secs = total.as_secs_f64() / 1000.0;
+            let target_secs = target.as_secs_f64();
+            rel_approx_eq!(mean_secs, target_secs, 0.01);
+        }
+
+        #[test]
+        fn test_lognormal_latency_src_new() {
+            let cfg = BenchCfg::default();
+            let target = Duration::from_millis(10);
+            let src = LognormalLatencySrc::<1>::new([(target, 0.2)]);
+            let out = BenchOut::from_iter(&cfg, src.take(2000));
+            let medians = out.medians();
+            rel_approx_eq_dur!(medians[0], target, 0.05);
+
+            let result = catch_unwind(|| {
+                LognormalLatencySrc::<1>::new([(Duration::ZERO, 0.2)]);
+            });
+            assert!(result.is_err(), "expected panic for zero median");
+
+            let result = catch_unwind(|| {
+                LognormalLatencySrc::<1>::new([(Duration::from_millis(10), 0.0)]);
+            });
+            assert!(result.is_err(), "expected panic for zero sigma");
         }
     }
 }

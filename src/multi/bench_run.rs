@@ -1022,6 +1022,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 /// Tests created by Claude Code, improved a bit by me.
 mod simple_tests {
     use super::*;
+    use crate::multi::test_support::LognormalLatencySrc;
     use crate::{LatencyUnit, RunLength, multi::LatencySrc1};
     use std::{thread, time::Duration};
 
@@ -1067,5 +1068,29 @@ mod simple_tests {
         );
         // At least some executions should have been captured
         assert!(out.n() > 0 && out.n() < 20);
+    }
+
+    #[test]
+    fn test_bench_run_time_with_synthetic_source() {
+        let src = LognormalLatencySrc::<1>::new_with_default_sigmas([Duration::from_millis(10)]);
+        let out = bench_run_arg_cfg(
+            &quick_cfg(),
+            src,
+            RunLength::Time(Duration::from_millis(500)),
+        );
+        // ~10ms per iteration → ~50 iterations expected
+        assert!(out.n() >= 30 && out.n() <= 70);
+    }
+
+    #[test]
+    fn test_bench_run_count_with_timeout_synthetic() {
+        let src = LognormalLatencySrc::<1>::new_with_default_sigmas([Duration::from_millis(5)]);
+        let out = bench_run_arg_cfg(
+            &quick_cfg(),
+            src,
+            RunLength::CountWithTimeout(200, Duration::from_millis(500)),
+        );
+        // 5ms per iteration, 500ms timeout → stops well before 200
+        assert!(out.n() > 50 && out.n() < 200);
     }
 }

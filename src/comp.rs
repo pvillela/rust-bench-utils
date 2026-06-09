@@ -363,12 +363,15 @@ impl<'a> Comp<'a> {
 #[cfg(feature = "_test")]
 mod test {
     use super::*;
+    use crate::multi::LatencySrc;
+    use crate::multi::test_support::ConstLatencySrc;
     use crate::test_support::{
         HI_STDEV_LN, LO_STDEV_LN, lognormal_moments_ln, lognormal_moments_ln_jittered,
-        lognormal_out, lognormal_out_jittered,
+        lognormal_out, lognormal_out_jittered, lognormal_samp,
     };
     use crate::{BenchCfg, LatencyUnit};
     use basic_stats::{approx_eq, core::AcceptedHyp};
+    use std::time::Duration;
 
     const EPSILON: f64 = 0.001;
     const JITTER_EPSILON: f64 = EPSILON;
@@ -625,5 +628,144 @@ mod test {
             let accepted = result.accepted();
             assert_eq!(accepted, AcceptedHyp::Alt);
         }
+    }
+
+    #[test]
+    fn test_comp_panics_on_empty_sample() {
+        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let out1 = BenchOut::from_iter(&cfg, std::iter::empty::<Duration>());
+        let mut src2 = ConstLatencySrc::new([Duration::from_millis(3)]);
+        let out2 = BenchOut::from_iter(&cfg, src2.aggregate().take(10));
+        let comp = Comp::new(&out1, &out2);
+
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_t(0.0)))
+                .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_df())).is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                comp.welch_ln_p(0.0, AltHyp::Ne)
+            }))
+            .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_ci(0.05)))
+                .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                comp.welch_ln_test(0.0, AltHyp::Ne, 0.05)
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn test_comp_panics_on_singleton_sample() {
+        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let mut src1 = ConstLatencySrc::new([Duration::from_millis(3)]);
+        let out1 = BenchOut::from_iter(&cfg, src1.aggregate().take(10));
+        let out2 = BenchOut::from_iter(&cfg, [Duration::from_millis(1)].into_iter());
+        let comp = Comp::new(&out1, &out2);
+
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_t(0.0)))
+                .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_df())).is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                comp.welch_ln_p(0.0, AltHyp::Ne)
+            }))
+            .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_ci(0.05)))
+                .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                comp.welch_ln_test(0.0, AltHyp::Ne, 0.05)
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn test_comp_panics_on_both_stdev_zero() {
+        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let out1 = BenchOut::from_iter(
+            &cfg,
+            [Duration::from_millis(5), Duration::from_millis(5)].into_iter(),
+        );
+        let out2 = BenchOut::from_iter(
+            &cfg,
+            [Duration::from_millis(5), Duration::from_millis(5)].into_iter(),
+        );
+        let comp = Comp::new(&out1, &out2);
+
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_t(0.0)))
+                .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_df())).is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                comp.welch_ln_p(0.0, AltHyp::Ne)
+            }))
+            .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_ci(0.05)))
+                .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                comp.welch_ln_test(0.0, AltHyp::Ne, 0.05)
+            }))
+            .is_err()
+        );
+    }
+
+    #[cfg(feature = "_experimental")]
+    #[test]
+    fn test_wilcoxon_empty_sample_panic() {
+        let cfg = BenchCfg::default().with_panic_on_error(true);
+        let out1 = BenchOut::from_iter(&cfg, std::iter::empty::<Duration>());
+        let mut src2 = ConstLatencySrc::new([Duration::from_millis(3)]);
+        let out2 = BenchOut::from_iter(&cfg, src2.aggregate().take(10));
+        let comp = Comp::new(&out1, &out2);
+
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                comp.wilcoxon_rank_sum_w()
+            }))
+            .is_err()
+        );
+    }
+
+    #[cfg(feature = "_experimental")]
+    #[test]
+    fn test_wilcoxon_equal_distribution_null() {
+        let cfg = BenchCfg::default();
+        let mu = 8.0;
+        let sigma = *LO_STDEV_LN;
+        let samp_size = 500;
+        let durations: Vec<Duration> = lognormal_samp(mu, sigma, samp_size)
+            .map(Duration::from_nanos)
+            .collect();
+        let out1 = BenchOut::from_iter(&cfg, durations.iter().cloned());
+        let out2 = BenchOut::from_iter(&cfg, durations.iter().cloned());
+        let comp = Comp::new(&out1, &out2);
+
+        let p = comp.wilcoxon_rank_sum_p(AltHyp::Ne);
+        assert!(p > 0.05, "expected p > 0.05, got {}", p);
     }
 }
