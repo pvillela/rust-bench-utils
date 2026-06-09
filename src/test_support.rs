@@ -2,7 +2,7 @@
 //! and constants for low/high log-standard-deviation.
 //! Gated by feature **"_test"**.
 
-use crate::{BenchCfg, BenchOut};
+use crate::{BenchCfg, BenchOut, LatencyUnit};
 use basic_stats::{core::SampleMoments, dev_utils::ApproxEq, normal::normal_detm_samp};
 use std::{io::Write, sync::LazyLock, time::Duration};
 
@@ -43,12 +43,12 @@ pub fn lognormal_samp_jittered(
     samp_size: usize,
     n_jitter: i64,
     jitter_epsilon: f64,
-) -> impl Iterator<Item = u64> {
+) -> impl Iterator<Item = f64> {
     let normal_samp = normal_detm_samp(mu, sigma, samp_size).unwrap();
     normal_samp
         .enumerate()
         .map(move |(i, v)| jitter(v, i as i64, n_jitter, jitter_epsilon))
-        .map(|x| x.exp() as u64)
+        .map(|x| x.exp())
 }
 
 /// Generates a deterministic lognormal sample without jitter.
@@ -60,7 +60,7 @@ pub fn lognormal_samp_jittered(
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
 /// - `samp_size` - sample size.
-pub fn lognormal_samp(mu: f64, sigma: f64, samp_size: usize) -> impl Iterator<Item = u64> {
+pub fn lognormal_samp(mu: f64, sigma: f64, samp_size: usize) -> impl Iterator<Item = f64> {
     lognormal_samp_jittered(mu, sigma, samp_size, 3, 0.)
 }
 
@@ -86,7 +86,7 @@ pub fn lognormal_out_jittered(
     jitter_epsilon: f64,
 ) -> BenchOut {
     let lognormal_samp = lognormal_samp_jittered(mu, sigma, samp_size, n_jitter, jitter_epsilon)
-        .map(|d| cfg.recording_unit().latency_from_u64(d));
+        .map(|v| cfg.recording_unit().latency_from_f64(v));
     BenchOut::from_iter(cfg, lognormal_samp)
 }
 
@@ -105,16 +105,19 @@ pub fn lognormal_out(cfg: &BenchCfg, mu: f64, sigma: f64, k: usize) -> BenchOut 
 }
 
 /// Computes sample moments (sum, sum of squares, count) of the natural logarithms
-/// of a jittered lognormal sample.
+/// of a jittered lognormal sample, for the specified latency recording unit.
 ///
 /// # Arguments
 ///
+/// - `ru` - specified latency recording unit. The sample values are converted to and from
+///   `ru` to ensure alignment with data capture in [`BenchOut`].
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
 /// - `samp_size` - sample size.
 /// - `n_jitter` - denominator controlling the jitter period (must be >= 3).
 /// - `jitter_epsilon` - maximum magnitude of the jitter added to each value.
 pub fn lognormal_moments_ln_jittered(
+    ru: LatencyUnit,
     mu: f64,
     sigma: f64,
     samp_size: usize,
@@ -122,21 +125,31 @@ pub fn lognormal_moments_ln_jittered(
     jitter_epsilon: f64,
 ) -> SampleMoments {
     let dataset = lognormal_samp_jittered(mu, sigma, samp_size, n_jitter, jitter_epsilon)
-        .map(|v| (v.max(1) as f64).ln());
+        .filter_map(|v| {
+            let latency = ru.latency_from_f64(v);
+            if latency > Duration::ZERO {
+                Some(ru.latency_as_f64(latency).ln())
+            } else {
+                None
+            }
+        });
     SampleMoments::from_iterator(dataset)
 }
 
-/// Computes sample moments of the natural logarithms of a non-jittered lognormal sample.
+/// Computes sample moments of the natural logarithms of a non-jittered lognormal sample,
+/// for the specified latency recording unit.
 ///
 /// Equivalent to [`lognormal_moments_ln_jittered`] with `n_jitter=3` and `jitter_epsilon=0.0`.
 ///
 /// # Arguments
 ///
+/// - `ru` - specified latency recording unit. The sample values are converted to and from
+///   `ru` to ensure alignment with data capture in [`BenchOut`].
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
 /// - `k` - controls the sample size; the total number of items is `2*k*k - 1`.
-pub fn lognormal_moments_ln(mu: f64, sigma: f64, k: usize) -> SampleMoments {
-    lognormal_moments_ln_jittered(mu, sigma, k, 3, 0.)
+pub fn lognormal_moments_ln(ru: LatencyUnit, mu: f64, sigma: f64, k: usize) -> SampleMoments {
+    lognormal_moments_ln_jittered(ru, mu, sigma, k, 3, 0.)
 }
 
 /// Writer backed by a [`Vec<u8>`] that can process backspace characters ("\u{8}") properly like stdout and stderr do.

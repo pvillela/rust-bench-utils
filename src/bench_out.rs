@@ -128,8 +128,8 @@ impl BenchOut {
         self.sum += elapsed as f64;
         self.sum2 += elapsed.pow(2) as f64;
 
-        if elapsed > 0 {
-            let ln = (elapsed as f64).ln();
+        if latency > Duration::ZERO {
+            let ln = self.recording_unit.latency_as_f64(latency).ln();
             self.n_ln += 1;
             self.sum_ln += ln;
             self.sum2_ln += ln.powi(2);
@@ -496,7 +496,7 @@ mod test {
         let cfg = BenchCfg::default();
         let ru = cfg.recording_unit();
 
-        let lognormal_samp = lognormal_samp(mu, sigma, samp_size).map(|x| ru.latency_from_u64(x));
+        let lognormal_samp = lognormal_samp(mu, sigma, samp_size).map(|x| ru.latency_from_f64(x));
         let out = BenchOut::from_iter(&cfg, lognormal_samp);
 
         assert_eq!(ru, LatencyUnit::Nano);
@@ -606,7 +606,7 @@ mod test {
         let cfg = BenchCfg::default();
         let ru = cfg.recording_unit();
 
-        let lognormal_samp = lognormal_samp(mu, sigma, samp_size).map(|x| ru.latency_from_u64(x));
+        let lognormal_samp = lognormal_samp(mu, sigma, samp_size).map(|x| ru.latency_from_f64(x));
         let out = BenchOut::from_iter(&cfg, lognormal_samp);
 
         let normal_samp = normal_detm_samp(mu, sigma, samp_size).unwrap();

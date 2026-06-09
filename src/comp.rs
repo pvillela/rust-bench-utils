@@ -411,6 +411,7 @@ mod test {
     // cargo test --package bench_utils --lib --all-features -- comp::test::test_comp --exact --nocapture --include-ignored
     fn test_comp() {
         let cfg = BenchCfg::default();
+        let ru = cfg.recording_unit();
 
         let samp_size = 12_800;
         let n_jitter = 7;
@@ -420,18 +421,18 @@ mod test {
 
         let mu_a = 8.;
         let out_a = lognormal_out(&cfg, mu_a, sigma_lo, samp_size);
-        let moments_ln_a = lognormal_moments_ln(mu_a, sigma_lo, samp_size);
+        let moments_ln_a = lognormal_moments_ln(ru, mu_a, sigma_lo, samp_size);
         let out_aj =
             lognormal_out_jittered(&cfg, mu_a, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
         let moments_ln_aj =
-            lognormal_moments_ln_jittered(mu_a, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
+            lognormal_moments_ln_jittered(ru, mu_a, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
 
         let median_ratio_a_b: f64 = 1.01;
         let mu_b = mu_a - median_ratio_a_b.ln();
         let out_bj =
             lognormal_out_jittered(&cfg, mu_b, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
         let moments_ln_bj =
-            lognormal_moments_ln_jittered(mu_b, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
+            lognormal_moments_ln_jittered(ru, mu_b, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
 
         #[derive(Debug)]
         struct TestArgs<'a> {
@@ -755,11 +756,12 @@ mod test {
     #[test]
     fn test_wilcoxon_equal_distribution_null() {
         let cfg = BenchCfg::default();
+        let ru = cfg.recording_unit();
         let mu = 8.0;
         let sigma = *LO_STDEV_LN;
         let samp_size = 500;
         let durations: Vec<Duration> = lognormal_samp(mu, sigma, samp_size)
-            .map(Duration::from_nanos)
+            .map(|v| ru.latency_from_f64(v))
             .collect();
         let out1 = BenchOut::from_iter(&cfg, durations.iter().cloned());
         let out2 = BenchOut::from_iter(&cfg, durations.iter().cloned());
