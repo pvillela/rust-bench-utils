@@ -1,4 +1,4 @@
-use crate::{RunLength, multi::LatencySrc1};
+use crate::RunLength;
 use log::trace;
 use std::time::{Duration, Instant};
 
@@ -66,6 +66,7 @@ impl LatencyUnit {
     }
 }
 
+#[cfg(test)]
 /// Estimates how many executions of `f` fit in one second by executing the function one or more times
 /// and doing a proportionality calculation.
 ///
@@ -73,7 +74,9 @@ impl LatencyUnit {
 ///
 /// `f` - the target function.
 /// `budget` - the budget for the estimation process, in terms of duration and/or iterations.
-pub fn fn_execs_per_sec(f: impl FnMut(), budget: RunLength) -> f64 {
+pub(crate) fn fn_execs_per_sec(f: impl FnMut(), budget: RunLength) -> f64 {
+    use crate::multi::LatencySrc1;
+
     let src = LatencySrc1(f).map(|arr| arr[0]);
     src_execs_per_sec(src, budget)
 }
@@ -93,7 +96,8 @@ pub fn fn_execs_per_sec(f: impl FnMut(), budget: RunLength) -> f64 {
 /// Panics if the measured latency for any iteration is zero,
 /// which would cause a division by zero. In practice, wall-clock latency
 /// measurements should always be non-zero for any non-trivial target function.
-pub fn src_execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: RunLength) -> f64 {
+pub(crate) fn src_execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: RunLength) -> f64 {
+    let (budget_count, budget_dur) = budget.get_exec_count_and_duration();
     let mut acc_latency = Duration::from_nanos(0);
     let mut acc_execs: u64 = 0;
 
@@ -103,7 +107,6 @@ pub fn src_execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: RunLen
 
         acc_latency += iter_latency;
         acc_execs += iter_execs;
-        let (budget_count, budget_dur) = budget.get_exec_count_and_duration();
         trace!("src_execs_per_sec >>> i={i}");
         if iter_latency >= budget_dur / 2 || acc_latency >= budget_dur || acc_execs >= budget_count
         {
@@ -271,14 +274,15 @@ mod test_latency_unit {
 #[cfg(feature = "_test")]
 // cargo test --package bench_utils --lib --all-features -- latency::test_executions_per_second --nocapture
 mod test_execs_per_second {
-
-    use crate::multi::{LatencySrc, test_support::LognormalLatencySrc};
-
     use super::*;
+    use crate::multi::{
+        LatencySrc, LatencySrc1,
+        test_support::{ConstLatencySrc, EmptyLatencySrc, LognormalLatencySrc},
+    };
     use basic_stats::rel_approx_eq;
 
     #[test]
-    fn test_src_execs_per_second() {
+    fn src_lognormal() {
         const EPSILON: f64 = 0.01;
 
         let target_latency = Duration::from_millis(10);
@@ -287,6 +291,30 @@ mod test_execs_per_second {
         let eps = src_execs_per_sec(src.aggregate(), RunLength::Count(1000));
 
         rel_approx_eq!(exp_eps, eps, EPSILON);
+    }
+
+    #[test]
+    fn src_empty() {
+        let mut src = EmptyLatencySrc::<1>;
+        let eps = src_execs_per_sec(src.aggregate(), RunLength::Count(1000));
+        assert!(eps.is_infinite(), "eps={eps}");
+    }
+
+    #[test]
+    fn src_small_finite() {
+        const COUNT: usize = 1000;
+        let iter_len = (COUNT as f64).sqrt() as usize;
+        let target_latency = Duration::from_secs(10);
+        let mut src = LognormalLatencySrc::new_with_default_sigmas([target_latency]);
+        let eps = src_execs_per_sec(src.aggregate().take(iter_len), RunLength::Count(1000));
+        assert!(eps.is_infinite(), "eps={eps}");
+    }
+
+    #[test]
+    fn src_infinite_zero() {
+        let mut src = ConstLatencySrc::new([Duration::ZERO]);
+        let eps = src_execs_per_sec(src.aggregate(), RunLength::Count(1000));
+        assert!(eps.is_infinite(), "eps={eps}");
     }
 
     #[test]

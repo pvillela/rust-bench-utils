@@ -32,7 +32,7 @@ impl RunLength {
     }
 
     /// Estimated number of iterations.
-    pub fn estimated_count(&self, execs_per_second: f64) -> u64 {
+    pub(crate) fn estimated_count(&self, execs_per_second: f64) -> u64 {
         assert!(execs_per_second > 0.0, "execs_per_second must be positive");
         match self {
             Self::Count(count) => *count,
@@ -46,7 +46,7 @@ impl RunLength {
     }
 
     /// Estimated run duration.
-    pub fn estimated_time(&self, execs_per_second: f64) -> Duration {
+    pub(crate) fn estimated_time(&self, execs_per_second: f64) -> Duration {
         match self {
             Self::Count(count) => Duration::from_secs_f64(*count as f64 / execs_per_second),
             Self::Time(duration) => *duration,
@@ -131,7 +131,7 @@ impl BenchCfg {
         self
     }
 
-    fn execs_per_second_budget(&self, exec_run_length: RunLength) -> RunLength {
+    fn execs_per_sec_budget(&self, exec_run_length: RunLength) -> RunLength {
         const WARMUP_DIVISOR: u32 = 3;
         const EXEC_DIVISOR: u32 = 30;
 
@@ -201,12 +201,14 @@ impl BenchCfg {
         budget
     }
 
+    #[allow(unused)]
+    #[cfg(test)]
     /// Estimates how many executions of `f` fit in one second.
     ///
     /// Used in status reporting as well as in execution loop termination logic (to ensure adherence to the
     /// run length specified when the benchmark is executed).
-    pub fn fn_execs_per_sec(&self, f: impl FnMut(), exec_run_length: RunLength) -> f64 {
-        let budget = self.execs_per_second_budget(exec_run_length);
+    fn fn_execs_per_sec(&self, f: impl FnMut(), exec_run_length: RunLength) -> f64 {
+        let budget = self.execs_per_sec_budget(exec_run_length);
         latency::fn_execs_per_sec(f, budget)
     }
 
@@ -214,18 +216,18 @@ impl BenchCfg {
     ///
     /// Used in status reporting as well as in execution loop termination logic (to ensure adherence to the
     /// run length specified when the benchmark is executed).
-    pub fn src_execs_per_sec<const K: usize>(
+    pub(crate) fn src_execs_per_sec<const K: usize>(
         &self,
         src: &mut impl LatencySrc<K>,
         exec_run_length: RunLength,
     ) -> f64 {
-        let budget = self.execs_per_second_budget(exec_run_length);
+        let budget = self.execs_per_sec_budget(exec_run_length);
         debug!("execs_per_second_budget >>> execs_per_second_budget={budget:?}");
         latency::src_execs_per_sec(src.aggregate(), budget)
     }
 
     /// Number of executions between status updates, derived from `execs_per_second`.
-    pub fn status_count(&self, execs_per_second: f64) -> u64 {
+    pub(crate) fn status_count(&self, execs_per_second: f64) -> u64 {
         let status_count = self.status_millis as f64 / 1000.0 * execs_per_second;
         1.max(status_count.ceil() as u64)
     }
