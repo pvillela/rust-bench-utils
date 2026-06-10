@@ -344,7 +344,7 @@ mod test {
     use crate::multi::test_support::ConstLatencySrc;
     use crate::test_support::{
         HI_STDEV_LN, LO_STDEV_LN, lognormal_moments_ln, lognormal_moments_ln_jittered,
-        lognormal_out, lognormal_out_jittered, lognormal_samp,
+        lognormal_out, lognormal_out_jittered,
     };
     use crate::{BenchCfg, LatencyUnit};
     use basic_stats::{approx_eq, core::AcceptedHyp};
@@ -566,48 +566,6 @@ mod test {
         }
     }
 
-    #[cfg(feature = "_experimental")]
-    // cargo test --package bench_utils --lib --all-features -- comp::test::wilcoxon_tests::test_wilcoxon_rank_sum_methods --exact --nocapture --include-ignored
-    mod wilcoxon_tests {
-        use super::*;
-        use crate::test_support::LO_STDEV_LN;
-
-        const ALPHA: f64 = 0.05;
-
-        #[test]
-        fn test_wilcoxon_rank_sum_methods() {
-            let cfg = BenchCfg::default();
-
-            let median_ratio_1_2: f64 = 1.05;
-            let mu1 = 8.0;
-            let mu2 = mu1 - median_ratio_1_2.ln();
-            let samp_size = 20;
-            let alt_hyp = AltHyp::Gt;
-
-            let out1 = lognormal_out(&cfg, mu1, *LO_STDEV_LN, samp_size);
-            let out2 = lognormal_out(&cfg, mu2, *LO_STDEV_LN, samp_size);
-
-            let comp = Comp::new(&out1, &out2);
-
-            let w = comp.wilcoxon_rank_sum_w();
-            assert!(w > 0.0, "w should be positive, got {}", w);
-
-            let z = comp.wilcoxon_rank_sum_z();
-            assert!(z > 1.0, "z should be greater than 1.0, got {}", z);
-
-            let p = comp.wilcoxon_rank_sum_p(alt_hyp);
-            assert!(
-                0.0 < p && p < 0.5,
-                "p should be between 0.5 and 1, got {}",
-                p
-            );
-
-            let result = comp.wilcoxon_rank_sum_test(alt_hyp, ALPHA);
-            let accepted = result.accepted();
-            assert_eq!(accepted, AcceptedHyp::Alt);
-        }
-    }
-
     #[test]
     fn test_comp_panics_on_empty_sample() {
         let cfg = BenchCfg::default();
@@ -711,8 +669,59 @@ mod test {
             .is_err()
         );
     }
+}
 
-    #[cfg(feature = "_experimental")]
+#[cfg(test)]
+#[cfg(feature = "_test")]
+#[cfg(feature = "_experimental")]
+// cargo test --package bench_utils --lib --all-features -- comp::test::wilcoxon_tests::test_wilcoxon_rank_sum_methods --exact --nocapture --include-ignored
+mod wilcoxon_tests {
+    use std::time::Duration;
+
+    use basic_stats::core::AcceptedHyp;
+
+    use super::*;
+    use crate::{
+        BenchCfg,
+        multi::{LatencySrc, test_support::ConstLatencySrc},
+        test_support::{LO_STDEV_LN, lognormal_out, lognormal_samp},
+    };
+
+    const ALPHA: f64 = 0.05;
+
+    #[test]
+    fn test_wilcoxon_rank_sum_methods() {
+        let cfg = BenchCfg::default();
+
+        let median_ratio_1_2: f64 = 1.05;
+        let mu1 = 8.0;
+        let mu2 = mu1 - median_ratio_1_2.ln();
+        let samp_size = 20;
+        let alt_hyp = AltHyp::Gt;
+
+        let out1 = lognormal_out(&cfg, mu1, *LO_STDEV_LN, samp_size);
+        let out2 = lognormal_out(&cfg, mu2, *LO_STDEV_LN, samp_size);
+
+        let comp = Comp::new(&out1, &out2);
+
+        let w = comp.wilcoxon_rank_sum_w();
+        assert!(w > 0.0, "w should be positive, got {}", w);
+
+        let z = comp.wilcoxon_rank_sum_z();
+        assert!(z > 1.0, "z should be greater than 1.0, got {}", z);
+
+        let p = comp.wilcoxon_rank_sum_p(alt_hyp);
+        assert!(
+            0.0 < p && p < 0.5,
+            "p should be between 0.5 and 1, got {}",
+            p
+        );
+
+        let result = comp.wilcoxon_rank_sum_test(alt_hyp, ALPHA);
+        let accepted = result.accepted();
+        assert_eq!(accepted, AcceptedHyp::Alt);
+    }
+
     #[test]
     fn test_wilcoxon_empty_sample_panic() {
         let cfg = BenchCfg::default();
@@ -729,7 +738,6 @@ mod test {
         );
     }
 
-    #[cfg(feature = "_experimental")]
     #[test]
     fn test_wilcoxon_equal_distribution_null() {
         let cfg = BenchCfg::default();

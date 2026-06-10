@@ -126,7 +126,6 @@ pub fn src_execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: RunLen
 mod validate {
     use super::*;
     use crate::{BenchCfg, bench_support::validate_latency_overhead, rel_approx_eq_dur};
-    use basic_stats::approx_eq;
 
     // SEE ALSO: tests for `fake_work` and `busy_work`.
 
