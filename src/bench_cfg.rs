@@ -205,6 +205,11 @@ impl BenchCfg {
     ///
     /// Used in status reporting as well as in execution loop termination logic (to ensure adherence to the
     /// run length specified when the benchmark is executed).
+    /// ///
+    /// # May return [`f64::INFINITY`]:
+    /// Returns `f64::INFINITY` if the aggregate latency for any iteration is zero.
+    /// In particular, this can happen if `src` is finite and its length is less than or equal to one half
+    /// of the estimation budget count (see [`latency::execs_per_sec`] and [`Self::execs_per_sec_budget`]).
     pub(crate) fn execs_per_sec<const K: usize>(
         &self,
         src: &mut impl LatencySrc<K>,

@@ -76,11 +76,10 @@ impl LatencyUnit {
 /// `src` - the latency source.
 /// `budget` - the budget for the estimation process, in terms of duration and/or iterations.
 ///
-/// # Panics
-///
-/// Panics if the measured latency for any iteration is zero,
-/// which would cause a division by zero. In practice, wall-clock latency
-/// measurements should always be non-zero for any non-trivial target function.
+/// # May return [`f64::INFINITY`]:
+/// Returns `f64::INFINITY` if the aggregate latency for any iteration is zero.
+/// In particular, this can happen if `src` is finite and its length is less than or equal to one half
+/// of the estimation budget count.
 pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: RunLength) -> f64 {
     let (budget_count, budget_dur) = budget.get_exec_count_and_duration();
     let mut acc_latency = Duration::from_nanos(0);
