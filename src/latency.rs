@@ -66,21 +66,6 @@ impl LatencyUnit {
     }
 }
 
-#[cfg(test)]
-/// Estimates how many executions of `f` fit in one second by executing the function one or more times
-/// and doing a proportionality calculation.
-///
-/// # Arguments
-///
-/// `f` - the target function.
-/// `budget` - the budget for the estimation process, in terms of duration and/or iterations.
-pub(crate) fn fn_execs_per_sec(f: impl FnMut(), budget: RunLength) -> f64 {
-    use crate::multi::LatencySrc1;
-
-    let src = LatencySrc1(f).map(|arr| arr[0]);
-    src_execs_per_sec(src, budget)
-}
-
 /// Estimates how many iterations of `src` can be done in one second by iterating one or more times
 /// and doing a proportionality calculation.
 /// The iterator `src` is expected to encapsulate closure invocations such that each
@@ -96,7 +81,7 @@ pub(crate) fn fn_execs_per_sec(f: impl FnMut(), budget: RunLength) -> f64 {
 /// Panics if the measured latency for any iteration is zero,
 /// which would cause a division by zero. In practice, wall-clock latency
 /// measurements should always be non-zero for any non-trivial target function.
-pub(crate) fn src_execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: RunLength) -> f64 {
+pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: RunLength) -> f64 {
     let (budget_count, budget_dur) = budget.get_exec_count_and_duration();
     let mut acc_latency = Duration::from_nanos(0);
     let mut acc_execs: u64 = 0;
@@ -288,7 +273,7 @@ mod test_execs_per_second {
         let target_latency = Duration::from_millis(10);
         let exp_eps = 100.0;
         let mut src = LognormalLatencySrc::new_with_default_sigmas([target_latency]);
-        let eps = src_execs_per_sec(src.aggregate(), RunLength::Count(1000));
+        let eps = execs_per_sec(src.aggregate(), RunLength::Count(1000));
 
         rel_approx_eq!(exp_eps, eps, EPSILON);
     }
@@ -296,7 +281,7 @@ mod test_execs_per_second {
     #[test]
     fn src_empty() {
         let mut src = EmptyLatencySrc::<1>;
-        let eps = src_execs_per_sec(src.aggregate(), RunLength::Count(1000));
+        let eps = execs_per_sec(src.aggregate(), RunLength::Count(1000));
         assert!(eps.is_infinite(), "eps={eps}");
     }
 
@@ -306,42 +291,22 @@ mod test_execs_per_second {
         let iter_len = (COUNT as f64).sqrt() as usize;
         let target_latency = Duration::from_secs(10);
         let mut src = LognormalLatencySrc::new_with_default_sigmas([target_latency]);
-        let eps = src_execs_per_sec(src.aggregate().take(iter_len), RunLength::Count(1000));
+        let eps = execs_per_sec(src.aggregate().take(iter_len), RunLength::Count(1000));
         assert!(eps.is_infinite(), "eps={eps}");
     }
 
     #[test]
     fn src_infinite_zero() {
         let mut src = ConstLatencySrc::new([Duration::ZERO]);
-        let eps = src_execs_per_sec(src.aggregate(), RunLength::Count(1000));
+        let eps = execs_per_sec(src.aggregate(), RunLength::Count(1000));
         assert!(eps.is_infinite(), "eps={eps}");
     }
 
     #[test]
-    fn no_op_fn_yields_positive_finite_estimate() {
-        let e = fn_execs_per_sec(|| {}, RunLength::Count(1000));
-        assert!(e > 0.0, "no-op should yield positive: {}", e);
-        assert!(e.is_finite(), "no-op estimate should be finite: {}", e);
-    }
-
-    #[test]
     fn no_op_src_yields_positive_finite_estimate() {
-        let src = LatencySrc1(|| {}).map(|arr| arr[0]);
-        let e = src_execs_per_sec(src, RunLength::Count(1000));
+        let mut src = LatencySrc1(|| {});
+        let e = execs_per_sec(src.aggregate(), RunLength::Count(1000));
         assert!(e > 0.0, "src no-op should yield positive: {}", e);
         assert!(e.is_finite(), "src no-op estimate should be finite: {}", e);
-    }
-
-    #[test]
-    fn fn_and_src_agree_for_no_op() {
-        let fn_e = fn_execs_per_sec(|| {}, RunLength::Count(1000));
-        let src_e = src_execs_per_sec(LatencySrc1(|| {}).map(|arr| arr[0]), RunLength::Count(1000));
-        let ratio = fn_e / src_e;
-        assert!(
-            ratio > 0.5 && ratio < 2.0,
-            "fn and src estimates should agree: fn={}, src={}",
-            fn_e,
-            src_e,
-        );
     }
 }

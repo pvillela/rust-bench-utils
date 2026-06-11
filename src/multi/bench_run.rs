@@ -102,7 +102,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
 ) -> BenchOut<K> {
     debug!("bench_run_x >>> exec_run_length={exec_run_length:?}");
     let mut state = BenchOut::new(cfg);
-    let execs_per_second = cfg.src_execs_per_sec(&mut src, exec_run_length);
+    let execs_per_second = cfg.execs_per_sec(&mut src, exec_run_length);
     debug!("bench_run_x >>> execs_per_second={execs_per_second}");
     let status_count = cfg.status_count(execs_per_second);
     debug!("bench_run_x >>> status_count={status_count}");
@@ -635,7 +635,7 @@ mod status {
             "\nExecuting bench_run".to_owned(),
         );
 
-        let execs_per_second = cfg.src_execs_per_sec(&mut src, exec_run_length);
+        let execs_per_second = cfg.execs_per_sec(&mut src, exec_run_length);
 
         let out = bench_run_x(&cfg, src, exec_run_length, status);
 

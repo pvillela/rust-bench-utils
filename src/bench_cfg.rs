@@ -201,29 +201,18 @@ impl BenchCfg {
         budget
     }
 
-    #[allow(unused)]
-    #[cfg(test)]
-    /// Estimates how many executions of `f` fit in one second.
-    ///
-    /// Used in status reporting as well as in execution loop termination logic (to ensure adherence to the
-    /// run length specified when the benchmark is executed).
-    fn fn_execs_per_sec(&self, f: impl FnMut(), exec_run_length: RunLength) -> f64 {
-        let budget = self.execs_per_sec_budget(exec_run_length);
-        latency::fn_execs_per_sec(f, budget)
-    }
-
     /// Estimates how many iterations of `src` can be done in one second.
     ///
     /// Used in status reporting as well as in execution loop termination logic (to ensure adherence to the
     /// run length specified when the benchmark is executed).
-    pub(crate) fn src_execs_per_sec<const K: usize>(
+    pub(crate) fn execs_per_sec<const K: usize>(
         &self,
         src: &mut impl LatencySrc<K>,
         exec_run_length: RunLength,
     ) -> f64 {
         let budget = self.execs_per_sec_budget(exec_run_length);
         debug!("execs_per_second_budget >>> execs_per_second_budget={budget:?}");
-        latency::src_execs_per_sec(src.aggregate(), budget)
+        latency::execs_per_sec(src.aggregate(), budget)
     }
 
     /// Number of executions between status updates, derived from `execs_per_second`.
@@ -247,6 +236,7 @@ impl Default for BenchCfg {
 #[cfg(test)]
 #[cfg(feature = "_test")]
 mod test {
+    use crate::multi::LatencySrc1;
     use crate::multi::test_support::LognormalLatencySrc;
     use crate::{BenchCfg, LatencyUnit, RunLength};
     use basic_stats::rel_approx_eq;
@@ -400,7 +390,8 @@ mod test {
     fn test_bench_cfg_execs_per_second() {
         let cfg = BenchCfg::default();
         // Using a no-op closure, the calibration should return a reasonable positive value
-        let eps = cfg.fn_execs_per_sec(|| {}, RunLength::Count(10));
+        let mut src = LatencySrc1(|| {});
+        let eps = cfg.execs_per_sec(&mut src, RunLength::Count(10));
         assert!(eps.is_finite());
     }
 
@@ -409,7 +400,7 @@ mod test {
         let cfg = BenchCfg::default();
         let mut src =
             LognormalLatencySrc::<1>::new_with_default_sigmas([Duration::from_millis(10)]);
-        let eps = cfg.src_execs_per_sec(&mut src, RunLength::Count(500));
+        let eps = cfg.execs_per_sec(&mut src, RunLength::Count(500));
         // Expected: 1000ms / 10ms = 100.0
         rel_approx_eq!(100.0, eps, 0.05);
     }
@@ -418,7 +409,7 @@ mod test {
     fn test_src_execs_per_sec_time_run_length() {
         let cfg = BenchCfg::default();
         let mut src = LognormalLatencySrc::<1>::new_with_default_sigmas([Duration::from_millis(1)]);
-        let eps = cfg.src_execs_per_sec(&mut src, RunLength::Time(Duration::from_millis(5)));
+        let eps = cfg.execs_per_sec(&mut src, RunLength::Time(Duration::from_millis(5)));
         assert!(eps.is_finite() && eps > 0.0);
         // Rough check: should be close to 1000 (1000ms / 1ms)
         rel_approx_eq!(1000.0, eps, 0.30);
@@ -428,7 +419,7 @@ mod test {
     fn test_src_execs_per_sec_count_with_timeout() {
         let cfg = BenchCfg::default();
         let mut src = LognormalLatencySrc::<1>::new_with_default_sigmas([Duration::from_millis(5)]);
-        let eps = cfg.src_execs_per_sec(
+        let eps = cfg.execs_per_sec(
             &mut src,
             RunLength::CountWithTimeout(200, Duration::from_millis(5)),
         );
