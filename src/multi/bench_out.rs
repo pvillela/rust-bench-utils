@@ -139,7 +139,6 @@ impl<const K: usize> BenchOut<K> {
         self.first().recording_unit()
     }
 
-
     /// Number of observations (sample size) for a function, as an integer.
     #[inline(always)]
     pub fn n(&self) -> u64 {
@@ -183,7 +182,7 @@ impl<const K: usize> BenchOut<K> {
     /// Sample means of the natural logarithms of latencies.
     ///
     /// # Panics
-    /// Panics if the number of observations is zero.
+    /// Panics if the number of non-zero observations is zero.
     pub fn mean_lns(&self) -> [f64; K] {
         array::from_fn(|k| self.arr[k].mean_ln())
     }
@@ -191,7 +190,7 @@ impl<const K: usize> BenchOut<K> {
     /// Sample standard deviations of the natural logarithms of latencies.
     ///
     /// # Panics
-    /// Panics if the number of observations is zero.
+    /// Panics if the number of non-zero observations is zero.
     pub fn stdev_lns(&self) -> [f64; K] {
         array::from_fn(|k| self.arr[k].stdev_ln())
     }
@@ -210,7 +209,7 @@ impl<const K: usize> BenchOut<K> {
     /// # Panics
     ///
     /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
-    /// - `number of observations <= 1`.
+    /// - `number of non-zero observations <= 1`.
     /// - `self.stdev_ln() == 0`.
     pub fn student_ln_ts(&self, ln_mu0: f64) -> [f64; K] {
         array::from_fn(|k| self.arr[k].student_ln_t(ln_mu0))
@@ -240,7 +239,7 @@ impl<const K: usize> BenchOut<K> {
     /// # Panics
     ///
     /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
-    /// - Sample size <= 1.
+    /// - Number of non-zero observations <= 1.
     /// - `self.stdev_ln()` == 0.
     pub fn student_ln_ps(&self, ln_mu0: f64, alt_hyp: AltHyp) -> [f64; K] {
         array::from_fn(|k| self.arr[k].student_ln_p(ln_mu0, alt_hyp))
@@ -256,7 +255,7 @@ impl<const K: usize> BenchOut<K> {
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `Sample size <= 1`.
+    /// - `number of non-zero observations <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_ln_cis(&self, alpha: f64) -> [Ci; K] {
         array::from_fn(|k| self.arr[k].student_ln_ci(alpha))
@@ -315,7 +314,7 @@ impl<const K: usize> BenchOut<K> {
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `Sample size <= 1`.
+    /// - `number of non-zero observations <= 1`.
     /// - `self.stdev_ln()` == 0.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_ln_tests(&self, ln_mu0: f64, alt_hyp: AltHyp, alpha: f64) -> [HypTestResult; K] {

@@ -81,7 +81,7 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.out_f1().n_ln == 0` or `self.out_f2().n_ln == 0`.
+    /// Panics if `self.out_f1().n_nz == 0` or `self.out_f2().n_nz == 0`.
     pub fn mean_diff_ln_f1_f2(&self) -> f64 {
         self.0.mean_ln() - self.1.mean_ln()
     }
@@ -91,17 +91,17 @@ impl<'a> Comp<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if `self.out_f1().n_ln == 0` or `self.out_f2().n_ln == 0`.
+    /// Panics if `self.out_f1().n_nz == 0` or `self.out_f2().n_nz == 0`.
     pub fn ratio_medians_f1_f2_from_lns(&self) -> f64 {
         self.mean_diff_ln_f1_f2().exp()
     }
 
     fn moments_ln_f1(&self) -> SampleMoments {
-        SampleMoments::new(self.0.n_ln, self.0.sum_ln, self.0.sum2_ln)
+        SampleMoments::new(self.0.n_nz, self.0.sum_ln, self.0.sum2_ln)
     }
 
     fn moments_ln_f2(&self) -> SampleMoments {
-        SampleMoments::new(self.1.n_ln, self.1.sum_ln, self.1.sum2_ln)
+        SampleMoments::new(self.1.n_nz, self.1.sum_ln, self.1.sum2_ln)
     }
 
     /// Welch's t statistic for the hypothesis that
@@ -118,12 +118,12 @@ impl<'a> Comp<'a> {
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_ln <= 1`.
-    /// - `self.out_f2().n_ln <= 1`.
+    /// - `self.out_f1().n_nz <= 1`.
+    /// - `self.out_f2().n_nz <= 1`.
     /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
     pub fn welch_ln_t(&self, ln_d0: f64) -> f64 {
         welch_t(&self.moments_ln_f1(), &self.moments_ln_f2(), ln_d0).expect(
-            "`number of observations <= 1` for either sample or `both standard deviations == 0`",
+            "`number of non-zero observations <= 1` for either sample or `both standard deviations == 0`",
         )
     }
 
@@ -137,12 +137,12 @@ impl<'a> Comp<'a> {
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_ln <= 1`.
-    /// - `self.out_f2().n_ln <= 1`.
+    /// - `self.out_f1().n_nz <= 1`.
+    /// - `self.out_f2().n_nz <= 1`.
     /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
     pub fn welch_ln_df(&self) -> f64 {
         welch_df(&self.moments_ln_f1(), &self.moments_ln_f2()).expect(
-            "`number of observations <= 1` for either sample or `both standard deviations == 0`",
+            "`number of non-zero observations <= 1` for either sample or `both standard deviations == 0`",
         )
     }
 
@@ -160,12 +160,12 @@ impl<'a> Comp<'a> {
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_ln <= 1`.
-    /// - `self.out_f2().n_ln <= 1`.
+    /// - `self.out_f1().n_nz <= 1`.
+    /// - `self.out_f2().n_nz <= 1`.
     /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
     pub fn welch_ln_p(&self, ln_d0: f64, alt_hyp: AltHyp) -> f64 {
         welch_p(&self.moments_ln_f1(), &self.moments_ln_f2(), ln_d0, alt_hyp).expect(
-            "`number of observations <= 1` for either sample or `both standard deviations == 0`",
+            "`number of non-zero observations <= 1` for either sample or `both standard deviations == 0`",
         )
     }
 
@@ -181,12 +181,12 @@ impl<'a> Comp<'a> {
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_ln <= 1`.
-    /// - `self.out_f2().n_ln <= 1`.
+    /// - `self.out_f1().n_nz <= 1`.
+    /// - `self.out_f2().n_nz <= 1`.
     /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn welch_ln_ci(&self, alpha: f64) -> Ci {
-        welch_ci(&self.moments_ln_f1(), &self.moments_ln_f2(), alpha).expect("`number of observations <= 1` for either sample, `both standard deviations == 0`, or `alpha` not in open interval `(0, 1)`")
+        welch_ci(&self.moments_ln_f1(), &self.moments_ln_f2(), alpha).expect("`number of non-zero observations <= 1` for either sample, `both standard deviations == 0`, or `alpha` not in open interval `(0, 1)`")
     }
 
     /// Welch confidence interval for
@@ -199,8 +199,8 @@ impl<'a> Comp<'a> {
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_ln <= 1`.
-    /// - `self.out_f2().n_ln <= 1`.
+    /// - `self.out_f1().n_nz <= 1`.
+    /// - `self.out_f2().n_nz <= 1`.
     /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn welch_ratio_ci(&self, alpha: f64) -> Ci {
@@ -221,8 +221,8 @@ impl<'a> Comp<'a> {
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_ln <= 1`.
-    /// - `self.out_f2().n_ln <= 1`.
+    /// - `self.out_f1().n_nz <= 1`.
+    /// - `self.out_f2().n_nz <= 1`.
     /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn welch_value_position_wrt_ratio_ci(&self, value: f64, alpha: f64) -> PositionWrtCi {
@@ -246,8 +246,8 @@ impl<'a> Comp<'a> {
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_ln <= 1`.
-    /// - `self.out_f2().n_ln <= 1`.
+    /// - `self.out_f1().n_nz <= 1`.
+    /// - `self.out_f2().n_nz <= 1`.
     /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn welch_ln_test(&self, ln_d0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
@@ -257,7 +257,7 @@ impl<'a> Comp<'a> {
             ln_d0,
             alt_hyp,
             alpha,
-        ).expect("`number of observations <= 1` for either sample, `both standard deviations == 0`, or `alpha` not in open interval `(0, 1)`")
+        ).expect("`number of non-zero observations <= 1` for either sample, `both standard deviations == 0`, or `alpha` not in open interval `(0, 1)`")
     }
 
     #[cfg(feature = "_experimental")]
@@ -359,7 +359,7 @@ mod test {
             && out1.summary() == out2.summary()
             && out1.sum == out2.sum
             && out1.sum2 == out2.sum2
-            && out1.n_ln == out2.n_ln
+            && out1.n_nz == out2.n_nz
             && out1.sum_ln == out2.sum_ln
             && out1.sum2_ln == out2.sum2_ln
     }

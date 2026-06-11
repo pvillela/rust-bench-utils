@@ -2,9 +2,7 @@
 
 use std::{fmt::Debug, time::Duration};
 
-use crate::{
-    BenchCfg, LatencyUnit, SummaryStats, Timing, multi, new_timing, summary_stats,
-};
+use crate::{BenchCfg, LatencyUnit, SummaryStats, Timing, multi, new_timing, summary_stats};
 use basic_stats::{
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean, sample_stdev},
     normal::{student_1samp_ci, student_1samp_p, student_1samp_t, student_1samp_test},
@@ -55,7 +53,7 @@ pub struct BenchOut {
     pub(crate) hist: Timing,
     pub(crate) sum: f64,
     pub(crate) sum2: f64,
-    pub(crate) n_ln: u64,
+    pub(crate) n_nz: u64,
     pub(crate) sum_ln: f64,
     pub(crate) sum2_ln: f64,
 }
@@ -67,7 +65,7 @@ impl BenchOut {
         let hist = new_timing(20 * 1000 * 1000, cfg.sigfig());
         let sum = 0.;
         let sum2 = 0.;
-        let n_ln = 0;
+        let n_nz = 0;
         let sum_ln = 0.;
         let sum2_ln = 0.;
 
@@ -76,7 +74,7 @@ impl BenchOut {
             hist,
             sum,
             sum2,
-            n_ln,
+            n_nz,
             sum_ln,
             sum2_ln,
         }
@@ -109,7 +107,7 @@ impl BenchOut {
         self.hist.reset();
         self.sum = 0.;
         self.sum2 = 0.;
-        self.n_ln = 0;
+        self.n_nz = 0;
         self.sum_ln = 0.;
         self.sum2_ln = 0.
     }
@@ -127,7 +125,7 @@ impl BenchOut {
 
         if latency > Duration::ZERO {
             let ln = self.recording_unit.latency_as_f64(latency).ln();
-            self.n_ln += 1;
+            self.n_nz += 1;
             self.sum_ln += ln;
             self.sum2_ln += ln.powi(2);
         }
@@ -161,7 +159,6 @@ impl BenchOut {
         self.recording_unit
     }
 
-
     /// Number of observations (sample size) for a function, as an integer.
     #[inline(always)]
     pub fn n(&self) -> u64 {
@@ -189,8 +186,7 @@ impl BenchOut {
     /// # Panics
     /// Panics if the number of observations is zero.
     pub fn mean(&self) -> Duration {
-        let mean_rec = sample_mean(self.n(), self.sum)
-            .expect("number of observations is zero");
+        let mean_rec = sample_mean(self.n(), self.sum).expect("number of observations is zero");
         self.recording_unit.latency_from_f64(mean_rec)
     }
 
@@ -199,8 +195,8 @@ impl BenchOut {
     /// # Panics
     /// Panics if the number of observations is zero.
     pub fn stdev(&self) -> Duration {
-        let stdev_rec = sample_stdev(self.n(), self.sum, self.sum2)
-            .expect("number of observations is zero");
+        let stdev_rec =
+            sample_stdev(self.n(), self.sum, self.sum2).expect("number of observations is zero");
         self.recording_unit.latency_from_f64(stdev_rec)
     }
 
@@ -215,19 +211,18 @@ impl BenchOut {
     /// Sample mean of the natural logarithms of latencies (in the recording unit).
     ///
     /// # Panics
-    /// Panics if the number of observations is zero.
+    /// Panics if the number of non-zero observations is zero.
     pub fn mean_ln(&self) -> f64 {
-        sample_mean(self.n_ln, self.sum_ln)
-            .expect("number of observations is zero")
+        sample_mean(self.n_nz, self.sum_ln).expect("number of non-zero observations is zero")
     }
 
     /// Sample standard deviation of the natural logarithms of latencies.
     ///
     /// # Panics
-    /// Panics if the number of observations is zero.
+    /// Panics if the number of non-zero observations is zero.
     pub fn stdev_ln(&self) -> f64 {
-        sample_stdev(self.n_ln, self.sum_ln, self.sum2_ln)
-            .expect("number of observations is zero")
+        sample_stdev(self.n_nz, self.sum_ln, self.sum2_ln)
+            .expect("number of non-zero observations is zero")
     }
 
     /// Student's one-sample t statistic for
@@ -244,11 +239,12 @@ impl BenchOut {
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `number of observations <= 1`.
+    /// - `number of non-zero observations <= 1`.
     /// - `self.stdev_ln() == 0`.
     pub fn student_ln_t(&self, ln_mu0: f64) -> f64 {
-        let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        student_1samp_t(&moments, ln_mu0).expect("`number of observations <= 1` or `self.stdev_ln() == 0`")
+        let moments = SampleMoments::new(self.n_nz, self.sum_ln, self.sum2_ln);
+        student_1samp_t(&moments, ln_mu0)
+            .expect("`number of non-zero observations <= 1` or `self.stdev_ln() == 0`")
     }
 
     /// Degrees of freedom for Student's t statistic for `mean(ln(latency(f)))` (where `ln` is the natural logarithm,
@@ -258,7 +254,7 @@ impl BenchOut {
     /// This assumption is widely supported by performance analysis theory and empirical data.
     /// Thus, this statistics equivalently pertains to `ln(median(latency(f)))`.
     pub fn student_ln_df(&self) -> f64 {
-        self.n_ln as f64 - 1.
+        self.n_nz as f64 - 1.
     }
 
     /// p-value of Student's one-sample t-test for
@@ -275,12 +271,12 @@ impl BenchOut {
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - Sample size <= 1.
+    /// - Number of non-zero observations <= 1.
     /// - `self.stdev_ln()` == 0.
     pub fn student_ln_p(&self, ln_mu0: f64, alt_hyp: AltHyp) -> f64 {
-        let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
+        let moments = SampleMoments::new(self.n_nz, self.sum_ln, self.sum2_ln);
         student_1samp_p(&moments, ln_mu0, alt_hyp)
-            .expect("`number of observations <= 1` or `self.stdev_ln() == 0`")
+            .expect("`number of non-zero observations <= 1` or `self.stdev_ln() == 0`")
     }
 
     /// Student's one-sample confidence interval for
@@ -293,11 +289,13 @@ impl BenchOut {
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `Sample size <= 1`.
+    /// - `Number of non-zero observations <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_ln_ci(&self, alpha: f64) -> Ci {
-        let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        student_1samp_ci(&moments, alpha).expect("`number of observations <= 1` or `alpha` not in open interval `(0, 1)`")
+        let moments = SampleMoments::new(self.n_nz, self.sum_ln, self.sum2_ln);
+        student_1samp_ci(&moments, alpha).expect(
+            "`number of non-zero observations <= 1` or `alpha` not in open interval `(0, 1)`",
+        )
     }
 
     /// Student's one-sample confidence interval for
@@ -366,12 +364,12 @@ impl BenchOut {
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `Sample size <= 1`.
+    /// - `number of non-zero observations <= 1`.
     /// - `self.stdev_ln()` == 0.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_ln_test(&self, ln_mu0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
-        let moments = SampleMoments::new(self.n_ln, self.sum_ln, self.sum2_ln);
-        student_1samp_test(&moments, ln_mu0, alt_hyp, alpha).expect("`number of observations <= 1` or `self.stdev_ln() == 0` or `alpha` not in open interval `(0, 1)`")
+        let moments = SampleMoments::new(self.n_nz, self.sum_ln, self.sum2_ln);
+        student_1samp_test(&moments, ln_mu0, alt_hyp, alpha).expect("`number of non-zero observations <= 1` or `self.stdev_ln() == 0` or `alpha` not in open interval `(0, 1)`")
     }
 
     #[cfg(feature = "_bench_diff")]
@@ -395,11 +393,10 @@ impl BenchOut {
         self.sum2
     }
 
-    #[cfg(feature = "_bench_diff")]
     #[inline(always)]
-    /// Sample size for log-latencies. Gated by feature **"_bench_diff"**.
-    pub fn n_ln(&self) -> u64 {
-        self.n_ln
+    /// Number of non-zero observations.
+    pub fn n_nz(&self) -> u64 {
+        self.n_nz
     }
 
     #[cfg(feature = "_bench_diff")]
@@ -419,13 +416,13 @@ impl BenchOut {
 
 impl Debug for BenchOut {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("BenchOut {{ recording_unit={:?}, sigfig={}, n={}, sum={}, sum2={}, n_ln={}, sum_ln={}, sum2_ln={}, summary={:?} }}",
+        f.write_str(&format!("BenchOut {{ recording_unit={:?}, sigfig={}, n={}, sum={}, sum2={}, n_nz={}, sum_ln={}, sum2_ln={}, summary={:?} }}",
             self.recording_unit,
             self.hist.sigfig(),
             self.n(),
             self.sum,
             self.sum2,
-            self.n_ln,
+            self.n_nz,
             self.sum_ln,
             self.sum2_ln,
             self.summary()))
