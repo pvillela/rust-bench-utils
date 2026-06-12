@@ -1,9 +1,6 @@
 use crate::{LatencyUnit, latency, multi::LatencySrc};
 use log::debug;
-use std::{
-    ops::{Add, Div},
-    time::Duration,
-};
+use std::time::Duration;
 
 /// Specifies how long a benchmark should run for. Encapsulates a target number of iterations for the benchmark to run
 /// and a time duration. The benchmark run length can be set as a number of iterations, a time duration, or
@@ -61,7 +58,6 @@ impl RunLength {
 /// Benchmark configuration, excluding the benchmark run length.
 ///
 /// Encapsulates the following data:
-/// - `exit_check_count`: number of executions between checks that the benchmark should end
 /// - `warmup_millis`: warm-up duration in milliseconds
 /// - `status_millis`: milliseconds between status reports during bench execution, if progress status reporting is enabled
 /// - `recording_unit`: time unit for latency recording
@@ -70,7 +66,6 @@ impl RunLength {
 ///   value resolution and separation
 #[derive(Debug, Clone)]
 pub struct BenchCfg {
-    exit_check_count: u64,
     warmup_millis: u64,
     status_millis: u64,
     recording_unit: LatencyUnit,
@@ -79,7 +74,7 @@ pub struct BenchCfg {
 
 impl BenchCfg {
     /// Default number of executions between checks that the benchmark should end.
-    pub const DEFAULT_EXIT_CHECK_COUNT: u64 = 100;
+    pub const DEFAULT_EXIT_CHECK_COUNT: u64 = u64::MAX;
     /// Default warm-up duration in milliseconds.
     pub const DEFAULT_WARMUP_MILLIS: u64 = 3000;
     /// Default status reporting interval in milliseconds.
@@ -88,11 +83,6 @@ impl BenchCfg {
     pub const DEFAULT_RECORDING_UNIT: LatencyUnit = LatencyUnit::Nano;
     /// Default number of significant decimal digits for the HDR histogram.
     pub const DEFAULT_SIGFIG: u8 = 3;
-
-    /// The number of executions between checks that the benchmark should end.
-    pub fn exit_check_count(&self) -> u64 {
-        self.exit_check_count
-    }
 
     /// The number of milliseconds used to "warm-up" the benchmark.
     pub fn warmup_millis(&self) -> u64 {
@@ -114,12 +104,6 @@ impl BenchCfg {
     /// This is the number of significant decimal digits to which the histogram will maintain value resolution and separation.
     pub fn sigfig(&self) -> u8 {
         self.sigfig
-    }
-
-    /// Sets the number of executions between checks that the benchmark should end.
-    pub fn with_exit_check_count(mut self, exit_check_count: u64) -> Self {
-        self.exit_check_count = exit_check_count;
-        self
     }
 
     /// Sets the number of milliseconds used to "warm-up" the benchmark.
@@ -151,15 +135,12 @@ impl BenchCfg {
         const EXEC_DIVISOR: u32 = 30;
 
         // Computes the median of a vector of length 3 or less.
-        fn median<T, D>(mut vec: Vec<T>, vec_len_2_divisor: D) -> Option<T>
-        where
-            T: Ord + Copy + Add<Output = T> + Div<D, Output = T>,
-        {
-            vec.sort();
+        fn median(mut vec: Vec<f64>) -> Option<f64> {
+            vec.sort_by(f64::total_cmp);
             match vec.len() {
                 0 => None,
                 1 => Some(vec[0]),
-                2 => Some((vec[0] + vec[1]) / vec_len_2_divisor),
+                2 => Some((vec[0] + vec[1]) / 2.0),
                 3 => Some(vec[1]),
                 _ => panic!("vector length exceeds 3"),
             }
@@ -168,7 +149,6 @@ impl BenchCfg {
         let adj_warmup_run_length = RunLength::Time(Duration::from_millis(
             self.warmup_millis / WARMUP_DIVISOR as u64,
         ));
-        let adj_exit_check_run_length = RunLength::Count(self.exit_check_count);
         let adj_exec_run_length = match exec_run_length {
             RunLength::Count(count) => RunLength::Count(count / EXEC_DIVISOR as u64),
             RunLength::Time(dur) => RunLength::Time(dur / EXEC_DIVISOR),
@@ -179,40 +159,45 @@ impl BenchCfg {
 
         let run_lengths = [
             adj_warmup_run_length,
-            adj_exit_check_run_length,
+            // adj_exit_check_run_length,
             adj_exec_run_length,
         ];
-        debug!("execs_per_second_budget >>> run_lengths[warmup, exit_check, exec]={run_lengths:?}");
+        debug!("execs_per_sec_budget >>> run_lengths[warmup, exit_check, exec]={run_lengths:?}");
 
         let counts = run_lengths
             .iter()
             .filter_map(|rl| match rl {
-                RunLength::Count(count) => Some(*count),
-                RunLength::CountWithTimeout(count, _) => Some(*count),
+                RunLength::Count(count) => Some(*count as f64),
+                RunLength::CountWithTimeout(count, _) => Some(*count as f64),
                 _ => None,
             })
             .collect::<Vec<_>>();
+        debug!("execs_per_sec_budget >>> counts={counts:?}");
 
-        let durs = [adj_exec_run_length]
+        let durs = run_lengths
             .iter()
             .filter_map(|rl| match rl {
-                RunLength::Time(dur) => Some(*dur),
-                RunLength::CountWithTimeout(_, dur) => Some(*dur),
+                RunLength::Time(dur) => Some(dur.as_secs_f64()),
+                RunLength::CountWithTimeout(_, dur) => Some(dur.as_secs_f64()),
                 _ => None,
             })
             .collect::<Vec<_>>();
+        debug!("execs_per_sec_budget >>> durs={durs:?}");
 
-        let median_count = median(counts, 2);
-        let median_dur = median(durs, 2);
+        let median_count = median(counts);
+        let median_dur = median(durs);
+        debug!("execs_per_sec_budget >>> median_count={median_count:?}, median_dur={median_dur:?}");
 
         let budget = match (median_count, median_dur) {
-            (Some(count), Some(dur)) => RunLength::CountWithTimeout(count, dur),
-            (Some(count), None) => RunLength::Count(count),
-            (None, Some(dur)) => RunLength::Time(dur),
+            (Some(count), Some(dur)) => {
+                RunLength::CountWithTimeout(count.round() as u64, Duration::from_secs_f64(dur))
+            }
+            (Some(count), None) => RunLength::Count(count.round() as u64),
+            (None, Some(dur)) => RunLength::Time(Duration::from_secs_f64(dur)),
             (None, None) => unreachable!("impossible"),
         };
 
-        debug!("execs_per_second_budget >>> budget={budget:?}");
+        debug!("execs_per_sec_budget >>> budget={budget:?}");
         budget
     }
 
@@ -231,8 +216,10 @@ impl BenchCfg {
         exec_run_length: RunLength,
     ) -> f64 {
         let budget = self.execs_per_sec_budget(exec_run_length);
-        debug!("execs_per_second_budget >>> execs_per_second_budget={budget:?}");
-        latency::execs_per_sec(src.aggregate(), budget)
+        debug!("execs_per_sec >>> execs_per_sec_budget={budget:?}");
+        let eps = latency::execs_per_sec(src.aggregate(), budget);
+        debug!("execs_per_sec >>> execs_per_sec={eps:?}");
+        eps
     }
 
     /// Number of executions between status updates, derived from `execs_per_second`.
@@ -245,7 +232,6 @@ impl BenchCfg {
 impl Default for BenchCfg {
     fn default() -> Self {
         Self {
-            exit_check_count: Self::DEFAULT_EXIT_CHECK_COUNT,
             warmup_millis: Self::DEFAULT_WARMUP_MILLIS,
             status_millis: Self::DEFAULT_STATUS_MILLIS,
             recording_unit: Self::DEFAULT_RECORDING_UNIT,
@@ -408,7 +394,9 @@ mod test {
     }
 
     #[test]
+    // cargo test --package bench_utils --lib --all-features -- bench_cfg::test::test_bench_cfg_execs_per_second --exact --nocapture --include-ignored
     fn test_bench_cfg_execs_per_second() {
+        _ = env_logger::try_init();
         let cfg = BenchCfg::default();
         // Using a no-op closure, the calibration should return a reasonable positive value
         let mut src = LatencySrc1(|| {});

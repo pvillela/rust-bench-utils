@@ -21,18 +21,14 @@ impl<const K: usize> BenchState<K> {
         src: &mut impl LatencySrc<K>,
         run_length: RunLength,
         status_count: u64,
-        // Used for control of the exit from the iteration loop when all of `status_count`, `exec_count`, and
-        // `exit_check_count` are too high compared to `run_length` duration.
-        est_count: u64,
         status: &mut Option<impl FnMut(u64)>,
-        exit_check_count: u64,
     ) {
         assert!(status_count > 0, "status_count must be > 0");
 
         let (exec_count, run_time) = run_length.get_exec_count_and_duration();
         assert!(exec_count > 0, "exec_count must be > 0");
 
-        let mut est_remaining_iters = est_count;
+        // let mut est_remaining_iters = est_count;
         let mut acc_latency = Duration::ZERO; // enables testing with synthetic latency sources
         let start = Instant::now();
 
@@ -45,16 +41,14 @@ impl<const K: usize> BenchState<K> {
                 true
             };
 
-            est_remaining_iters = est_remaining_iters.saturating_sub(1);
+            let elapsed = start.elapsed();
 
             if i == exec_count
-                || i.is_multiple_of(exit_check_count)
+                || elapsed >= run_time
                 || i.is_multiple_of(status_count)
-                || est_remaining_iters == 0
                 || acc_latency >= run_time
                 || src_finished
             {
-                let elapsed = start.elapsed();
                 let finished = i == exec_count
                     || elapsed >= run_time
                     || acc_latency >= run_time
@@ -68,16 +62,9 @@ impl<const K: usize> BenchState<K> {
 
                 if finished {
                     debug!(
-                        "execute >>> i={i}, elapsed={elapsed:?}, exec_count={exec_count}, est_remaining_iters={est_remaining_iters}, acc_latency={acc_latency:?}, run_time={run_time:?}, iter_finished={src_finished}"
+                        "execute >>> i={i}, elapsed={elapsed:?}, exec_count={exec_count}, acc_latency={acc_latency:?}, run_time={run_time:?}, src_finished={src_finished}"
                     );
                     break;
-                }
-
-                if est_remaining_iters == 0 {
-                    let remaining_time = run_time - elapsed;
-                    let avg_time_per_iter = elapsed / i as u32;
-                    est_remaining_iters =
-                        remaining_time.div_duration_f64(avg_time_per_iter).ceil() as u64;
                 }
             }
         }
@@ -125,9 +112,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
         &mut src,
         warmup_run_length,
         warmup_status_count,
-        warmup_est_count,
         &mut warmup_status,
-        cfg.exit_check_count(),
     );
     state.reset();
     drop(warmup_status);
@@ -144,9 +129,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
         &mut src,
         exec_run_length,
         warmup_status_count,
-        exec_est_count,
         &mut exec_status,
-        cfg.exit_check_count(),
     );
 
     state
@@ -364,16 +347,16 @@ mod validate {
 
         // Assertions
         {
-            for i in 0..K {
-                rel_approx_eq_dur!(raw_means[i], out[i].mean(), epsilon);
-            }
-
             if K >= 2 {
                 rel_approx_eq_dur!(
                     aggregate_raw_mean,
                     aggregate_out_mean,
                     epsilon / (K as f64).sqrt()
                 );
+            }
+
+            for i in 0..K {
+                rel_approx_eq_dur!(raw_means[i], out[i].mean(), epsilon);
             }
         }
     }
@@ -594,7 +577,7 @@ mod validate {
 mod status {
     use super::*;
     use crate::{
-        LatencyUnit, RunLength, multi::test_support::LognormalLatencySrc, status::DefaultStatus,
+        LatencyUnit, RunLength, multi::test_support::ConstLatencySrc, status::DefaultStatus,
         test_support::StringWriter,
     };
     use basic_stats::rel_approx_eq;
@@ -669,14 +652,12 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         {
             assert_eq!(caps[1], warmup_millis.to_string());
-            let warmup_last = caps[2].parse::<u64>().unwrap();
             let warmup_est_count = caps[3].parse::<u64>().unwrap();
             rel_approx_eq!(
                 warmup_est_count as f64,
                 warmup_run_length.estimated_count(execs_per_second) as f64,
                 epsilon
             );
-            rel_approx_eq!(warmup_last as f64, warmup_est_count as f64, epsilon);
         }
 
         {
@@ -692,21 +673,19 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
                 exec_run_length.estimated_count(execs_per_second) as f64,
                 epsilon
             );
-            rel_approx_eq!(exec_last as f64, exec_est_count as f64, epsilon);
             assert_eq!(out.n(), exec_last);
         }
     }
 
+    // Use `ConstLatencySrc` to allow accurate checking of status output.
+
     fn src1(base_target_latency: Duration) -> impl LatencySrc<1> {
-        LognormalLatencySrc::new_with_default_sigmas([base_target_latency])
+        ConstLatencySrc::new([base_target_latency])
     }
 
     fn src2(base_target_latency: Duration) -> impl LatencySrc<2> {
         let delta = base_target_latency / 10;
-        LognormalLatencySrc::new_with_default_sigmas([
-            base_target_latency + delta,
-            base_target_latency - delta,
-        ])
+        ConstLatencySrc::new([base_target_latency + delta, base_target_latency - delta])
     }
 
     mod status1 {
@@ -731,7 +710,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         #[test]
         fn test_0_10_0_200() {
-            const EPSILON: f64 = 2.0;
+            const EPSILON: f64 = 0.001;
 
             let warmup_millis: u64 = 0;
             let target_latency = Duration::from_micros(10);
@@ -778,7 +757,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         #[test]
         fn test_0_10_1_200() {
-            const EPSILON: f64 = 2.0;
+            const EPSILON: f64 = 0.001;
 
             let warmup_millis: u64 = 0;
             let target_latency = Duration::from_micros(10);
@@ -796,7 +775,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         #[test]
         fn test_1_10_0_200() {
-            const EPSILON: f64 = 0.50;
+            const EPSILON: f64 = 0.001;
 
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
@@ -814,7 +793,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         #[test]
         fn test_1_10_1_200() {
-            const EPSILON: f64 = 0.50;
+            const EPSILON: f64 = 0.001;
 
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
@@ -832,7 +811,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         #[test]
         fn test_1_10_1_300() {
-            const EPSILON: f64 = 0.10;
+            const EPSILON: f64 = 0.001;
 
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
@@ -850,7 +829,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         #[test]
         fn test_1_10_1_2000() {
-            const EPSILON: f64 = 0.10;
+            const EPSILON: f64 = 0.001;
 
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
@@ -889,7 +868,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         #[test]
         fn test_0_10_0_200() {
-            const EPSILON: f64 = 2.0;
+            const EPSILON: f64 = 0.001;
 
             let warmup_millis: u64 = 0;
             let target_latency = Duration::from_micros(10);
@@ -936,7 +915,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         #[test]
         fn test_0_10_1_200() {
-            const EPSILON: f64 = 2.0;
+            const EPSILON: f64 = 0.001;
 
             let warmup_millis: u64 = 0;
             let target_latency = Duration::from_micros(10);
@@ -954,7 +933,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         #[test]
         fn test_1_10_0_200() {
-            const EPSILON: f64 = 0.50;
+            const EPSILON: f64 = 0.001;
 
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
@@ -972,7 +951,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         #[test]
         fn test_1_10_1_200() {
-            const EPSILON: f64 = 0.50;
+            const EPSILON: f64 = 0.001;
 
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
@@ -990,7 +969,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         #[test]
         fn test_1_10_1_300() {
-            const EPSILON: f64 = 0.10;
+            const EPSILON: f64 = 0.001;
 
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
@@ -1008,7 +987,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         #[test]
         fn test_1_10_1_2000() {
-            const EPSILON: f64 = 0.10;
+            const EPSILON: f64 = 0.001;
 
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
