@@ -61,33 +61,47 @@ impl RunLength {
 /// Benchmark configuration, excluding the benchmark run length.
 ///
 /// Encapsulates the following data:
+/// - `exit_check_count`: number of executions between checks that the benchmark should end
 /// - `warmup_millis`: warm-up duration in milliseconds
+/// - `status_millis`: milliseconds between status reports during bench execution, if progress status reporting is enabled
 /// - `recording_unit`: time unit for latency recording
 /// - `sigfig`: as data is stored in an [HDR (high dynamic range) histogram](https://docs.rs/hdrhistogram/latest/hdrhistogram/index.html),
 ///   this is the number of significant decimal digits (of `recording_unit`) to which the histogram will maintain
 ///   value resolution and separation
-/// - `status_millis`: milliseconds between status reports during bench execution
 #[derive(Debug, Clone)]
 pub struct BenchCfg {
+    exit_check_count: u64,
     warmup_millis: u64,
+    status_millis: u64,
     recording_unit: LatencyUnit,
     sigfig: u8,
-    status_millis: u64,
 }
 
 impl BenchCfg {
+    /// Default number of executions between checks that the benchmark should end.
+    pub const DEFAULT_EXIT_CHECK_COUNT: u64 = 100;
     /// Default warm-up duration in milliseconds.
     pub const DEFAULT_WARMUP_MILLIS: u64 = 3000;
+    /// Default status reporting interval in milliseconds.
+    pub const DEFAULT_STATUS_MILLIS: u64 = 1000;
     /// Default unit for recording latencies.
     pub const DEFAULT_RECORDING_UNIT: LatencyUnit = LatencyUnit::Nano;
     /// Default number of significant decimal digits for the HDR histogram.
     pub const DEFAULT_SIGFIG: u8 = 3;
-    /// Default status reporting interval in milliseconds.
-    pub const DEFAULT_STATUS_MILLIS: u64 = 1000;
+
+    /// The number of executions between checks that the benchmark should end.
+    pub fn exit_check_count(&self) -> u64 {
+        self.exit_check_count
+    }
 
     /// The number of milliseconds used to "warm-up" the benchmark.
     pub fn warmup_millis(&self) -> u64 {
         self.warmup_millis
+    }
+
+    /// Status reporting interval in milliseconds.
+    pub fn status_millis(&self) -> u64 {
+        self.status_millis
     }
 
     /// Unit in which latencies are recorded.
@@ -102,14 +116,21 @@ impl BenchCfg {
         self.sigfig
     }
 
-    /// Status reporting interval in milliseconds.
-    pub fn status_millis(&self) -> u64 {
-        self.status_millis
+    /// Sets the number of executions between checks that the benchmark should end.
+    pub fn with_exit_check_count(mut self, exit_check_count: u64) -> Self {
+        self.exit_check_count = exit_check_count;
+        self
     }
 
-    /// Changes the number of milliseconds used to "warm-up" the benchmark.
+    /// Sets the number of milliseconds used to "warm-up" the benchmark.
     pub fn with_warmup_millis(mut self, warmup_millis: u64) -> Self {
         self.warmup_millis = warmup_millis;
+        self
+    }
+
+    /// Sets the status reporting interval in milliseconds.
+    pub fn with_status_millis(mut self, status_millis: u64) -> Self {
+        self.status_millis = status_millis;
         self
     }
 
@@ -122,12 +143,6 @@ impl BenchCfg {
     /// Sets the number of significant figures for the HDR histogram.
     pub fn with_sigfig(mut self, sigfig: u8) -> Self {
         self.sigfig = sigfig;
-        self
-    }
-
-    /// Sets the status reporting interval in milliseconds.
-    pub fn with_status_millis(mut self, status_millis: u64) -> Self {
-        self.status_millis = status_millis;
         self
     }
 
@@ -153,7 +168,7 @@ impl BenchCfg {
         let adj_warmup_run_length = RunLength::Time(Duration::from_millis(
             self.warmup_millis / WARMUP_DIVISOR as u64,
         ));
-        let adj_status_run_length = RunLength::Time(Duration::from_millis(self.status_millis));
+        let adj_exit_check_run_length = RunLength::Count(self.exit_check_count);
         let adj_exec_run_length = match exec_run_length {
             RunLength::Count(count) => RunLength::Count(count / EXEC_DIVISOR as u64),
             RunLength::Time(dur) => RunLength::Time(dur / EXEC_DIVISOR),
@@ -164,10 +179,10 @@ impl BenchCfg {
 
         let run_lengths = [
             adj_warmup_run_length,
-            adj_status_run_length,
+            adj_exit_check_run_length,
             adj_exec_run_length,
         ];
-        debug!("execs_per_second_budget >>> run_lengths[warmup, status, exec]={run_lengths:?}");
+        debug!("execs_per_second_budget >>> run_lengths[warmup, exit_check, exec]={run_lengths:?}");
 
         let counts = run_lengths
             .iter()
@@ -230,10 +245,11 @@ impl BenchCfg {
 impl Default for BenchCfg {
     fn default() -> Self {
         Self {
+            exit_check_count: Self::DEFAULT_EXIT_CHECK_COUNT,
             warmup_millis: Self::DEFAULT_WARMUP_MILLIS,
+            status_millis: Self::DEFAULT_STATUS_MILLIS,
             recording_unit: Self::DEFAULT_RECORDING_UNIT,
             sigfig: Self::DEFAULT_SIGFIG,
-            status_millis: Self::DEFAULT_STATUS_MILLIS,
         }
     }
 }

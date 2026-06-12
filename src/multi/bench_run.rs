@@ -21,10 +21,11 @@ impl<const K: usize> BenchState<K> {
         src: &mut impl LatencySrc<K>,
         run_length: RunLength,
         status_count: u64,
-        // Used in control of the exit from the iteration loop when both `status_count` and `exec_count` are too high
-        // compared to `run_length` duration.
+        // Used for control of the exit from the iteration loop when all of `status_count`, `exec_count`, and
+        // `exit_check_count` are too high compared to `run_length` duration.
         est_count: u64,
         status: &mut Option<impl FnMut(u64)>,
+        exit_check_count: u64,
     ) {
         assert!(status_count > 0, "status_count must be > 0");
 
@@ -36,7 +37,7 @@ impl<const K: usize> BenchState<K> {
         let start = Instant::now();
 
         for i in 1..=exec_count {
-            let iter_finished = if let Some(latencies) = src.next() {
+            let src_finished = if let Some(latencies) = src.next() {
                 acc_latency += latencies.iter().sum();
                 self.capture_data(latencies);
                 false
@@ -46,17 +47,18 @@ impl<const K: usize> BenchState<K> {
 
             est_remaining_iters = est_remaining_iters.saturating_sub(1);
 
-            if i % status_count == 0
-                || i == exec_count
+            if i == exec_count
+                || i.is_multiple_of(exit_check_count)
+                || i.is_multiple_of(status_count)
                 || est_remaining_iters == 0
                 || acc_latency >= run_time
-                || iter_finished
+                || src_finished
             {
                 let elapsed = start.elapsed();
                 let finished = i == exec_count
                     || elapsed >= run_time
                     || acc_latency >= run_time
-                    || iter_finished;
+                    || src_finished;
 
                 if (i % status_count == 0 || finished)
                     && let Some(exec_status) = status
@@ -66,7 +68,7 @@ impl<const K: usize> BenchState<K> {
 
                 if finished {
                     debug!(
-                        "execute >>> i={i}, elapsed={elapsed:?}, exec_count={exec_count}, est_remaining_iters={est_remaining_iters}, acc_latency={acc_latency:?}, run_time={run_time:?}, iter_finished={iter_finished}"
+                        "execute >>> i={i}, elapsed={elapsed:?}, exec_count={exec_count}, est_remaining_iters={est_remaining_iters}, acc_latency={acc_latency:?}, run_time={run_time:?}, iter_finished={src_finished}"
                     );
                     break;
                 }
@@ -104,8 +106,6 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     let mut state = BenchOut::new(cfg);
     let execs_per_second = cfg.execs_per_sec(&mut src, exec_run_length);
     debug!("bench_run_x >>> execs_per_second={execs_per_second}");
-    let status_count = cfg.status_count(execs_per_second);
-    debug!("bench_run_x >>> status_count={status_count}");
 
     let warmup_run_length = RunLength::Time(Duration::from_millis(cfg.warmup_millis()));
     let warmup_est_time = warmup_run_length.estimated_time(execs_per_second);
@@ -115,24 +115,38 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
 
     // Warm-up.
     let mut warmup_status = S::part_apply(s.warmup_status(), warmup_est_time, warmup_est_count);
+    let warmup_status_count = if warmup_status.is_some() {
+        cfg.status_count(execs_per_second)
+    } else {
+        u64::MAX
+    };
+    debug!("bench_run_x >>> warmup_status_count={warmup_status_count}");
     state.execute(
         &mut src,
         warmup_run_length,
-        status_count,
+        warmup_status_count,
         warmup_est_count,
         &mut warmup_status,
+        cfg.exit_check_count(),
     );
     state.reset();
     drop(warmup_status);
 
     // Execute.
     let mut exec_status = S::part_apply(s.exec_status(), exec_est_time, exec_est_count);
+    let exec_status_count = if exec_status.is_some() {
+        cfg.status_count(execs_per_second)
+    } else {
+        u64::MAX
+    };
+    debug!("bench_run_x >>> exec_status_count={exec_status_count}");
     state.execute(
         &mut src,
         exec_run_length,
-        status_count,
+        warmup_status_count,
         exec_est_count,
         &mut exec_status,
+        cfg.exit_check_count(),
     );
 
     state
@@ -174,11 +188,6 @@ pub fn bench_run_arg_cfg<const K: usize>(
     src: impl LatencySrc<K>,
     exec_run_length: RunLength,
 ) -> BenchOut<K> {
-    // 100 millis is reasonable to avoid churn in `BenchOut.execute` and support calculation of
-    // a reasonable estimation budget for `BenchCfg::*_execs_per_sec`.
-    const NO_STATUS_MILLIS: u64 = 100;
-
-    let cfg = &cfg.clone().with_status_millis(NO_STATUS_MILLIS);
     bench_run_x(cfg, src, exec_run_length, NoStatus)
 }
 
