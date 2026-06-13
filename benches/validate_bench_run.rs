@@ -14,7 +14,7 @@ fn run_bench_with_status(
     let name = format!(
         "target_latency={target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}"
     );
-    let exec_count = (bench_time.as_secs_f64() / target_latency.as_secs_f64()).round() as u64;
+    let exec_count = (bench_time.as_secs_f64() / target_latency.as_secs_f64()).round() as usize;
 
     println!("validate_bench_run: {name}");
 

@@ -21,7 +21,7 @@ pub fn validate_latency_overhead(
     cfg: &BenchCfg,
     bench_duration: Duration,
     target_latency: Duration,
-    group_size: u64,
+    group_size: usize,
 ) -> (Duration, Duration) {
     assert!(
         target_latency > Duration::ZERO && group_size > 0,
@@ -37,7 +37,7 @@ pub fn validate_latency_overhead(
 
     let target_group_latency = target_latency * group_size as u32;
     let exec_count_group =
-        (bench_duration.as_secs_f64() / target_group_latency.as_secs_f64()).round() as u64;
+        (bench_duration.as_secs_f64() / target_group_latency.as_secs_f64()).round() as usize;
     let exec_count_solo = exec_count_group * group_size;
 
     println!("running solo_f: {name}");

@@ -8,11 +8,11 @@ use std::time::Duration;
 #[derive(Debug, Clone, Copy)]
 pub enum RunLength {
     /// Run for a fixed number of iterations.
-    Count(u64),
+    Count(usize),
     /// Run for a fixed duration.
     Time(Duration),
     /// Run for a fixed number of iterations, but stop early if the given duration is exceeded.
-    CountWithTimeout(u64, Duration),
+    CountWithTimeout(usize, Duration),
 }
 
 impl RunLength {
@@ -20,23 +20,23 @@ impl RunLength {
     ///
     /// The benchmark ends when the specified number of iterations is reached (or exceeded)
     /// or when the time duration is reached (or exceeded), whichever comes first.
-    pub fn get_exec_count_and_duration(&self) -> (u64, Duration) {
+    pub fn exec_count_and_duration(&self) -> (usize, Duration) {
         match self {
             Self::Count(count) => (*count, Duration::MAX),
-            Self::Time(duration) => (u64::MAX, *duration),
+            Self::Time(duration) => (usize::MAX, *duration),
             Self::CountWithTimeout(count, duration) => (*count, *duration),
         }
     }
 
     /// Estimated number of iterations.
-    pub(crate) fn estimated_count(&self, execs_per_second: f64) -> u64 {
+    pub(crate) fn estimated_count(&self, execs_per_second: f64) -> usize {
         assert!(execs_per_second > 0.0, "execs_per_second must be positive");
         match self {
             Self::Count(count) => *count,
-            Self::Time(duration) => (duration.as_secs_f64() * execs_per_second).round() as u64,
+            Self::Time(duration) => (duration.as_secs_f64() * execs_per_second).round() as usize,
             Self::CountWithTimeout(count, duration) => {
                 let count_from_duration =
-                    (duration.as_secs_f64() * execs_per_second).round() as u64;
+                    (duration.as_secs_f64() * execs_per_second).round() as usize;
                 *count.min(&count_from_duration)
             }
         }
@@ -73,8 +73,6 @@ pub struct BenchCfg {
 }
 
 impl BenchCfg {
-    /// Default number of executions between checks that the benchmark should end.
-    pub const DEFAULT_EXIT_CHECK_COUNT: u64 = u64::MAX;
     /// Default warm-up duration in milliseconds.
     pub const DEFAULT_WARMUP_MILLIS: u64 = 3000;
     /// Default status reporting interval in milliseconds.
@@ -150,10 +148,10 @@ impl BenchCfg {
             self.warmup_millis / WARMUP_DIVISOR as u64,
         ));
         let adj_exec_run_length = match exec_run_length {
-            RunLength::Count(count) => RunLength::Count(count / EXEC_DIVISOR as u64),
+            RunLength::Count(count) => RunLength::Count(count / EXEC_DIVISOR as usize),
             RunLength::Time(dur) => RunLength::Time(dur / EXEC_DIVISOR),
             RunLength::CountWithTimeout(count, dur) => {
-                RunLength::CountWithTimeout(count / EXEC_DIVISOR as u64, dur / EXEC_DIVISOR)
+                RunLength::CountWithTimeout(count / EXEC_DIVISOR as usize, dur / EXEC_DIVISOR)
             }
         };
 
@@ -190,9 +188,9 @@ impl BenchCfg {
 
         let budget = match (median_count, median_dur) {
             (Some(count), Some(dur)) => {
-                RunLength::CountWithTimeout(count.round() as u64, Duration::from_secs_f64(dur))
+                RunLength::CountWithTimeout(count.round() as usize, Duration::from_secs_f64(dur))
             }
-            (Some(count), None) => RunLength::Count(count.round() as u64),
+            (Some(count), None) => RunLength::Count(count.round() as usize),
             (None, Some(dur)) => RunLength::Time(Duration::from_secs_f64(dur)),
             (None, None) => unreachable!("impossible"),
         };
@@ -215,17 +213,18 @@ impl BenchCfg {
         src: &mut impl LatencySrc<K>,
         exec_run_length: RunLength,
     ) -> f64 {
-        let budget = self.execs_per_sec_budget(exec_run_length);
-        debug!("execs_per_sec >>> execs_per_sec_budget={budget:?}");
-        let eps = latency::execs_per_sec(src.aggregate(), budget);
-        debug!("execs_per_sec >>> execs_per_sec={eps:?}");
-        eps
+        let group_run_length = src.group_run_length(exec_run_length);
+        let group_budget = self.execs_per_sec_budget(group_run_length);
+        debug!("execs_per_sec >>> execs_per_sec_budget={group_budget:?}");
+        let group_eps = latency::execs_per_sec(src.aggregate(), group_budget);
+        debug!("execs_per_sec >>> execs_per_sec={group_eps:?}");
+        group_eps * src.group_size() as f64
     }
 
     /// Number of executions between status updates, derived from `execs_per_second`.
-    pub(crate) fn status_count(&self, execs_per_second: f64) -> u64 {
+    pub(crate) fn status_count(&self, execs_per_second: f64) -> usize {
         let status_count = self.status_millis as f64 / 1000.0 * execs_per_second;
-        1.max(status_count.ceil() as u64)
+        1.max(status_count.ceil() as usize)
     }
 }
 
@@ -277,18 +276,18 @@ mod test {
     #[test]
     fn test_run_length_get_exec_count_and_time() {
         // Count variant
-        let (count, dur) = RunLength::Count(100).get_exec_count_and_duration();
+        let (count, dur) = RunLength::Count(100).exec_count_and_duration();
         assert_eq!(count, 100);
         assert_eq!(dur, Duration::MAX);
 
         // Duration variant
-        let (count, dur) = RunLength::Time(Duration::from_secs(5)).get_exec_count_and_duration();
-        assert_eq!(count, u64::MAX);
+        let (count, dur) = RunLength::Time(Duration::from_secs(5)).exec_count_and_duration();
+        assert_eq!(count, usize::MAX);
         assert_eq!(dur, Duration::from_secs(5));
 
         // CountWithTimeout variant
         let (count, dur) =
-            RunLength::CountWithTimeout(100, Duration::from_secs(5)).get_exec_count_and_duration();
+            RunLength::CountWithTimeout(100, Duration::from_secs(5)).exec_count_and_duration();
         assert_eq!(count, 100);
         assert_eq!(dur, Duration::from_secs(5));
     }

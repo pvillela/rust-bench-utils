@@ -12,7 +12,7 @@ pub fn latency(f: impl FnOnce()) -> Duration {
 
 /// Invokes `f` `n` times and returns its latency.
 #[inline(always)]
-pub fn latency_n(mut f: impl FnMut(), n: u32) -> Duration {
+pub fn latency_n(mut f: impl FnMut(), n: usize) -> Duration {
     let start = Instant::now();
     for _ in 0..n {
         f();
@@ -41,11 +41,11 @@ impl<F: FnMut()> Iterator for LatencyIter<F> {
 
 /// An infinite iterator that encapsulates a closure `f` and, for each invocation
 /// of `next()`, yields the wall-clock latency duration from one invocation of `f`.
-pub struct LatencyIterN<F: FnMut()>(F, u32);
+pub struct LatencyIterN<F: FnMut()>(F, usize);
 
 impl<F: FnMut()> LatencyIterN<F> {
     /// Constructs `Self`.
-    pub fn new(f: F, n: u32) -> Self {
+    pub fn new(f: F, n: usize) -> Self {
         Self(f, n)
     }
 }
@@ -132,12 +132,12 @@ impl LatencyUnit {
 /// In particular, this can happen if `src` is finite and its length is less than or equal to one half
 /// of the estimation budget count.
 pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: RunLength) -> f64 {
-    let (budget_count, budget_dur) = budget.get_exec_count_and_duration();
+    let (budget_count, budget_dur) = budget.exec_count_and_duration();
     let mut acc_latency = Duration::from_nanos(0);
-    let mut acc_execs: u64 = 0;
+    let mut acc_execs: usize = 0;
 
     for i in 1.. {
-        let iter_execs = 2u64.pow(i - 1);
+        let iter_execs = 2usize.pow(i - 1);
         let iter_latency = (&mut src).take(iter_execs as usize).sum();
 
         acc_latency += iter_latency;

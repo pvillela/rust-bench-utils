@@ -55,19 +55,18 @@ fn run<const K: usize, R, F0, F1, Src>(
     let status_millis = base_status_millis * K as u64;
     let group_size = src.group_size() as u64;
 
-    let exec_count =
-        (bench_time.as_secs_f64() / (base_target_latency * K as u32).as_secs_f64()).round() as u64;
-    let bench_iterations = (exec_count / group_size).max(1);
+    let exec_count = (bench_time.as_secs_f64() / (base_target_latency * K as u32).as_secs_f64())
+        .round() as usize;
 
     println!(
-        "validate_bench_run: K={K}, base_target_latency={base_target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}, group_size={group_size}, exec_count={exec_count}, bench_iterations={bench_iterations}"
+        "validate_bench_run: K={K}, base_target_latency={base_target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}, group_size={group_size}, exec_count={exec_count}"
     );
 
     let cfg = BenchCfg::default()
         .with_warmup_millis(warmup_millis)
         .with_status_millis(status_millis)
         .with_recording_unit(LatencyUnit::Nano);
-    let out = runner(&cfg, src, RunLength::Count(bench_iterations));
+    let out = runner(&cfg, src, RunLength::Count(exec_count));
 
     let mut raw_latencies = Vec::<Duration>::new();
     if K >= 1 {
@@ -356,11 +355,11 @@ mod ungrouped {
 mod grouped_10 {
     use super::*;
 
-    const GROUP_SIZE: u32 = 10;
+    const GROUP_SIZE: usize = 10;
 
     fn fsrc1_grouped(
         base_target_latency: Duration,
-        group_size: u32,
+        group_size: usize,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
         let f = BusyWork::new(base_target_latency).fun();
         let src = LatencySrc1n::new(f.clone(), group_size);
@@ -369,7 +368,7 @@ mod grouped_10 {
 
     fn fsrc2_grouped(
         base_target_latency: Duration,
-        group_size: u32,
+        group_size: usize,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<2>> {
         let bw0 = BusyWork::new(base_target_latency);
         let effort0 = bw0.effort();

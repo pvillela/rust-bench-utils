@@ -14,7 +14,7 @@ pub trait Status<'a> {
     /// - `est_time` is the estimated warm-up duration.
     /// - `est_count` is the estimated number of warm-up iterations.
     /// - `i` is the current warm-up iteration.
-    fn warmup_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, u64, u64) + 'b>
+    fn warmup_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
     where
         'a: 'b;
 
@@ -24,20 +24,20 @@ pub trait Status<'a> {
     /// - `est_time` is the estimated execution duration.
     /// - `est_count` is the estimated number of execution iterations.
     /// - `i` is the current execution iteration.
-    fn exec_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, u64, u64) + 'b>
+    fn exec_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
     where
         'a: 'b;
 
     /// Partially applies `(est_time, est_count, i)` to a status closure,
-    /// yielding an `FnMut(u64)` closure
+    /// yielding an `FnMut(usize)` closure
     ///
     /// The returned closure only receives the iteration index `i`; the estimated duration
     /// and count are captured at construction time.
     fn part_apply(
-        status: Option<impl FnMut(Duration, u64, u64)>,
+        status: Option<impl FnMut(Duration, usize, usize)>,
         est_time: Duration,
-        est_count: u64,
-    ) -> Option<impl FnMut(u64)> {
+        est_count: usize,
+    ) -> Option<impl FnMut(usize)> {
         status.map(|mut s| move |i| s(est_time, est_count, i))
     }
 }
@@ -45,18 +45,18 @@ pub trait Status<'a> {
 pub(crate) struct NoStatus;
 
 impl<'a> Status<'a> for NoStatus {
-    fn warmup_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, u64, u64) + 'b>
+    fn warmup_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
     where
         'a: 'b,
     {
-        None::<fn(Duration, u64, u64)>
+        None::<fn(Duration, usize, usize)>
     }
 
-    fn exec_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, u64, u64) + 'b>
+    fn exec_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
     where
         'a: 'b,
     {
-        None::<fn(Duration, u64, u64)>
+        None::<fn(Duration, usize, usize)>
     }
 }
 
@@ -90,13 +90,13 @@ impl<'a, W: Write> DefaultStatus<'a, W> {
         }
     }
 
-    fn make_status<'b>(w: &'b mut W, preamble: String) -> impl FnMut(Duration, u64, u64) + 'b
+    fn make_status<'b>(w: &'b mut W, preamble: String) -> impl FnMut(Duration, usize, usize) + 'b
     where
         'a: 'b,
     {
         let mut status_len: usize = 0;
 
-        move |est_time: Duration, est_count: u64, i: u64| {
+        move |est_time: Duration, est_count: usize, i: usize| {
             if status_len == 0 {
                 write!(
                     w,
@@ -118,7 +118,7 @@ impl<'a, W: Write> DefaultStatus<'a, W> {
 }
 
 impl<'a, W: Write> Status<'a> for DefaultStatus<'a, W> {
-    fn warmup_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, u64, u64) + 'b>
+    fn warmup_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
     where
         'a: 'b,
     {
@@ -128,7 +128,7 @@ impl<'a, W: Write> Status<'a> for DefaultStatus<'a, W> {
         ))
     }
 
-    fn exec_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, u64, u64) + 'b>
+    fn exec_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
     where
         'a: 'b,
     {
@@ -154,8 +154,12 @@ mod test {
     fn test_part_apply() {
         // None case
         assert!(
-            NoStatus::part_apply(None::<fn(Duration, u64, u64)>, Duration::from_secs(1), 100,)
-                .is_none()
+            NoStatus::part_apply(
+                None::<fn(Duration, usize, usize)>,
+                Duration::from_secs(1),
+                100,
+            )
+            .is_none()
         );
 
         // Some case: verify captured values are forwarded correctly
