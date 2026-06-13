@@ -1,4 +1,4 @@
-use crate::latency;
+use crate::{latency, latency_n};
 use std::time::Duration;
 
 /// An infinite iterator that encapsulates `K` closures and, for each invocation
@@ -24,21 +24,14 @@ pub trait LatencySrc<const K: usize>: Iterator<Item = [Duration; K]> {
 
 impl<const K: usize, T: LatencySrc<K>> LatencySrc<K> for &mut T {}
 
-/// Infinite iterator that yields the latency of the invocation of a single closure on each
+/// A [`LatencySrc`] that yields the latency of the invocation of a single closure on each
 /// call to `next()`.
-pub struct LatencySrc1<F0: FnMut()>(F0, u32);
+pub struct LatencySrc1<F0: FnMut()>(F0);
 
 impl<F0: FnMut()> LatencySrc1<F0> {
-    /// Returns an instance of `Self` that yields the latency of the invocation of a single closure, once
-    /// for each call to `next()`.
+    /// Returns an instance of `Self`.
     pub fn new(f: F0) -> Self {
-        Self(f, 1)
-    }
-
-    /// Returns an instance of `Self` that yields the latency of the invocation of a single closure,
-    /// `group_size` times for each call to `next()`.
-    pub fn new_grouped(f: F0, group_size: u32) -> Self {
-        Self(f, group_size)
+        Self(f)
     }
 }
 
@@ -47,36 +40,47 @@ impl<F0: FnMut()> Iterator for LatencySrc1<F0> {
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
-        Some([latency(|| {
-            for _ in 0..self.group_size() {
-                self.0()
-            }
-        })])
+        Some([latency(&mut self.0)])
     }
 }
 
-impl<F0: FnMut()> LatencySrc<1> for LatencySrc1<F0> {
+impl<F0: FnMut()> LatencySrc<1> for LatencySrc1<F0> {}
+
+/// A [`LatencySrc`] that yields the latency of [`group_size`](Self::group_size) invocations
+/// of a single closure on each call to `next()`.
+pub struct LatencySrc1n<F0: FnMut()>(F0, u32);
+
+impl<F0: FnMut()> LatencySrc1n<F0> {
+    /// Returns an instance of `Self`.
+    pub fn new(f: F0, group_size: u32) -> Self {
+        Self(f, group_size)
+    }
+}
+
+impl<F0: FnMut()> Iterator for LatencySrc1n<F0> {
+    type Item = [Duration; 1];
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        Some([latency_n(&mut self.0, self.1)])
+    }
+}
+
+impl<F0: FnMut()> LatencySrc<1> for LatencySrc1n<F0> {
     #[inline(always)]
     fn group_size(&self) -> u32 {
         self.1
     }
 }
 
-/// Infinite iterator that yields the latencies of the invocations of two closures on each
+/// A [`LatencySrc`] that yields the latencies of the invocations of two closures on each
 /// call to `next()`.
-pub struct LatencySrc2<F0: FnMut(), F1: FnMut()>(F0, F1, u32);
+pub struct LatencySrc2<F0: FnMut(), F1: FnMut()>(F0, F1);
 
 impl<F0: FnMut(), F1: FnMut()> LatencySrc2<F0, F1> {
-    /// Returns an instance of `Self` that yields the latency of the invocations of two closures, once
-    /// for each call to `next()`.
+    /// Returns an instance of `Self`.
     pub fn new(f0: F0, f1: F1) -> Self {
-        Self(f0, f1, 1)
-    }
-
-    /// Returns an instance of [`LatencySrc<2>`] that yields the latency of the invocation of two closures,
-    /// `group_size` times for each call to `next()`.
-    pub fn new_grouped(f0: F0, f1: F1, group_size: u32) -> Self {
-        Self(f0, f1, group_size)
+        Self(f0, f1)
     }
 }
 
@@ -85,22 +89,37 @@ impl<F0: FnMut(), F1: FnMut()> Iterator for LatencySrc2<F0, F1> {
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
+        Some([latency(&mut self.0), latency(&mut self.1)])
+    }
+}
+
+impl<F0: FnMut(), F1: FnMut()> LatencySrc<2> for LatencySrc2<F0, F1> {}
+
+/// A [`LatencySrc`] that yields the latencies of [`group_size`](Self::group_size) invocations
+/// of two closures on each call to `next()`.
+pub struct LatencySrc2n<F0: FnMut(), F1: FnMut()>(F0, F1, u32);
+
+impl<F0: FnMut(), F1: FnMut()> LatencySrc2n<F0, F1> {
+    /// Returns an instance of `Self` that yields the latency of the invocations of two closures, once
+    /// for each call to `next()`.
+    pub fn new(f0: F0, f1: F1, group_size: u32) -> Self {
+        Self(f0, f1, group_size)
+    }
+}
+
+impl<F0: FnMut(), F1: FnMut()> Iterator for LatencySrc2n<F0, F1> {
+    type Item = [Duration; 2];
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
         Some([
-            latency(|| {
-                for _ in 0..self.group_size() {
-                    self.0()
-                }
-            }),
-            latency(|| {
-                for _ in 0..self.group_size() {
-                    self.1()
-                }
-            }),
+            latency_n(&mut self.0, self.2),
+            latency_n(&mut self.1, self.2),
         ])
     }
 }
 
-impl<F0: FnMut(), F1: FnMut()> LatencySrc<2> for LatencySrc2<F0, F1> {
+impl<F0: FnMut(), F1: FnMut()> LatencySrc<2> for LatencySrc2n<F0, F1> {
     #[inline(always)]
     fn group_size(&self) -> u32 {
         self.2
