@@ -53,18 +53,21 @@ fn run<const K: usize, R, F0, F1, Src>(
     let warmup_millis = base_warmup_millis * K as u64;
     let bench_time = base_bench_time * K as u32;
     let status_millis = base_status_millis * K as u64;
-
-    println!(
-        "validate_bench_run: K={K}, base_target_latency={base_target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}"
-    );
+    let group_size = src.group_size() as u64;
 
     let exec_count =
         (bench_time.as_secs_f64() / (base_target_latency * K as u32).as_secs_f64()).round() as u64;
+    let bench_iterations = (exec_count / group_size).max(1);
+
+    println!(
+        "validate_bench_run: K={K}, base_target_latency={base_target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}, group_size={group_size}, exec_count={exec_count}, bench_iterations={bench_iterations}"
+    );
+
     let cfg = BenchCfg::default()
         .with_warmup_millis(warmup_millis)
         .with_status_millis(status_millis)
         .with_recording_unit(LatencyUnit::Nano);
-    let out = runner(&cfg, src, RunLength::Count(exec_count));
+    let out = runner(&cfg, src, RunLength::Count(bench_iterations));
 
     let mut raw_latencies = Vec::<Duration>::new();
     if K >= 1 {

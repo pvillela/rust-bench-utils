@@ -9,7 +9,7 @@ use std::time::Duration;
 /// with the benchmarking functions, the benchmark will end prematurely if the iterator is exhausted
 /// before the specified benchmark run length.
 pub trait LatencySrc<const K: usize>: Iterator<Item = [Duration; K]> {
-    /// Returns the group size. Grouped latency sources should implement this method rather than
+    /// Returns the group size. Grouped latency sources **must** implement this method rather than
     /// use the provided implementation.
     #[inline(always)]
     fn group_size(&self) -> u32 {
@@ -22,7 +22,15 @@ pub trait LatencySrc<const K: usize>: Iterator<Item = [Duration; K]> {
     }
 }
 
-impl<const K: usize, T: LatencySrc<K>> LatencySrc<K> for &mut T {}
+impl<const K: usize, T: LatencySrc<K>> LatencySrc<K> for &mut T {
+    /// Forwards to the inner type's [`group_size`](LatencySrc::group_size) so that
+    /// code calling through `&mut impl LatencySrc<K>` (e.g. [`execute`]) sees
+    /// the concrete override rather than the trait default of `1`.
+    #[inline(always)]
+    fn group_size(&self) -> u32 {
+        (**self).group_size()
+    }
+}
 
 /// A [`LatencySrc`] that yields the latency of the invocation of a single closure on each
 /// call to `next()`.
