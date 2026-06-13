@@ -678,7 +678,7 @@ mod simple_tests {
     #[test]
     fn test_bench_run_with_count() {
         let cfg = quick_cfg();
-        let out = bench_run_arg_cfg(&cfg, LatencySrc1(|| ()), RunLength::Count(5));
+        let out = bench_run_arg_cfg(&cfg, LatencySrc1::new(|| ()), RunLength::Count(5));
         // With 5 count and no timeout, we should have exactly 5 iterations
         assert_eq!(out.n(), 5);
     }
@@ -690,7 +690,7 @@ mod simple_tests {
         // Use a very short timeout that should be exceeded immediately
         let out = bench_run_arg_cfg(
             &cfg,
-            LatencySrc1(|| thread::sleep(Duration::from_nanos(1))),
+            LatencySrc1::new(|| thread::sleep(Duration::from_nanos(1))),
             RunLength::Time(Duration::from_nanos(1)),
         );
         // At least some executions should have been captured
@@ -704,7 +704,7 @@ mod simple_tests {
         // Use a very short timeout that should be exceeded immediately
         let out = bench_run_arg_cfg(
             &cfg,
-            LatencySrc1(|| thread::sleep(Duration::from_nanos(1))),
+            LatencySrc1::new(|| thread::sleep(Duration::from_nanos(1))),
             RunLength::CountWithTimeout(20, Duration::from_nanos(1)),
         );
         // At least some executions should have been captured

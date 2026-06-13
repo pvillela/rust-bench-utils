@@ -23,7 +23,7 @@ pub fn bench_run_x<'a, S: Status<'a>>(
     exec_run_length: RunLength,
     s: S,
 ) -> BenchOut {
-    multi::bench_run_x(cfg, LatencySrc1(f), exec_run_length, s).into()
+    multi::bench_run_x(cfg, LatencySrc1::new(f), exec_run_length, s).into()
 }
 
 /// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
@@ -38,7 +38,7 @@ pub fn bench_run_x<'a, S: Status<'a>>(
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
-    multi::bench_run(LatencySrc1(f), exec_run_length).into()
+    multi::bench_run(LatencySrc1::new(f), exec_run_length).into()
 }
 
 /// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
@@ -53,7 +53,7 @@ pub fn bench_run(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_arg_cfg(cfg: &BenchCfg, f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
-    multi::bench_run_arg_cfg(cfg, LatencySrc1(f), exec_run_length).into()
+    multi::bench_run_arg_cfg(cfg, LatencySrc1::new(f), exec_run_length).into()
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -69,7 +69,7 @@ pub fn bench_run_arg_cfg(cfg: &BenchCfg, f: impl FnMut(), exec_run_length: RunLe
 /// - `f` - benchmark target.
 /// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_with_status(f: impl FnMut(), exec_run_length: RunLength) -> BenchOut {
-    multi::bench_run_with_status(LatencySrc1(f), exec_run_length).into()
+    multi::bench_run_with_status(LatencySrc1::new(f), exec_run_length).into()
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -89,7 +89,7 @@ pub fn bench_run_with_status_arg_cfg(
     f: impl FnMut(),
     exec_run_length: RunLength,
 ) -> BenchOut {
-    multi::bench_run_with_status_arg_cfg(cfg, LatencySrc1(f), exec_run_length).into()
+    multi::bench_run_with_status_arg_cfg(cfg, LatencySrc1::new(f), exec_run_length).into()
 }
 
 #[cfg(test)]

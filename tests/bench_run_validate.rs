@@ -5,8 +5,8 @@
 use bench_utils::{
     BenchCfg, BusyWork, LatencyUnit, RunLength, latency,
     multi::{
-        BenchOut, LatencySrc, LatencySrc1, LatencySrc2, LatencySrcGrouped1, LatencySrcGrouped2,
-        bench_run_arg_cfg, bench_run_with_status_arg_cfg,
+        BenchOut, LatencySrc, LatencySrc1, LatencySrc2, bench_run_arg_cfg,
+        bench_run_with_status_arg_cfg,
     },
     rel_approx_eq_dur,
     test_support::AbsRelDiffDur,
@@ -143,7 +143,7 @@ mod ungrouped {
         base_target_latency: Duration,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
         let f = BusyWork::new(base_target_latency).fun();
-        let src = LatencySrc1(f.clone());
+        let src = LatencySrc1::new(f.clone());
         FnsLatencySrc::new(f, || (), src)
     }
 
@@ -162,7 +162,7 @@ mod ungrouped {
             f1b()
         };
 
-        let src = LatencySrc2(f0.clone(), f1.clone());
+        let src = LatencySrc2::new(f0.clone(), f1.clone());
         FnsLatencySrc::new(f0, f1, src)
     }
 
@@ -360,7 +360,7 @@ mod grouped_10 {
         group_size: u32,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
         let f = BusyWork::new(base_target_latency).fun();
-        let src = LatencySrcGrouped1(f.clone(), group_size);
+        let src = LatencySrc1::new_grouped(f.clone(), group_size);
         FnsLatencySrc::new(f, || (), src)
     }
 
@@ -380,7 +380,7 @@ mod grouped_10 {
             f1b()
         };
 
-        let src = LatencySrcGrouped2(f0.clone(), f1.clone(), group_size);
+        let src = LatencySrc2::new_grouped(f0.clone(), f1.clone(), group_size);
         FnsLatencySrc::new(f0, f1, src)
     }
 

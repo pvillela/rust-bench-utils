@@ -399,7 +399,7 @@ mod test {
         _ = env_logger::try_init();
         let cfg = BenchCfg::default();
         // Using a no-op closure, the calibration should return a reasonable positive value
-        let mut src = LatencySrc1(|| {});
+        let mut src = LatencySrc1::new(|| {});
         let eps = cfg.execs_per_sec(&mut src, RunLength::Count(10));
         assert!(eps.is_finite());
     }

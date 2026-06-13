@@ -303,7 +303,7 @@ mod test_execs_per_second {
 
     #[test]
     fn no_op_src_yields_positive_finite_estimate() {
-        let mut src = LatencySrc1(|| {});
+        let mut src = LatencySrc1::new(|| {});
         let e = execs_per_sec(src.aggregate(), RunLength::Count(1000));
         assert!(e > 0.0, "src no-op should yield positive: {}", e);
         assert!(e.is_finite(), "src no-op estimate should be finite: {}", e);

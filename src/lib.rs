@@ -25,7 +25,7 @@
 //!
 //! let out = bench_run_arg_cfg(
 //!     &cfg,
-//!     &mut LatencySrc2(f1, f2),
+//!     &mut LatencySrc2::new(f1, f2),
 //!     RunLength::Time(Duration::from_secs(1)),
 //! );
 //! println!("n = {}, medians = {:?}", out.n(), out.medians());
