@@ -9,4 +9,4 @@ export NOCOVER="1"
 
 ./check-features.sh || { echo "Error: check-features failed"; exit 1; }
 
-cargo test -r --tests --features _ALL_NON_TEST,_bench -- --test-threads=1
+cargo test -r --tests --test '*' --features _ALL_NON_TEST,_bench --no-fail-fast -- --test-threads=1
