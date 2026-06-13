@@ -26,38 +26,23 @@ impl<const K: usize, T: LatencySrc<K>> LatencySrc<K> for &mut T {}
 
 /// Infinite iterator that yields the latency of the invocation of a single closure on each
 /// call to `next()`.
-pub struct LatencySrc1<F0: FnMut()>(F0);
+pub struct LatencySrc1<F0: FnMut()>(F0, u32);
 
 impl<F0: FnMut()> LatencySrc1<F0> {
     /// Returns an instance of `Self` that yields the latency of the invocation of a single closure, once
     /// for each call to `next()`.
     pub fn new(f: F0) -> Self {
-        Self(f)
+        Self(f, 1)
     }
 
-    /// Returns an instance of [`LatencySrc<1>`] that yields the latency of the invocation of a single closure,
+    /// Returns an instance of `Self` that yields the latency of the invocation of a single closure,
     /// `group_size` times for each call to `next()`.
-    pub fn new_grouped(f: F0, group_size: u32) -> impl LatencySrc<1> {
-        LatencySrcGrouped1(f, group_size)
+    pub fn new_grouped(f: F0, group_size: u32) -> Self {
+        Self(f, group_size)
     }
 }
 
 impl<F0: FnMut()> Iterator for LatencySrc1<F0> {
-    type Item = [Duration; 1];
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        Some([latency(&mut self.0)])
-    }
-}
-
-impl<F0: FnMut()> LatencySrc<1> for LatencySrc1<F0> {}
-
-/// Infinite iterator that yields the total latency of `group_size` invocations of a single closure
-/// on each call to `next()`.
-struct LatencySrcGrouped1<F0: FnMut()>(pub F0, pub u32);
-
-impl<F0: FnMut()> Iterator for LatencySrcGrouped1<F0> {
     type Item = [Duration; 1];
 
     #[inline(always)]
@@ -70,7 +55,7 @@ impl<F0: FnMut()> Iterator for LatencySrcGrouped1<F0> {
     }
 }
 
-impl<F0: FnMut()> LatencySrc<1> for LatencySrcGrouped1<F0> {
+impl<F0: FnMut()> LatencySrc<1> for LatencySrc1<F0> {
     #[inline(always)]
     fn group_size(&self) -> u32 {
         self.1
@@ -79,38 +64,23 @@ impl<F0: FnMut()> LatencySrc<1> for LatencySrcGrouped1<F0> {
 
 /// Infinite iterator that yields the latencies of the invocations of two closures on each
 /// call to `next()`.
-pub struct LatencySrc2<F0: FnMut(), F1: FnMut()>(F0, F1);
+pub struct LatencySrc2<F0: FnMut(), F1: FnMut()>(F0, F1, u32);
 
 impl<F0: FnMut(), F1: FnMut()> LatencySrc2<F0, F1> {
     /// Returns an instance of `Self` that yields the latency of the invocations of two closures, once
     /// for each call to `next()`.
     pub fn new(f0: F0, f1: F1) -> Self {
-        Self(f0, f1)
+        Self(f0, f1, 1)
     }
 
     /// Returns an instance of [`LatencySrc<2>`] that yields the latency of the invocation of two closures,
     /// `group_size` times for each call to `next()`.
-    pub fn new_grouped(f0: F0, f1: F1, group_size: u32) -> impl LatencySrc<2> {
-        LatencySrcGrouped2(f0, f1, group_size)
+    pub fn new_grouped(f0: F0, f1: F1, group_size: u32) -> Self {
+        Self(f0, f1, group_size)
     }
 }
 
 impl<F0: FnMut(), F1: FnMut()> Iterator for LatencySrc2<F0, F1> {
-    type Item = [Duration; 2];
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        Some([latency(&mut self.0), latency(&mut self.1)])
-    }
-}
-
-impl<F0: FnMut(), F1: FnMut()> LatencySrc<2> for LatencySrc2<F0, F1> {}
-
-/// Infinite iterator that yields the respective total latencies of `G` invocations of each
-/// of two closures on each call to `next()`.
-struct LatencySrcGrouped2<F0: FnMut(), F1: FnMut()>(pub F0, pub F1, pub u32);
-
-impl<F0: FnMut(), F1: FnMut()> Iterator for LatencySrcGrouped2<F0, F1> {
     type Item = [Duration; 2];
 
     #[inline(always)]
@@ -130,7 +100,7 @@ impl<F0: FnMut(), F1: FnMut()> Iterator for LatencySrcGrouped2<F0, F1> {
     }
 }
 
-impl<F0: FnMut(), F1: FnMut()> LatencySrc<2> for LatencySrcGrouped2<F0, F1> {
+impl<F0: FnMut(), F1: FnMut()> LatencySrc<2> for LatencySrc2<F0, F1> {
     #[inline(always)]
     fn group_size(&self) -> u32 {
         self.2
