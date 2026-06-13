@@ -23,12 +23,10 @@ impl<const K: usize> BenchState<K> {
         status_count: usize,
         status: &mut Option<impl FnMut(usize)>,
     ) {
-        // ***** Redefine counts and shadow arguments in terms of group_size. *****
-        let group_size = src.group_size();
-        let run_length = src.group_run_length(run_length);
+        assert!(status_count > 0, "status_count must be > 0");
+
         let (exec_count, run_time) = run_length.exec_count_and_duration();
-        assert!(exec_count > 0, "group_count must be > 0");
-        let status_count = status_count.div_ceil(group_size);
+        assert!(exec_count > 0, "exec_count must be > 0");
 
         let mut acc_latency = Duration::ZERO; // enables testing with synthetic latency sources
         let start = Instant::now();
@@ -36,7 +34,7 @@ impl<const K: usize> BenchState<K> {
         for i in 1..=exec_count {
             let src_finished = if let Some(latencies) = src.next() {
                 acc_latency += latencies.iter().sum();
-                self.capture_data(latencies.map(|lat| lat / group_size as u32));
+                self.capture_data(latencies);
                 false
             } else {
                 true
@@ -44,13 +42,13 @@ impl<const K: usize> BenchState<K> {
 
             let elapsed = start.elapsed();
 
-            if i >= exec_count
+            if i == exec_count
                 || elapsed >= run_time
                 || i.is_multiple_of(status_count)
                 || acc_latency >= run_time
                 || src_finished
             {
-                let finished = i >= exec_count
+                let finished = i == exec_count
                     || elapsed >= run_time
                     || acc_latency >= run_time
                     || src_finished;
@@ -58,12 +56,12 @@ impl<const K: usize> BenchState<K> {
                 if (i % status_count == 0 || finished)
                     && let Some(exec_status) = status
                 {
-                    exec_status(i * group_size);
+                    exec_status(i);
                 }
 
                 if finished {
                     debug!(
-                        "execute >>> group_size={group_size}, i={i}, exec_count={exec_count}, run_time={run_time:?}, elapsed={elapsed:?}, acc_latency={acc_latency:?}, src_finished={src_finished}"
+                        "execute >>> i={i}, elapsed={elapsed:?}, exec_count={exec_count}, acc_latency={acc_latency:?}, run_time={run_time:?}, src_finished={src_finished}"
                     );
                     break;
                 }

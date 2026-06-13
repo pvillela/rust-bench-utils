@@ -12,7 +12,7 @@ pub fn latency(f: impl FnOnce()) -> Duration {
 
 /// Invokes `f` `n` times and returns its latency.
 #[inline(always)]
-pub fn latency_n(mut f: impl FnMut(), n: usize) -> Duration {
+pub fn latency_n(mut f: impl FnMut(), n: u32) -> Duration {
     let start = Instant::now();
     for _ in 0..n {
         f();
@@ -41,11 +41,11 @@ impl<F: FnMut()> Iterator for LatencyIter<F> {
 
 /// An infinite iterator that encapsulates a closure `f` and, for each invocation
 /// of `next()`, yields the wall-clock latency duration from one invocation of `f`.
-pub struct LatencyIterN<F: FnMut()>(F, usize);
+pub struct LatencyIterN<F: FnMut()>(F, u32);
 
 impl<F: FnMut()> LatencyIterN<F> {
     /// Constructs `Self`.
-    pub fn new(f: F, n: usize) -> Self {
+    pub fn new(f: F, n: u32) -> Self {
         Self(f, n)
     }
 }

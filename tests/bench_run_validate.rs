@@ -53,13 +53,12 @@ fn run<const K: usize, R, F0, F1, Src>(
     let warmup_millis = base_warmup_millis * K as u64;
     let bench_time = base_bench_time * K as u32;
     let status_millis = base_status_millis * K as u64;
-    let group_size = src.group_size() as u64;
 
     let exec_count = (bench_time.as_secs_f64() / (base_target_latency * K as u32).as_secs_f64())
         .round() as usize;
 
     println!(
-        "validate_bench_run: K={K}, base_target_latency={base_target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}, group_size={group_size}, exec_count={exec_count}"
+        "validate_bench_run: K={K}, base_target_latency={base_target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}, exec_count={exec_count}"
     );
 
     let cfg = BenchCfg::default()
@@ -355,11 +354,11 @@ mod ungrouped {
 mod grouped_10 {
     use super::*;
 
-    const GROUP_SIZE: usize = 10;
+    const GROUP_SIZE: u32 = 10;
 
     fn fsrc1_grouped(
         base_target_latency: Duration,
-        group_size: usize,
+        group_size: u32,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
         let f = BusyWork::new(base_target_latency).fun();
         let src = LatencySrc1n::new(f.clone(), group_size);
@@ -368,7 +367,7 @@ mod grouped_10 {
 
     fn fsrc2_grouped(
         base_target_latency: Duration,
-        group_size: usize,
+        group_size: u32,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<2>> {
         let bw0 = BusyWork::new(base_target_latency);
         let effort0 = bw0.effort();

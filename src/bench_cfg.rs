@@ -213,12 +213,11 @@ impl BenchCfg {
         src: &mut impl LatencySrc<K>,
         exec_run_length: RunLength,
     ) -> f64 {
-        let group_run_length = src.group_run_length(exec_run_length);
-        let group_budget = self.execs_per_sec_budget(group_run_length);
-        debug!("execs_per_sec >>> execs_per_sec_budget={group_budget:?}");
-        let group_eps = latency::execs_per_sec(src.aggregate(), group_budget);
-        debug!("execs_per_sec >>> execs_per_sec={group_eps:?}");
-        group_eps * src.group_size() as f64
+        let budget = self.execs_per_sec_budget(exec_run_length);
+        debug!("execs_per_sec >>> execs_per_sec_budget={budget:?}");
+        let eps = latency::execs_per_sec(src.aggregate(), budget);
+        debug!("execs_per_sec >>> execs_per_sec={eps:?}");
+        eps
     }
 
     /// Number of executions between status updates, derived from `execs_per_second`.
