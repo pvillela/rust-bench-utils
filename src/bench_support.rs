@@ -9,36 +9,36 @@ use crate::{
 };
 use std::time::Duration;
 
-/// Compares latency outputs for `n` executions of a function `f` with `n/grouping` executions of `f` grouped `grouping` times.
+/// Compares latency outputs for `n` executions of a function `f` with `n/batch` executions of `f` grouped `batch` times.
 ///
 /// # Panics
 ///
 /// Panics if any of the following conditions is true:
 /// - `target_latency` is zero
-/// - `grouping` is zero.
+/// - `batch` is zero.
 /// the estimated execution count.
 pub fn validate_latency_overhead(
     cfg: &BenchCfg,
     bench_duration: Duration,
     target_latency: Duration,
-    grouping: usize,
+    batch: usize,
 ) -> (Duration, Duration) {
     assert!(
-        target_latency > Duration::ZERO && grouping > 0,
-        "`target_latency` and `grouping` must both be positive"
+        target_latency > Duration::ZERO && batch > 0,
+        "`target_latency` and `batch` must both be positive"
     );
-    let name = "Group of ".to_owned() + &grouping.to_string();
+    let name = "Group of ".to_owned() + &batch.to_string();
     let solo_f = BusyWork::new(target_latency).fun();
     let group_f = || {
-        for _ in 0..grouping {
+        for _ in 0..batch {
             solo_f();
         }
     };
 
-    let target_group_latency = target_latency * grouping as u32;
+    let target_group_latency = target_latency * batch as u32;
     let exec_count_group =
         (bench_duration.as_secs_f64() / target_group_latency.as_secs_f64()).round() as usize;
-    let exec_count_solo = exec_count_group * grouping;
+    let exec_count_solo = exec_count_group * batch;
 
     println!("running solo_f: {name}");
     let out_solo = bench_run_with_status_arg_cfg(cfg, &solo_f, RunLength::Count(exec_count_solo));
@@ -62,9 +62,9 @@ pub fn validate_latency_overhead(
     println!();
 
     println!(
-        "Solo vs. grouped: grouping={grouping}, out_solo.median()*grouping={:?}, out_group.median()={group_median:?}, rel_diff={}",
-        solo_median * grouping as u32,
-        (solo_median * grouping as u32).abs_rel_diff(group_median)
+        "Solo vs. grouped: batch={batch}, out_solo.median()*batch={:?}, out_group.median()={group_median:?}, rel_diff={}",
+        solo_median * batch as u32,
+        (solo_median * batch as u32).abs_rel_diff(group_median)
     );
     println!();
 

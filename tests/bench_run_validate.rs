@@ -5,7 +5,7 @@
 use bench_utils::{
     BenchCfg, BusyWork, LatencyUnit, RunLength, latency,
     multi::{
-        BenchOut, LatencySrc, LatencySrc1, LatencySrc1g, LatencySrc2, LatencySrc2g,
+        BenchOut, LatencySrc, LatencySrc1, LatencySrc1b, LatencySrc2, LatencySrc2b,
         bench_run_arg_cfg, bench_run_with_status_arg_cfg,
     },
     rel_approx_eq_dur,
@@ -354,20 +354,20 @@ mod ungrouped {
 mod grouped_10 {
     use super::*;
 
-    const GROUP_SIZE: u32 = 10;
+    const BATCH: u32 = 10;
 
     fn fsrc1_grouped(
         base_target_latency: Duration,
-        grouping: u32,
+        batch: u32,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
         let f = BusyWork::new(base_target_latency).fun();
-        let src = LatencySrc1g::new(f.clone(), grouping);
+        let src = LatencySrc1b::new(f.clone(), batch);
         FnsLatencySrc::new(f, || (), src)
     }
 
     fn fsrc2_grouped(
         base_target_latency: Duration,
-        grouping: u32,
+        batch: u32,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<2>> {
         let bw0 = BusyWork::new(base_target_latency);
         let effort0 = bw0.effort();
@@ -381,7 +381,7 @@ mod grouped_10 {
             f1b()
         };
 
-        let src = LatencySrc2g::new(f0.clone(), f1.clone(), grouping);
+        let src = LatencySrc2b::new(f0.clone(), f1.clone(), batch);
         FnsLatencySrc::new(f0, f1, src)
     }
 
@@ -398,7 +398,7 @@ mod grouped_10 {
         ) {
             run(
                 bench_run_with_status_arg_cfg,
-                fsrc1_grouped(base_target_latency, GROUP_SIZE),
+                fsrc1_grouped(base_target_latency, BATCH),
                 base_warmup_millis,
                 base_status_millis,
                 base_bench_time,
@@ -444,7 +444,7 @@ mod grouped_10 {
         ) {
             run(
                 bench_run_arg_cfg,
-                fsrc1_grouped(base_target_latency, GROUP_SIZE),
+                fsrc1_grouped(base_target_latency, BATCH),
                 base_warmup_millis,
                 0,
                 base_bench_time,
@@ -489,7 +489,7 @@ mod grouped_10 {
         ) {
             run(
                 bench_run_with_status_arg_cfg,
-                fsrc2_grouped(base_target_latency, GROUP_SIZE),
+                fsrc2_grouped(base_target_latency, BATCH),
                 base_warmup_millis,
                 base_status_millis,
                 base_bench_time,
@@ -535,7 +535,7 @@ mod grouped_10 {
         ) {
             run(
                 bench_run_arg_cfg,
-                fsrc2_grouped(base_target_latency, GROUP_SIZE),
+                fsrc2_grouped(base_target_latency, BATCH),
                 base_warmup_millis,
                 0,
                 base_bench_time,
