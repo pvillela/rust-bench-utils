@@ -35,8 +35,8 @@
 //!
 //! | Feature | Purpose |
 //! |---------|---------|
-//! | `default` | For access to all of the library's benchmarking functions and typed.
-//! | `busy_work` | Enables synthetic loads using SHA-256-based CPU work via [`BusyWork`] (requires `sha2` crate) |
+//! | `default` | For access to all of the library's benchmarking functions and types.
+//! | `busy_work` | Enables synthetic loads using SHA-256-based CPU work via [`BusyWork`] (uses `sha2` crate) |
 //!
 //! # Log-normal assumption
 //!
@@ -66,6 +66,7 @@ pub use summary_stats::*;
 mod bench_run;
 pub use bench_run::*;
 
+pub mod duo;
 pub mod multi;
 pub mod status;
 

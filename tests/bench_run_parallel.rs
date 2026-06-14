@@ -12,7 +12,6 @@ fn test() {
     const RUN_TIME: Duration = Duration::from_millis(100);
     const TARGET_BASE_LATENCY: Duration = Duration::from_micros(100);
     const TARGET_MEDIAN_RATIO: f64 = 1.05;
-    const EPSILON: f64 = 0.01;
 
     let exec_run_length = RunLength::Time(RUN_TIME);
     let bw1 = BusyWork::new(TARGET_BASE_LATENCY);

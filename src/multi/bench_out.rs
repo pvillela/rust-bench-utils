@@ -36,6 +36,8 @@ impl<const K: usize> Index<usize> for BenchOut<K> {
     }
 }
 
+//--- Impls for BenchOut<1>
+
 impl Deref for BenchOut<1> {
     type Target = crate::BenchOut;
 
@@ -60,12 +62,10 @@ impl BenchOut<1> {
     }
 }
 
-impl BenchOut<2> {
-    /// Returns a [`Comp`] comparing the two benchmark outputs.
-    pub fn comp(&self) -> Comp<'_> {
-        Comp(&self.arr[0], &self.arr[1])
-    }
-}
+//--- Impls for BenchOut<2>
+// See module `duo`.
+
+//--- Impls for BenchOut<K>
 
 impl<const K: usize> BenchOut<K> {
     #[doc(hidden)]

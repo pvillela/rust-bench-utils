@@ -34,9 +34,7 @@ statrs = "0.18"
 [features]
 
 ## Public
-default = [
-    "basic_stats/normal",
-] # should always be enabled for public use
+default = ["basic_stats/normal"] # should always be enabled for public use
 busy_work = ["dep:sha2"]
 
 ## Helpers
