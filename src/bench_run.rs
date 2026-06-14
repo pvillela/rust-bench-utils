@@ -2,7 +2,7 @@
 
 use crate::{
     BenchCfg, BenchOut, RunLength,
-    multi::{self, LatencySrc1},
+    multi::{self, LatencySrc1, LatencySrc1g},
     status::Status,
 };
 
@@ -90,6 +90,82 @@ pub fn bench_run_with_status_arg_cfg(
     exec_run_length: RunLength,
 ) -> BenchOut {
     multi::bench_run_with_status_arg_cfg(cfg, LatencySrc1::new(f), exec_run_length).into()
+}
+
+/// Similar to [`bench_run_x`] but batches the executions of `f` into groups of size `grouping`.
+///
+/// Batching may reduce measurement overhead.
+/// Each batch results in the batch average being collected `grouping` times, so the number of captured
+/// latency values is not impacted by grouping.
+/// However, a potential consequence is that the statistical tests provided by [`BenchOut`] may be somewhat
+/// distorted as the resulting distribution may no longer be approximately logormal.
+pub fn bench_run_x_g<'a, S: Status<'a>>(
+    cfg: &BenchCfg,
+    f: impl FnMut(),
+    exec_run_length: RunLength,
+    s: S,
+    grouping: u32,
+) -> BenchOut {
+    multi::bench_run_x(cfg, LatencySrc1g::new(f, grouping), exec_run_length, s).into()
+}
+
+/// Similar to [`bench_run`] but batches the executions of `f` into groups of size `grouping`.
+///
+/// Batching may reduce measurement overhead.
+/// Each batch results in the batch average being collected `grouping` times, so the number of captured
+/// latency values is not impacted by grouping.
+/// However, a potential consequence is that the statistical tests provided by [`BenchOut`] may be somewhat
+/// distorted as the resulting distribution may no longer be approximately logormal.
+pub fn bench_run_g(f: impl FnMut(), exec_run_length: RunLength, grouping: u32) -> BenchOut {
+    multi::bench_run(LatencySrc1g::new(f, grouping), exec_run_length).into()
+}
+
+/// Similar to [`bench_run_arg_cfg`] but batches the executions of `f` into groups of size `grouping`.
+///
+/// Batching may reduce measurement overhead.
+/// Each batch results in the batch average being collected `grouping` times, so the number of captured
+/// latency values is not impacted by grouping.
+/// However, a potential consequence is that the statistical tests provided by [`BenchOut`] may be somewhat
+/// distorted as the resulting distribution may no longer be approximately logormal.
+pub fn bench_run_arg_cfg_g(
+    cfg: &BenchCfg,
+    f: impl FnMut(),
+    exec_run_length: RunLength,
+    grouping: u32,
+) -> BenchOut {
+    multi::bench_run_arg_cfg(cfg, LatencySrc1g::new(f, grouping), exec_run_length).into()
+}
+
+/// Similar to [`bench_run_with_status`] but batches the executions of `f` into groups of size `grouping`.
+///
+/// Batching may reduce measurement overhead.
+/// Each batch results in the batch average being collected `grouping` times, so the number of captured
+/// latency values is not impacted by grouping.
+/// However, a potential consequence is that the statistical tests provided by [`BenchOut`] may be somewhat
+/// distorted as the resulting distribution may no longer be approximately logormal.
+pub fn bench_run_with_status_g(
+    f: impl FnMut(),
+    exec_run_length: RunLength,
+    grouping: u32,
+) -> BenchOut {
+    multi::bench_run_with_status(LatencySrc1g::new(f, grouping), exec_run_length).into()
+}
+
+/// Similar to [`bench_run_with_status_arg_cfg`] but batches the executions of `f` into groups of size `grouping`.
+///
+/// Batching may reduce measurement overhead.
+/// Each batch results in the batch average being collected `grouping` times, so the number of captured
+/// latency values is not impacted by grouping.
+/// However, a potential consequence is that the statistical tests provided by [`BenchOut`] may be somewhat
+/// distorted as the resulting distribution may no longer be approximately logormal.
+pub fn bench_run_with_status_arg_cfg_g(
+    cfg: &BenchCfg,
+    f: impl FnMut(),
+    exec_run_length: RunLength,
+    grouping: u32,
+) -> BenchOut {
+    multi::bench_run_with_status_arg_cfg(cfg, LatencySrc1g::new(f, grouping), exec_run_length)
+        .into()
 }
 
 #[cfg(test)]
