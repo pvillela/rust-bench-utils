@@ -3,23 +3,24 @@
 //!
 //! To run the example:
 //! ```
-//! cargo run -r --example calibration --features busy_work
+//! cargo run -r --example busy_work --features busy_work
 //! ```
 
 use bench_utils::{BusyWork, latency};
 use std::time::Duration;
 
 fn main() {
+    const N: u64 = 10;
+
     let target_latency = Duration::from_nanos(2000);
     let target_latency_nanos = target_latency.as_nanos() as f64;
-
     println!("target_latency_nanos={}", target_latency.as_nanos());
 
-    const N: u64 = 10;
+    let f = BusyWork::new(target_latency).fun();
 
     let mut sum2dev = 0.;
     for _ in 0..N {
-        let latency_nanos = latency(BusyWork::new(target_latency).fun()).as_nanos() as f64;
+        let latency_nanos = latency(&f).as_nanos() as f64;
         sum2dev += (latency_nanos - target_latency_nanos).powi(2);
 
         println!("latency_nanos={}", latency_nanos);
