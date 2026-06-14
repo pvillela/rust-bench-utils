@@ -63,16 +63,16 @@ impl<F0: FnMut(), F1: FnMut()> LatencySrc<2> for LatencySrc2<F0, F1> {}
 
 /// Helper iterator that doles out group averages for grouped latency sources.
 struct Doler<V> {
-    group_size: u32,
+    grouping: u32,
     i: u32,
     value: V,
 }
 
 impl<V: Copy> Doler<V> {
-    fn new(group_size: u32, init_value: V) -> Self {
+    fn new(grouping: u32, init_value: V) -> Self {
         Self {
-            group_size,
-            i: group_size,
+            grouping,
+            i: grouping,
             value: init_value,
         }
     }
@@ -89,7 +89,7 @@ impl<V: Copy> Iterator for Doler<V> {
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.i < self.group_size {
+        if self.i < self.grouping {
             Some(self.value)
         } else {
             None
@@ -97,8 +97,8 @@ impl<V: Copy> Iterator for Doler<V> {
     }
 }
 
-/// A [`LatencySrc`] that groups invocations of a single `f` into groups of size `group_size` and yields
-/// the average latency of each group `group_size` times before proceding to the next group execution.
+/// A [`LatencySrc`] that groups invocations of a single `f` into groups of size `grouping` and yields
+/// the average latency of each group `grouping` times before proceding to the next group execution.
 pub struct LatencySrc1n<F0: FnMut()> {
     /// Target closure
     f: F0,
@@ -108,10 +108,10 @@ pub struct LatencySrc1n<F0: FnMut()> {
 
 impl<F0: FnMut()> LatencySrc1n<F0> {
     /// Returns an instance of `Self`.
-    pub fn new(f: F0, group_size: u32) -> Self {
+    pub fn new(f: F0, grouping: u32) -> Self {
         Self {
             f,
-            doler: Doler::new(group_size, [Duration::ZERO]),
+            doler: Doler::new(grouping, [Duration::ZERO]),
         }
     }
 }
@@ -124,8 +124,8 @@ impl<F0: FnMut()> Iterator for LatencySrc1n<F0> {
         match self.doler.next() {
             ret @ Some(_) => ret,
             None => {
-                let group_size = self.doler.group_size;
-                let value = [latency_n(&mut self.f, group_size) / group_size];
+                let grouping = self.doler.grouping;
+                let value = [latency_n(&mut self.f, grouping) / grouping];
                 self.doler.update(value);
                 self.doler.next()
             }
@@ -135,8 +135,8 @@ impl<F0: FnMut()> Iterator for LatencySrc1n<F0> {
 
 impl<F0: FnMut()> LatencySrc<1> for LatencySrc1n<F0> {}
 
-/// A [`LatencySrc`] that groups invocations of two closures` into groups of size `group_size` and yields
-/// the respective average latencies of the closures for each group `group_size` times before proceding
+/// A [`LatencySrc`] that groups invocations of two closures` into groups of size `grouping` and yields
+/// the respective average latencies of the closures for each group `grouping` times before proceding
 /// to the next group execution..
 pub struct LatencySrc2n<F0: FnMut(), F1: FnMut()> {
     f0: F0,
@@ -146,11 +146,11 @@ pub struct LatencySrc2n<F0: FnMut(), F1: FnMut()> {
 
 impl<F0: FnMut(), F1: FnMut()> LatencySrc2n<F0, F1> {
     /// Returns an instance of `Self`.
-    pub fn new(f0: F0, f1: F1, group_size: u32) -> Self {
+    pub fn new(f0: F0, f1: F1, grouping: u32) -> Self {
         Self {
             f0,
             f1,
-            doler: Doler::new(group_size, [Duration::ZERO; 2]),
+            doler: Doler::new(grouping, [Duration::ZERO; 2]),
         }
     }
 }
@@ -163,10 +163,10 @@ impl<F0: FnMut(), F1: FnMut()> Iterator for LatencySrc2n<F0, F1> {
         match self.doler.next() {
             ret @ Some(_) => ret,
             None => {
-                let group_size = self.doler.group_size;
+                let grouping = self.doler.grouping;
                 let value = [
-                    latency_n(&mut self.f0, group_size) / group_size,
-                    latency_n(&mut self.f1, group_size) / group_size,
+                    latency_n(&mut self.f0, grouping) / grouping,
+                    latency_n(&mut self.f1, grouping) / grouping,
                 ];
                 self.doler.update(value);
                 self.doler.next()

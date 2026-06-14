@@ -358,16 +358,16 @@ mod grouped_10 {
 
     fn fsrc1_grouped(
         base_target_latency: Duration,
-        group_size: u32,
+        grouping: u32,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
         let f = BusyWork::new(base_target_latency).fun();
-        let src = LatencySrc1n::new(f.clone(), group_size);
+        let src = LatencySrc1n::new(f.clone(), grouping);
         FnsLatencySrc::new(f, || (), src)
     }
 
     fn fsrc2_grouped(
         base_target_latency: Duration,
-        group_size: u32,
+        grouping: u32,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<2>> {
         let bw0 = BusyWork::new(base_target_latency);
         let effort0 = bw0.effort();
@@ -381,7 +381,7 @@ mod grouped_10 {
             f1b()
         };
 
-        let src = LatencySrc2n::new(f0.clone(), f1.clone(), group_size);
+        let src = LatencySrc2n::new(f0.clone(), f1.clone(), grouping);
         FnsLatencySrc::new(f0, f1, src)
     }
 
