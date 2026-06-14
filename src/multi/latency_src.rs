@@ -99,14 +99,14 @@ impl<V: Copy> Iterator for Doler<V> {
 
 /// A [`LatencySrc`] that groups invocations of a single `f` into groups of size `grouping` and yields
 /// the average latency of each group `grouping` times before proceding to the next group execution.
-pub struct LatencySrc1n<F0: FnMut()> {
+pub struct LatencySrc1g<F0: FnMut()> {
     /// Target closure
     f: F0,
     /// doler
     doler: Doler<[Duration; 1]>,
 }
 
-impl<F0: FnMut()> LatencySrc1n<F0> {
+impl<F0: FnMut()> LatencySrc1g<F0> {
     /// Returns an instance of `Self`.
     pub fn new(f: F0, grouping: u32) -> Self {
         Self {
@@ -116,7 +116,7 @@ impl<F0: FnMut()> LatencySrc1n<F0> {
     }
 }
 
-impl<F0: FnMut()> Iterator for LatencySrc1n<F0> {
+impl<F0: FnMut()> Iterator for LatencySrc1g<F0> {
     type Item = [Duration; 1];
 
     #[inline(always)]
@@ -133,18 +133,18 @@ impl<F0: FnMut()> Iterator for LatencySrc1n<F0> {
     }
 }
 
-impl<F0: FnMut()> LatencySrc<1> for LatencySrc1n<F0> {}
+impl<F0: FnMut()> LatencySrc<1> for LatencySrc1g<F0> {}
 
 /// A [`LatencySrc`] that groups invocations of two closures` into groups of size `grouping` and yields
 /// the respective average latencies of the closures for each group `grouping` times before proceding
 /// to the next group execution..
-pub struct LatencySrc2n<F0: FnMut(), F1: FnMut()> {
+pub struct LatencySrc2g<F0: FnMut(), F1: FnMut()> {
     f0: F0,
     f1: F1,
     doler: Doler<[Duration; 2]>,
 }
 
-impl<F0: FnMut(), F1: FnMut()> LatencySrc2n<F0, F1> {
+impl<F0: FnMut(), F1: FnMut()> LatencySrc2g<F0, F1> {
     /// Returns an instance of `Self`.
     pub fn new(f0: F0, f1: F1, grouping: u32) -> Self {
         Self {
@@ -155,7 +155,7 @@ impl<F0: FnMut(), F1: FnMut()> LatencySrc2n<F0, F1> {
     }
 }
 
-impl<F0: FnMut(), F1: FnMut()> Iterator for LatencySrc2n<F0, F1> {
+impl<F0: FnMut(), F1: FnMut()> Iterator for LatencySrc2g<F0, F1> {
     type Item = [Duration; 2];
 
     #[inline(always)]
@@ -175,7 +175,7 @@ impl<F0: FnMut(), F1: FnMut()> Iterator for LatencySrc2n<F0, F1> {
     }
 }
 
-impl<F0: FnMut(), F1: FnMut()> LatencySrc<2> for LatencySrc2n<F0, F1> {}
+impl<F0: FnMut(), F1: FnMut()> LatencySrc<2> for LatencySrc2g<F0, F1> {}
 
 #[cfg(feature = "_test_support")]
 pub mod test_support {

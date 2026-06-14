@@ -5,7 +5,7 @@
 use bench_utils::{
     BenchCfg, BusyWork, LatencyUnit, RunLength, latency,
     multi::{
-        BenchOut, LatencySrc, LatencySrc1, LatencySrc1n, LatencySrc2, LatencySrc2n,
+        BenchOut, LatencySrc, LatencySrc1, LatencySrc1g, LatencySrc2, LatencySrc2g,
         bench_run_arg_cfg, bench_run_with_status_arg_cfg,
     },
     rel_approx_eq_dur,
@@ -361,7 +361,7 @@ mod grouped_10 {
         grouping: u32,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
         let f = BusyWork::new(base_target_latency).fun();
-        let src = LatencySrc1n::new(f.clone(), grouping);
+        let src = LatencySrc1g::new(f.clone(), grouping);
         FnsLatencySrc::new(f, || (), src)
     }
 
@@ -381,7 +381,7 @@ mod grouped_10 {
             f1b()
         };
 
-        let src = LatencySrc2n::new(f0.clone(), f1.clone(), grouping);
+        let src = LatencySrc2g::new(f0.clone(), f1.clone(), grouping);
         FnsLatencySrc::new(f0, f1, src)
     }
 
