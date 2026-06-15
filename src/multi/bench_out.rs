@@ -1,7 +1,7 @@
 //! Module defining the key data structure produced by the [`multi::bench_run`](super::bench_run) and
 //! related benchmarking functions.
 
-use crate::{BenchCfg, Comp, LatencyUnit, SummaryStats, summary_stats};
+use crate::{BenchCfg, LatencyUnit, SummaryStats, summary_stats};
 use basic_stats::core::{AltHyp, Ci, HypTestResult, PositionWrtCi};
 use std::{
     array,
