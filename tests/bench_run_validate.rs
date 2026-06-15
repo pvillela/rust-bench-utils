@@ -143,7 +143,8 @@ mod ungrouped {
     fn fsrc1(
         base_target_latency: Duration,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
-        let f = BusyWork::new(base_target_latency).fun();
+        let effort = BusyWork::calibrate(base_target_latency);
+        let f = BusyWork::new(effort).fun();
         let src = LatencySrc1::new(f.clone());
         FnsLatencySrc::new(f, || (), src)
     }
@@ -151,13 +152,12 @@ mod ungrouped {
     fn fsrc2(
         base_target_latency: Duration,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<2>> {
-        let bw0 = BusyWork::new(base_target_latency);
-        let effort0 = bw0.effort();
+        let effort0 = BusyWork::calibrate(base_target_latency);
         let effort_delta = effort0 / 10;
 
-        let f0 = bw0.fun();
-        let f1a = BusyWork::from_effort(effort0 - effort_delta).fun();
-        let f1b = BusyWork::from_effort(effort_delta).fun();
+        let f0 = BusyWork::new(effort0).fun();
+        let f1a = BusyWork::new(effort0 - effort_delta).fun();
+        let f1b = BusyWork::new(effort_delta).fun();
         let f1 = move || {
             f1a();
             f1b()
@@ -360,7 +360,8 @@ mod grouped_10 {
         base_target_latency: Duration,
         batch: u32,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
-        let f = BusyWork::new(base_target_latency).fun();
+        let effort = BusyWork::calibrate(base_target_latency);
+        let f = BusyWork::new(effort).fun();
         let src = LatencySrc1b::new(f.clone(), batch);
         FnsLatencySrc::new(f, || (), src)
     }
@@ -369,13 +370,12 @@ mod grouped_10 {
         base_target_latency: Duration,
         batch: u32,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<2>> {
-        let bw0 = BusyWork::new(base_target_latency);
-        let effort0 = bw0.effort();
+        let effort0 = BusyWork::calibrate(base_target_latency);
         let effort_delta = effort0 / 10;
 
-        let f0 = bw0.fun();
-        let f1a = BusyWork::from_effort(effort0 - effort_delta).fun();
-        let f1b = BusyWork::from_effort(effort_delta).fun();
+        let f0 = BusyWork::new(effort0).fun();
+        let f1a = BusyWork::new(effort0 - effort_delta).fun();
+        let f1b = BusyWork::new(effort_delta).fun();
         let f1 = move || {
             f1a();
             f1b()

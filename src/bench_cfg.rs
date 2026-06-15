@@ -1,59 +1,6 @@
-use crate::{LatencyUnit, latency, multi::LatencySrc};
+use crate::{LatencyUnit, RunLength, latency, multi::LatencySrc};
 use log::debug;
 use std::time::Duration;
-
-/// Specifies how long a benchmark should run for. Encapsulates a target number of iterations for the benchmark to run
-/// and a time duration. The benchmark run length can be set as a number of iterations, a time duration, or
-/// a number of iterations with a timeout duration.
-#[derive(Debug, Clone, Copy)]
-pub enum RunLength {
-    /// Run for a fixed number of iterations.
-    Count(usize),
-    /// Run for a fixed duration.
-    Time(Duration),
-    /// Run for a fixed number of iterations, but stop early if the given duration is exceeded.
-    CountWithTimeout(usize, Duration),
-}
-
-impl RunLength {
-    /// Returns both the number of iterations and time duration specified for the benchmark to run.
-    ///
-    /// The benchmark ends when the specified number of iterations is reached (or exceeded)
-    /// or when the time duration is reached (or exceeded), whichever comes first.
-    pub fn exec_count_and_duration(&self) -> (usize, Duration) {
-        match self {
-            Self::Count(count) => (*count, Duration::MAX),
-            Self::Time(duration) => (usize::MAX, *duration),
-            Self::CountWithTimeout(count, duration) => (*count, *duration),
-        }
-    }
-
-    /// Estimated number of iterations.
-    pub(crate) fn estimated_count(&self, execs_per_second: f64) -> usize {
-        assert!(execs_per_second > 0.0, "execs_per_second must be positive");
-        match self {
-            Self::Count(count) => *count,
-            Self::Time(duration) => (duration.as_secs_f64() * execs_per_second).round() as usize,
-            Self::CountWithTimeout(count, duration) => {
-                let count_from_duration =
-                    (duration.as_secs_f64() * execs_per_second).round() as usize;
-                *count.min(&count_from_duration)
-            }
-        }
-    }
-
-    /// Estimated run duration.
-    pub(crate) fn estimated_time(&self, execs_per_second: f64) -> Duration {
-        match self {
-            Self::Count(count) => Duration::from_secs_f64(*count as f64 / execs_per_second),
-            Self::Time(duration) => *duration,
-            Self::CountWithTimeout(count, duration) => {
-                let duration_from_count = Duration::from_secs_f64(*count as f64 / execs_per_second);
-                *duration.min(&duration_from_count)
-            }
-        }
-    }
-}
 
 /// Benchmark configuration, excluding the benchmark run length.
 ///

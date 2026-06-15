@@ -28,7 +28,8 @@ pub fn validate_latency_overhead(
         "`target_latency` and `batch` must both be positive"
     );
     let name = "Group of ".to_owned() + &batch.to_string();
-    let solo_f = BusyWork::new(target_latency).fun();
+    let effort = BusyWork::calibrate(target_latency);
+    let solo_f = BusyWork::new(effort).fun();
     let group_f = || {
         for _ in 0..batch {
             solo_f();

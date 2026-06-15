@@ -1,4 +1,3 @@
-use crate::RunLength;
 use log::trace;
 use std::time::{Duration, Instant};
 
@@ -117,6 +116,59 @@ impl LatencyUnit {
     }
 }
 
+/// Specifies how long a benchmark should run for. Encapsulates a target number of iterations for the benchmark to run
+/// and a time duration. The benchmark run length can be set as a number of iterations, a time duration, or
+/// a number of iterations with a timeout duration.
+#[derive(Debug, Clone, Copy)]
+pub enum RunLength {
+    /// Run for a fixed number of iterations.
+    Count(usize),
+    /// Run for a fixed duration.
+    Time(Duration),
+    /// Run for a fixed number of iterations, but stop early if the given duration is exceeded.
+    CountWithTimeout(usize, Duration),
+}
+
+impl RunLength {
+    /// Returns both the number of iterations and time duration specified for the benchmark to run.
+    ///
+    /// The benchmark ends when the specified number of iterations is reached (or exceeded)
+    /// or when the time duration is reached (or exceeded), whichever comes first.
+    pub fn exec_count_and_duration(&self) -> (usize, Duration) {
+        match self {
+            Self::Count(count) => (*count, Duration::MAX),
+            Self::Time(duration) => (usize::MAX, *duration),
+            Self::CountWithTimeout(count, duration) => (*count, *duration),
+        }
+    }
+
+    /// Estimated number of iterations.
+    pub(crate) fn estimated_count(&self, execs_per_second: f64) -> usize {
+        assert!(execs_per_second > 0.0, "execs_per_second must be positive");
+        match self {
+            Self::Count(count) => *count,
+            Self::Time(duration) => (duration.as_secs_f64() * execs_per_second).round() as usize,
+            Self::CountWithTimeout(count, duration) => {
+                let count_from_duration =
+                    (duration.as_secs_f64() * execs_per_second).round() as usize;
+                *count.min(&count_from_duration)
+            }
+        }
+    }
+
+    /// Estimated run duration.
+    pub(crate) fn estimated_time(&self, execs_per_second: f64) -> Duration {
+        match self {
+            Self::Count(count) => Duration::from_secs_f64(*count as f64 / execs_per_second),
+            Self::Time(duration) => *duration,
+            Self::CountWithTimeout(count, duration) => {
+                let duration_from_count = Duration::from_secs_f64(*count as f64 / execs_per_second);
+                *duration.min(&duration_from_count)
+            }
+        }
+    }
+}
+
 /// Estimates how many iterations of `src` can be done in one second by iterating one or more times
 /// and doing a proportionality calculation.
 /// The iterator `src` is expected to encapsulate closure invocations such that each
@@ -133,7 +185,7 @@ impl LatencyUnit {
 /// of the estimation budget count.
 pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: RunLength) -> f64 {
     let (budget_count, budget_dur) = budget.exec_count_and_duration();
-    let mut acc_latency = Duration::from_nanos(0);
+    let mut acc_latency = Duration::ZERO;
     let mut acc_execs: usize = 0;
 
     for i in 1.. {
@@ -143,15 +195,16 @@ pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: Run
         acc_latency += iter_latency;
         acc_execs += iter_execs;
         trace!("src_execs_per_sec >>> i={i}");
-        if iter_latency >= budget_dur / 2 || acc_latency >= budget_dur || acc_execs >= budget_count
+        // Castings to f64 to avoid integer overflow or truncation to zero.
+        if iter_latency >= budget_dur / 3
+            || acc_latency.as_secs_f64() >= budget_dur.as_secs_f64() * (2.0 / 3.0)
+            || acc_execs as f64 >= budget_count as f64 * (2.0 / 3.0)
         {
             let iter_execs_per_sec = iter_execs as f64 / iter_latency.as_secs_f64();
             let acc_execs_per_sec = acc_execs as f64 / acc_latency.as_secs_f64();
-            trace!(
-                "src_execs_per_sec >>> src_execs_per_sec={}",
-                iter_execs_per_sec.max(acc_execs_per_sec)
-            );
-            return iter_execs_per_sec.max(acc_execs_per_sec);
+            let execs_per_sec = iter_execs_per_sec.max(acc_execs_per_sec);
+            trace!("execs_per_sec >>> execs_per_sec={execs_per_sec}",);
+            return execs_per_sec;
         }
     }
 

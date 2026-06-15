@@ -16,7 +16,8 @@ fn main() {
     let target_latency_nanos = target_latency.as_nanos() as f64;
     println!("target_latency_nanos={}", target_latency.as_nanos());
 
-    let f = BusyWork::new(target_latency).fun();
+    let effort = BusyWork::calibrate(target_latency);
+    let f = BusyWork::new(effort).fun();
 
     let mut sum2dev = 0.;
     for _ in 0..N {

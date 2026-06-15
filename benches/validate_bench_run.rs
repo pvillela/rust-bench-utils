@@ -18,7 +18,8 @@ fn run_bench_with_status(
 
     println!("validate_bench_run: {name}");
 
-    let mut f = BusyWork::new(target_latency).fun();
+    let effort = BusyWork::calibrate(target_latency);
+    let mut f = BusyWork::new(effort).fun();
 
     let cfg = BenchCfg::default()
         .with_warmup_millis(warmup_millis)
