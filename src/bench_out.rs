@@ -431,8 +431,7 @@ impl Debug for BenchOut {
 
 impl From<multi::BenchOut<1>> for BenchOut {
     fn from(value: multi::BenchOut<1>) -> Self {
-        // Destructure the struct and unpack the single-element array
-        let multi::BenchOut { arity: _, arr: [b] } = value;
+        let [b] = value.arr;
         b
     }
 }

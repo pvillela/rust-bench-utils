@@ -3,8 +3,7 @@ use std::thread;
 use crate::{
     BenchCfg, RunLength,
     duo::DuoOut,
-    multi::BenchOut,
-    multi::{self, LatencySrc2, LatencySrc2b},
+    multi::{self, BenchOut, LatencySrc, LatencySrc1, LatencySrc1b, LatencySrc2, LatencySrc2b},
     status::Status,
 };
 
@@ -228,9 +227,65 @@ pub fn bench_run_parallel_arg_cfg(
     f2: impl FnMut() + Send,
     exec_run_length: RunLength,
 ) -> DuoOut {
+    let src1 = LatencySrc1::new(f1);
+    let src2 = LatencySrc1::new(f2);
+    bench_run_parallel_src_arg_cfg(cfg, src1, src2, exec_run_length)
+}
+
+/// Similar to [`bench_run_parallel`] but batches the executions of `f1` and `f2` into groups of size `batch`.
+///
+/// Batching may reduce measurement overhead.
+/// Each batch results in the batch average being collected `batch` times, so the number of captured
+/// latency values is not impacted by grouping.
+/// However, a potential consequence is that the statistical tests provided by [`DuoOut`] may be somewhat
+/// distorted as the resulting distributions may no longer be approximately logormal.
+pub fn bench_run_parallel_b(
+    f1: impl FnMut() + Send,
+    f2: impl FnMut() + Send,
+    exec_run_length: RunLength,
+    batch: u32,
+) -> DuoOut {
+    let cfg = BenchCfg::default();
+    bench_run_parallel_arg_cfg_b(&cfg, f1, f2, exec_run_length, batch)
+}
+
+/// Similar to [`bench_run_parallel_arg_cfg`] but batches the executions of `f1` and `f2` into groups of size `batch`.
+///
+/// Batching may reduce measurement overhead.
+/// Each batch results in the batch average being collected `batch` times, so the number of captured
+/// latency values is not impacted by grouping.
+/// However, a potential consequence is that the statistical tests provided by [`DuoOut`] may be somewhat
+/// distorted as the resulting distributions may no longer be approximately logormal.
+pub fn bench_run_parallel_arg_cfg_b(
+    cfg: &BenchCfg,
+    f1: impl FnMut() + Send,
+    f2: impl FnMut() + Send,
+    exec_run_length: RunLength,
+    batch: u32,
+) -> DuoOut {
+    let src1 = LatencySrc1b::new(f1, batch);
+    let src2 = LatencySrc1b::new(f2, batch);
+    bench_run_parallel_src_arg_cfg(cfg, src1, src2, exec_run_length)
+}
+
+#[doc(hidden)]
+/// Runs benchmarks of `src1` and `src2` on two separate threads, using [multi::bench_run_arg_cfg] on each thread.
+///
+/// Arguments:
+/// - `cfg` - bench configuration used to run the benchmark.
+/// - `src1` - first latency source.
+/// - `src2` - second latency source.
+/// - `exec_run_length` - target run length (iteration count and/or duration) for data collection. Applies to
+///   each thread.
+pub fn bench_run_parallel_src_arg_cfg(
+    cfg: &BenchCfg,
+    src1: impl LatencySrc<1> + Send,
+    src2: impl LatencySrc<1> + Send,
+    exec_run_length: RunLength,
+) -> DuoOut {
     let (out1, out2) = thread::scope(|s| {
-        let h1 = s.spawn(|| crate::bench_run_arg_cfg(&cfg, f1, exec_run_length));
-        let h2 = s.spawn(|| crate::bench_run_arg_cfg(&cfg, f2, exec_run_length));
+        let h1 = s.spawn(|| multi::bench_run_arg_cfg(&cfg, src1, exec_run_length));
+        let h2 = s.spawn(|| multi::bench_run_arg_cfg(&cfg, src2, exec_run_length));
 
         let out1 = h1.join().expect("thread running bench for `f1` panicked");
         let out2 = h2.join().expect("thread running bench for `f2` panicked");
@@ -240,6 +295,6 @@ pub fn bench_run_parallel_arg_cfg(
 
     BenchOut {
         arity: 2,
-        arr: [out1, out2],
+        arr: [out1.into(), out2.into()],
     }
 }
