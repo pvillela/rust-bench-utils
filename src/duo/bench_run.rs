@@ -294,7 +294,6 @@ pub fn bench_run_parallel_src_arg_cfg(
     });
 
     BenchOut {
-        arity: 2,
         arr: [out1.into(), out2.into()],
     }
 }

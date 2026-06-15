@@ -24,7 +24,6 @@ use std::{
 /// Thus, the `*_ln_*` methods are useful for the analysis of median latencies.
 #[derive(Debug)]
 pub struct BenchOut<const K: usize> {
-    pub(crate) arity: usize,
     pub(crate) arr: [crate::BenchOut; K],
 }
 
@@ -48,10 +47,7 @@ impl Deref for BenchOut<1> {
 
 impl From<crate::BenchOut> for BenchOut<1> {
     fn from(value: crate::BenchOut) -> Self {
-        Self {
-            arity: 1,
-            arr: [value],
-        }
+        Self { arr: [value] }
     }
 }
 
@@ -71,7 +67,6 @@ impl<const K: usize> BenchOut<K> {
     #[doc(hidden)]
     pub fn new(cfg: &BenchCfg) -> Self {
         Self {
-            arity: K,
             arr: array::from_fn(|_| crate::BenchOut::new(cfg)),
         }
     }
@@ -105,11 +100,12 @@ impl<const K: usize> BenchOut<K> {
     }
 
     /// Returns the number of benchmarked closures (`K`).
+    #[inline(always)]
     pub fn arity(&self) -> usize {
-        self.arity
+        K
     }
 
-    pub(crate) fn first(&self) -> &crate::BenchOut {
+    pub fn first(&self) -> &crate::BenchOut {
         &self.arr[0]
     }
 
