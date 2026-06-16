@@ -22,10 +22,10 @@ fn criterion_benchmark(c: &mut Criterion) {
     eprintln!("base_effort={}", base_effort);
 
     let effort1 = (base_effort as f64 * target_ratio) as u32;
-    let mut f1 = BusyWork::new(effort1).fun();
+    let mut f1 = BusyWork::fun(effort1);
 
     let effort2 = base_effort;
-    let mut f2 = BusyWork::new(effort2).fun();
+    let mut f2 = BusyWork::fun(effort2);
 
     for i in 1..=nrepeats {
         let name1 = format!("f1={target_ratio}@novar[{i}/{nrepeats}]");

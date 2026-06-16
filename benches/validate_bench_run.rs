@@ -1,6 +1,6 @@
 use bench_utils::{
-    BenchCfg, BusyWork, RunLength, bench_run_with_status_arg_cfg, latency, rel_approx_eq_dur,
-    test_support::AbsRelDiffDur,
+    BenchCfg, BusyWork, RunLength, bench_run_with_status_arg_cfg, bench_run_with_status_arg_cfg_b,
+    latency, rel_approx_eq_dur, test_support::AbsRelDiffDur,
 };
 use std::time::Duration;
 
@@ -10,6 +10,7 @@ fn run_bench_with_status(
     bench_time: Duration,
     target_latency: Duration,
     epsilon: f64,
+    batch: Option<u32>,
 ) {
     let name = format!(
         "target_latency={target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}"
@@ -19,12 +20,17 @@ fn run_bench_with_status(
     println!("validate_bench_run: {name}");
 
     let effort = BusyWork::calibrate(target_latency);
-    let mut f = BusyWork::new(effort).fun();
+    let mut f = BusyWork::fun(effort);
 
     let cfg = BenchCfg::default()
         .with_warmup_millis(warmup_millis)
         .with_status_millis(status_millis);
-    let out = bench_run_with_status_arg_cfg(&cfg, &mut f, RunLength::Count(exec_count));
+    let out = match batch {
+        None => bench_run_with_status_arg_cfg(&cfg, &mut f, RunLength::Count(exec_count)),
+        Some(batch) => {
+            bench_run_with_status_arg_cfg_b(&cfg, &mut f, RunLength::Count(exec_count), batch)
+        }
+    };
     println!();
 
     let out_mean = out.mean();
@@ -54,24 +60,26 @@ fn run_bench_with_status(
 
 fn main() {
     {
-        const EPSILON: f64 = 0.05;
+        const EPSILON: f64 = 0.01; // 0.05
         run_bench_with_status(
             1000,
             100,
             Duration::from_millis(2000),
             Duration::from_millis(10),
             EPSILON,
+            None,
         );
     }
 
     {
-        const EPSILON: f64 = 0.05;
+        const EPSILON: f64 = 0.01; // 0.05
         run_bench_with_status(
             100,
             10,
             Duration::from_millis(200),
             Duration::from_micros(50),
             EPSILON,
+            Some(20),
         );
     }
 }

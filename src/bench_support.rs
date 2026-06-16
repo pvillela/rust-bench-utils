@@ -29,7 +29,7 @@ pub fn validate_latency_overhead(
     );
     let name = "Group of ".to_owned() + &batch.to_string();
     let effort = BusyWork::calibrate(target_latency);
-    let solo_f = BusyWork::new(effort).fun();
+    let solo_f = BusyWork::fun(effort);
     let group_f = || {
         for _ in 0..batch {
             solo_f();

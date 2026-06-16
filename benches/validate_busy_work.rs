@@ -9,7 +9,7 @@ fn main() {
 
 fn run_core(dur: Duration) -> (f64, f64) {
     let effort = BusyWork::calibrate(dur);
-    let f = BusyWork::new(effort).fun();
+    let f = BusyWork::fun(effort);
     let latency_secs = latency(f).as_secs_f64();
     let dur_secs = dur.as_secs_f64();
     let rel_diff = dur_secs.abs_rel_diff(latency_secs);
@@ -67,8 +67,8 @@ fn validate_ratio() {
         let effort1 = BusyWork::calibrate(dur1);
         let effort2 = (effort1 as f64 * ratio) as u32;
 
-        let f1 = BusyWork::new(effort1).fun();
-        let f2 = BusyWork::new(effort2).fun();
+        let f1 = BusyWork::fun(effort1);
+        let f2 = BusyWork::fun(effort2);
 
         let mut latency_secs1 = 0.0;
         let mut latency_secs2 = 0.0;

@@ -8,35 +8,23 @@ use std::{hint::black_box, time::Duration};
 /// the validation of benchmarking frameworks.
 /// Gated by feature **"busy_work"**.
 ///
-/// The closure executes a work function whose latency is controlled by the `effort` value encapsulated in this struct.
+/// The closure executes a work function whose latency is controlled by an `effort` value that is obtained by
+/// running a calibration associated function.
 ///
 /// Given a desired target latency at a milliseconds scale, the latency of the resulting closure is not as reliable as
 /// using `|| thread::sleep(target_latency)`. However, the busy work closure is a more realistic synthetic load as its
 /// latency is the result of computations, and it is more reliable for latencies at the microseconds scale.
-/// In any case, the ratio of the latencies of two closures created from two [`BusyWork`] instances is reliably
-/// proportional to the ratio of the respective `effort` attributes, the more so the higher the sample size.
-pub struct BusyWork {
-    effort: u32,
-}
+/// In any case, the ratio of the latencies of two closures created from two `effort` values is reliably
+/// proportional to the ratio of the respective `effort` values, the more so the higher the sample size.
+pub struct BusyWork;
 
 impl BusyWork {
-    /// Constructs a new intance with the provided `effort`.
-    pub fn new(effort: u32) -> Self {
-        BusyWork { effort }
-    }
-
-    /// The number of work iterations performed by the closure returned by [`Self::fun`].
-    pub fn effort(&self) -> u32 {
-        self.effort
-    }
-
     /// Closure which does a significant amount of computation to support validation of benchmarking frameworks.
     ///
-    /// The documentation for [`BusyWork`] and its constructor methods describes how to control the closure's
-    /// latency.
+    /// See [`calibrate`](Self::calibrate) and [`calibrate_with_budget`](Self::calibrate_with_budget) for how to
+    /// determine the `effort` argument to achieve a desired target latency.
     #[inline(always)]
-    pub fn fun(&self) -> impl Fn() + Clone + use<> {
-        let effort = self.effort;
+    pub fn fun(effort: u32) -> impl Fn() + Clone + use<> {
         move || Self::work(effort)
     }
 
@@ -120,7 +108,7 @@ impl BusyWork {
 
 #[cfg(test)]
 #[cfg(feature = "_bench")]
-/// cargo test --package bench_utils --lib --all-features -- busy_work::validate_latency --nocapture
+/// cargo test -r --package bench_utils --lib --all-features -- busy_work::validate_latency --nocapture
 mod validate_latency {
     use super::*;
     use crate::latency;
@@ -128,7 +116,7 @@ mod validate_latency {
 
     fn run(dur: Duration) -> (f64, f64) {
         let effort = BusyWork::calibrate(dur);
-        let f = BusyWork::new(effort).fun();
+        let f = BusyWork::fun(effort);
         let latency_secs = latency(f).as_secs_f64();
         let dur_secs = dur.as_secs_f64();
         let rel_diff = dur_secs.abs_rel_diff(latency_secs);
@@ -194,8 +182,8 @@ mod validate_ratio {
     fn run(dur1: Duration, ratio: f64, repeats: u32) -> f64 {
         let effort1 = BusyWork::calibrate(dur1);
         let effort2 = (effort1 as f64 * ratio) as u32;
-        let f1 = BusyWork::new(effort1).fun();
-        let f2 = BusyWork::new(effort2).fun();
+        let f1 = BusyWork::fun(effort1);
+        let f2 = BusyWork::fun(effort2);
 
         let mut latency1 = Duration::ZERO;
         let mut latency2 = Duration::ZERO;

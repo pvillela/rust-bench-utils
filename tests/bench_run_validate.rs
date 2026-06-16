@@ -144,7 +144,7 @@ mod ungrouped {
         base_target_latency: Duration,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
         let effort = BusyWork::calibrate(base_target_latency);
-        let f = BusyWork::new(effort).fun();
+        let f = BusyWork::fun(effort);
         let src = LatencySrc1::new(f.clone());
         FnsLatencySrc::new(f, || (), src)
     }
@@ -155,9 +155,9 @@ mod ungrouped {
         let effort0 = BusyWork::calibrate(base_target_latency);
         let effort_delta = effort0 / 10;
 
-        let f0 = BusyWork::new(effort0).fun();
-        let f1a = BusyWork::new(effort0 - effort_delta).fun();
-        let f1b = BusyWork::new(effort_delta).fun();
+        let f0 = BusyWork::fun(effort0);
+        let f1a = BusyWork::fun(effort0 - effort_delta);
+        let f1b = BusyWork::fun(effort_delta);
         let f1 = move || {
             f1a();
             f1b()
@@ -361,7 +361,7 @@ mod grouped_10 {
         batch: u32,
     ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
         let effort = BusyWork::calibrate(base_target_latency);
-        let f = BusyWork::new(effort).fun();
+        let f = BusyWork::fun(effort);
         let src = LatencySrc1b::new(f.clone(), batch);
         FnsLatencySrc::new(f, || (), src)
     }
@@ -373,9 +373,9 @@ mod grouped_10 {
         let effort0 = BusyWork::calibrate(base_target_latency);
         let effort_delta = effort0 / 10;
 
-        let f0 = BusyWork::new(effort0).fun();
-        let f1a = BusyWork::new(effort0 - effort_delta).fun();
-        let f1b = BusyWork::new(effort_delta).fun();
+        let f0 = BusyWork::fun(effort0);
+        let f1a = BusyWork::fun(effort0 - effort_delta);
+        let f1b = BusyWork::fun(effort_delta);
         let f1 = move || {
             f1a();
             f1b()
