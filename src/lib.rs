@@ -52,14 +52,12 @@
 mod bench_cfg;
 mod bench_out;
 mod comp;
-mod fake_work;
 mod latency;
 mod summary_stats;
 
 pub use bench_cfg::*;
 pub use bench_out::*;
 pub use comp::*;
-pub use fake_work::*;
 pub use latency::*;
 pub use summary_stats::*;
 
@@ -70,10 +68,8 @@ pub mod duo;
 pub mod multi;
 pub mod status;
 
-#[cfg(feature = "busy_work")]
-mod busy_work;
-#[cfg(feature = "busy_work")]
-pub use busy_work::*;
+#[cfg(feature = "load")]
+pub mod load;
 
 /// Structs and enums for confidence intervals and hypothesis tests.
 pub mod stats_types {

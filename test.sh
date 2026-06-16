@@ -11,4 +11,4 @@ export NOCOVER="1"
 cargo nextest run --tests --features _ALL_NON_TEST,_test --no-fail-fast
 
 echo "***** test doc"
-cargo test --doc --features busy_work --target-dir target/test-target
+cargo test --doc --features load --target-dir target/test-target

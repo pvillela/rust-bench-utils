@@ -5,7 +5,7 @@
 //! compares solo vs. grouped execution latencies to detect overhead from the measurement harness.
 
 use crate::{
-    BenchCfg, BusyWork, RunLength, bench_run_with_status_arg_cfg, test_support::AbsRelDiffDur,
+    BenchCfg, RunLength, bench_run_with_status_arg_cfg, load::BusyWork, test_support::AbsRelDiffDur,
 };
 use std::time::Duration;
 

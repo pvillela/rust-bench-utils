@@ -1,6 +1,6 @@
 use bench_utils::{
-    BenchCfg, BusyWork, RunLength, bench_run_with_status_arg_cfg, bench_run_with_status_arg_cfg_b,
-    latency, rel_approx_eq_dur, test_support::AbsRelDiffDur,
+    BenchCfg, RunLength, bench_run_with_status_arg_cfg, bench_run_with_status_arg_cfg_b, latency,
+    load::BusyWork, rel_approx_eq_dur, test_support::AbsRelDiffDur,
 };
 use std::time::Duration;
 

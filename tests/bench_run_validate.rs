@@ -3,7 +3,8 @@
 //! cargo test -r --test bench_run_validate --all-features -- grouped_10 ungrouped --nocapture --test-threads=1
 
 use bench_utils::{
-    BenchCfg, BusyWork, LatencyUnit, RunLength, latency,
+    BenchCfg, LatencyUnit, RunLength, latency,
+    load::BusyWork,
     multi::{
         BenchOut, LatencySrc, LatencySrc1, LatencySrc1b, LatencySrc2, LatencySrc2b,
         bench_run_arg_cfg, bench_run_with_status_arg_cfg,

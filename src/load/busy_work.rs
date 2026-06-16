@@ -1,12 +1,11 @@
-use super::latency;
-use crate::RunLength;
+use crate::{RunLength, latency};
 use sha2::{Digest, Sha256};
 use std::{hint::black_box, time::Duration};
 
 #[derive(Clone, Copy)]
 /// Produces a closure which does a significant amount of computation, useful as a synthetic workload to support
 /// the validation of benchmarking frameworks.
-/// Gated by feature **"busy_work"**.
+/// Gated by feature **"load"**.
 ///
 /// The closure executes a work function whose latency is controlled by an `effort` value that is obtained by
 /// running a calibration associated function.

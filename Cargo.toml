@@ -35,7 +35,7 @@ statrs = "0.18"
 
 ## Public
 default = ["basic_stats/normal"] # should always be enabled for public use
-busy_work = ["dep:sha2"]
+load = ["dep:sha2"]
 
 ## Helpers
 __null = ["dep:basic_stats"]
@@ -43,11 +43,11 @@ __null = ["dep:basic_stats"]
 ## Internal
 
 # MUST UPDATE THIS WHENEVER OTHER FEATURES CHANGE
-_ALL_NON_TEST = ["default", "busy_work", "_experimental", "_bench_diff"]
+_ALL_NON_TEST = ["default", "load", "_experimental", "_bench_diff"]
 
 _bench = [
     "_test_support",
-    "busy_work",
+    "load",
     "dep:criterion",
 ] # used by some benches and some tests
 _test = ["_test_support"]
@@ -65,7 +65,7 @@ _experimental = [
 _bench_diff = ["_experimental"] # for use by `bench_diff` crate
 
 [package.metadata.docs.rs]
-features = ["busy_work"]
+features = ["load"]
 
 [[bench]]
 name = "criterion_comp"

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
-use bench_utils::{fake_work, latency};
+use bench_utils::{latency, load::fake_work};
 
 fn main() {
     fn run(dur: Duration) -> (f64, f64) {

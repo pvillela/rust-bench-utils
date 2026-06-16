@@ -1,6 +1,6 @@
 mod support;
 
-use bench_utils::BusyWork;
+use bench_utils::load::BusyWork;
 use criterion::{Criterion, criterion_group, criterion_main};
 use support::bench_basic_naive::{Args, get_args};
 

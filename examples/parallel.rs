@@ -1,12 +1,12 @@
 //! Example of two benches running in parallel on separate threads.
-//! This example requires the feature "busy_work".
+//! This example requires the feature "load".
 //!
 //! To run the example:
 //! ```
-//! cargo run -r --example parallel --features busy_work
+//! cargo run -r --example parallel --features load
 //! ```
 
-use bench_utils::{BenchCfg, BusyWork, RunLength, duo::bench_run_parallel_arg_cfg};
+use bench_utils::{BenchCfg, RunLength, duo::bench_run_parallel_arg_cfg, load::BusyWork};
 use std::time::{Duration, Instant};
 
 fn main() {

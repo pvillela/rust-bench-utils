@@ -7,8 +7,8 @@ set -e  # Stop script immediately on any error
 echo "***** (default feature)"
 cargo check --lib --tests
 
-echo "***** --features busy_work"
-cargo check --lib --tests --features busy_work
+echo "***** --features load"
+cargo check --lib --tests --features load
 
 echo "*****  --features _bench"
 cargo check --lib --tests --features _bench

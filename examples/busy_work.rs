@@ -1,12 +1,12 @@
 //! Example demonstrating [`BusyWork`].
-//! This example requires the feature "busy_work".
+//! This example requires the feature "load".
 //!
 //! To run the example:
 //! ```
-//! cargo run -r --example busy_work --features busy_work
+//! cargo run -r --example busy_work --features load
 //! ```
 
-use bench_utils::{BusyWork, latency};
+use bench_utils::{latency, load::BusyWork};
 use std::time::Duration;
 
 fn main() {

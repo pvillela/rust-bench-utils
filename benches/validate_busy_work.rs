@@ -1,5 +1,5 @@
 use basic_stats::{approx_eq, dev_utils::ApproxEq, rel_approx_eq};
-use bench_utils::{BusyWork, latency};
+use bench_utils::{latency, load::BusyWork};
 use std::time::Duration;
 
 fn main() {
