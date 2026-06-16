@@ -36,7 +36,7 @@
 //! | Feature | Purpose |
 //! |---------|---------|
 //! | `default` | For access to all of the library's benchmarking functions and types.
-//! | `busy_work` | Enables synthetic loads using SHA-256-based CPU work via [`BusyWork`] (uses `sha2` crate) |
+//! | `load` | Enables synthetic loads: `fake_work(Duration)` (thread sleep) and SHA-256-based CPU work via [`BusyWork`] (uses `sha2` crate) |
 //!
 //! # Log-normal assumption
 //!
