@@ -80,24 +80,24 @@ impl<const K: usize> BenchState<K> {
 /// Arguments:
 /// - `cfg` - bench configuration used to run the benchmark.
 /// - `src` - iterator yielding arrays of measured latencies.
-/// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
+/// - `run_length` - target run length (iteration count and/or duration) for data collection.
 /// - `s` - status handler for reporting warm-up and execution progress.
 pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     cfg: &BenchCfg,
     mut src: impl LatencySrc<K>,
-    exec_run_length: RunLength,
+    run_length: RunLength,
     mut s: S,
 ) -> BenchOut<K> {
-    debug!("bench_run_x >>> exec_run_length={exec_run_length:?}");
+    debug!("bench_run_x >>> run_length={run_length:?}");
     let mut state = BenchOut::new(cfg);
-    let execs_per_second = cfg.execs_per_sec(&mut src, exec_run_length);
+    let execs_per_second = cfg.execs_per_sec(&mut src, run_length);
     debug!("bench_run_x >>> execs_per_second={execs_per_second}");
 
     let warmup_run_length = RunLength::Time(Duration::from_millis(cfg.warmup_millis()));
     let warmup_est_time = warmup_run_length.estimated_time(execs_per_second);
     let warmup_est_count = warmup_run_length.estimated_count(execs_per_second);
-    let exec_est_time = exec_run_length.estimated_time(execs_per_second);
-    let exec_est_count = exec_run_length.estimated_count(execs_per_second);
+    let exec_est_time = run_length.estimated_time(execs_per_second);
+    let exec_est_count = run_length.estimated_count(execs_per_second);
 
     // Warm-up.
     let mut warmup_status = S::part_apply(s.warmup_status(), warmup_est_time, warmup_est_count);
@@ -124,12 +124,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
         usize::MAX
     };
     debug!("bench_run_x >>> exec_status_count={exec_status_count}");
-    state.execute(
-        &mut src,
-        exec_run_length,
-        warmup_status_count,
-        &mut exec_status,
-    );
+    state.execute(&mut src, run_length, exec_status_count, &mut exec_status);
 
     state
 }
@@ -144,13 +139,10 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
 ///
 /// Arguments:
 /// - `f` - benchmark target.
-/// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
-pub fn bench_run<const K: usize>(
-    src: impl LatencySrc<K>,
-    exec_run_length: RunLength,
-) -> BenchOut<K> {
+/// - `run_length` - target run length (iteration count and/or duration) for data collection.
+pub fn bench_run<const K: usize>(src: impl LatencySrc<K>, run_length: RunLength) -> BenchOut<K> {
     let cfg = BenchCfg::default();
-    bench_run_arg_cfg(&cfg, src, exec_run_length)
+    bench_run_arg_cfg(&cfg, src, run_length)
 }
 
 /// Repeatedly invokes `src.next()`, collects the resulting latency data in a
@@ -164,13 +156,13 @@ pub fn bench_run<const K: usize>(
 /// Arguments:
 /// - `cfg` - bench configuration used to run the benchmark.
 /// - `f` - benchmark target.
-/// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
+/// - `run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_arg_cfg<const K: usize>(
     cfg: &BenchCfg,
     src: impl LatencySrc<K>,
-    exec_run_length: RunLength,
+    run_length: RunLength,
 ) -> BenchOut<K> {
-    bench_run_x(cfg, src, exec_run_length, NoStatus)
+    bench_run_x(cfg, src, run_length, NoStatus)
 }
 
 /// Repeatedly invokes `src.next()`, collects the resulting latency data in a
@@ -183,13 +175,13 @@ pub fn bench_run_arg_cfg<const K: usize>(
 ///
 /// Arguments:
 /// - `f` - benchmark target.
-/// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
+/// - `run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_with_status<const K: usize>(
     src: impl LatencySrc<K>,
-    exec_run_length: RunLength,
+    run_length: RunLength,
 ) -> BenchOut<K> {
     let cfg = BenchCfg::default();
-    bench_run_with_status_arg_cfg(&cfg, src, exec_run_length)
+    bench_run_with_status_arg_cfg(&cfg, src, run_length)
 }
 
 /// Repeatedly invokes `src.next()`, collects the resulting latency data in a
@@ -204,11 +196,11 @@ pub fn bench_run_with_status<const K: usize>(
 /// Arguments:
 /// - `cfg` - bench configuration used to run the benchmark.
 /// - `f` - benchmark target.
-/// - `exec_run_length` - target run length (iteration count and/or duration) for data collection.
+/// - `run_length` - target run length (iteration count and/or duration) for data collection.
 pub fn bench_run_with_status_arg_cfg<const K: usize>(
     cfg: &BenchCfg,
     src: impl LatencySrc<K>,
-    exec_run_length: RunLength,
+    run_length: RunLength,
 ) -> BenchOut<K> {
     let mut w = stderr();
 
@@ -220,7 +212,7 @@ pub fn bench_run_with_status_arg_cfg<const K: usize>(
         "\nExecuting bench_run".to_owned(),
     );
 
-    bench_run_x(cfg, src, exec_run_length, s)
+    bench_run_x(cfg, src, run_length, s)
 }
 
 #[cfg(test)]
@@ -239,7 +231,7 @@ mod status {
     fn run<const K: usize, Src>(
         mut src: Src,
         base_warmup_millis: u64,
-        base_exec_run_length: RunLength,
+        base_run_length: RunLength,
         base_status_millis: u64,
         base_target_latency: Duration,
         epsilon: f64,
@@ -253,8 +245,8 @@ mod status {
         // Scale certain arguments to align with status tests between K = 1 and 2.
         let warmup_millis = base_warmup_millis * K as u64;
         let status_millis = base_status_millis * K as u64;
-        let exec_run_length = match base_exec_run_length {
-            RunLength::Count(_) => base_exec_run_length,
+        let run_length = match base_run_length {
+            RunLength::Count(_) => base_run_length,
             RunLength::Time(duration) => RunLength::Time(duration * 2),
             RunLength::CountWithTimeout(count, duration) => {
                 RunLength::CountWithTimeout(count, duration * 2)
@@ -262,7 +254,7 @@ mod status {
         };
 
         println!(
-            "\n***** Testing: warmup_millis={warmup_millis}, exec_run_length={exec_run_length:?}, status_millis={status_millis}, target_latency={base_target_latency:?}, epsilon={epsilon}"
+            "\n***** Testing: warmup_millis={warmup_millis}, run_length={run_length:?}, status_millis={status_millis}, target_latency={base_target_latency:?}, epsilon={epsilon}"
         );
 
         let warmup_run_length = RunLength::Time(Duration::from_millis(warmup_millis));
@@ -279,9 +271,9 @@ mod status {
             "\nExecuting bench_run".to_owned(),
         );
 
-        let execs_per_second = cfg.execs_per_sec(&mut src, exec_run_length);
+        let execs_per_second = cfg.execs_per_sec(&mut src, run_length);
 
-        let out = bench_run_x(&cfg, src, exec_run_length, status);
+        let out = bench_run_x(&cfg, src, run_length, status);
 
         let status_str = w.as_str().expect("StringWriter doesn't contain string");
         println!("** {status_str}");
@@ -315,14 +307,14 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
         {
             rel_approx_eq!(
                 caps[4].parse::<u64>().unwrap() as f64,
-                exec_run_length.estimated_time(execs_per_second).as_millis() as f64,
+                run_length.estimated_time(execs_per_second).as_millis() as f64,
                 epsilon
             );
             let exec_last = caps[5].parse::<u64>().unwrap();
             let exec_est_count = caps[6].parse::<u64>().unwrap();
             rel_approx_eq!(
                 exec_est_count as f64,
-                exec_run_length.estimated_count(execs_per_second) as f64,
+                run_length.estimated_count(execs_per_second) as f64,
                 epsilon
             );
             assert_eq!(out.n(), exec_last);
@@ -345,7 +337,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         fn run_test(
             base_warmup_millis: u64,
-            base_exec_run_length: RunLength,
+            base_run_length: RunLength,
             base_status_millis: u64,
             base_target_latency: Duration,
             epsilon: f64,
@@ -353,7 +345,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             run(
                 src1(base_target_latency),
                 base_warmup_millis,
-                base_exec_run_length,
+                base_run_length,
                 base_status_millis,
                 base_target_latency,
                 epsilon,
@@ -367,11 +359,11 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_millis: u64 = 0;
             let target_latency = Duration::from_micros(10);
             let status_millis: u64 = 0;
-            let exec_run_length = RunLength::Count(200);
+            let run_length = RunLength::Count(200);
 
             run_test(
                 warmup_millis,
-                exec_run_length,
+                run_length,
                 status_millis,
                 target_latency,
                 EPSILON,
@@ -385,14 +377,14 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_millis: u64 = 0;
             let target_latency = Duration::from_micros(10);
             let status_millis: u64 = 0;
-            let exec_run_length = RunLength::Count(0);
+            let run_length = RunLength::Count(0);
 
-            // exec_count must be > 0 but exec_run_length makes it 0
+            // exec_count must be > 0 but run_length makes it 0
             let result = {
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     run_test(
                         warmup_millis,
-                        exec_run_length,
+                        run_length,
                         status_millis,
                         target_latency,
                         EPSILON,
@@ -414,11 +406,11 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_millis: u64 = 0;
             let target_latency = Duration::from_micros(10);
             let status_millis: u64 = 1;
-            let exec_run_length = RunLength::Count(200);
+            let run_length = RunLength::Count(200);
 
             run_test(
                 warmup_millis,
-                exec_run_length,
+                run_length,
                 status_millis,
                 target_latency,
                 EPSILON,
@@ -432,11 +424,11 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
             let status_millis: u64 = 0;
-            let exec_run_length = RunLength::Count(200);
+            let run_length = RunLength::Count(200);
 
             run_test(
                 warmup_millis,
-                exec_run_length,
+                run_length,
                 status_millis,
                 target_latency,
                 EPSILON,
@@ -450,11 +442,11 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
             let status_millis: u64 = 1;
-            let exec_run_length = RunLength::Count(200);
+            let run_length = RunLength::Count(200);
 
             run_test(
                 warmup_millis,
-                exec_run_length,
+                run_length,
                 status_millis,
                 target_latency,
                 EPSILON,
@@ -468,11 +460,11 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
             let status_millis: u64 = 1;
-            let exec_run_length = RunLength::Count(300);
+            let run_length = RunLength::Count(300);
 
             run_test(
                 warmup_millis,
-                exec_run_length,
+                run_length,
                 status_millis,
                 target_latency,
                 EPSILON,
@@ -486,11 +478,11 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
             let status_millis: u64 = 1;
-            let exec_run_length = RunLength::CountWithTimeout(300, Duration::from_micros(2000));
+            let run_length = RunLength::CountWithTimeout(300, Duration::from_micros(2000));
 
             run_test(
                 warmup_millis,
-                exec_run_length,
+                run_length,
                 status_millis,
                 target_latency,
                 EPSILON,
@@ -503,7 +495,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         fn run_test(
             base_warmup_millis: u64,
-            base_exec_run_length: RunLength,
+            base_run_length: RunLength,
             base_status_millis: u64,
             base_target_latency: Duration,
             epsilon: f64,
@@ -511,7 +503,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             run(
                 src2(base_target_latency),
                 base_warmup_millis,
-                base_exec_run_length,
+                base_run_length,
                 base_status_millis,
                 base_target_latency,
                 epsilon,
@@ -525,11 +517,11 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_millis: u64 = 0;
             let target_latency = Duration::from_micros(10);
             let status_millis: u64 = 0;
-            let exec_run_length = RunLength::Count(200);
+            let run_length = RunLength::Count(200);
 
             run_test(
                 warmup_millis,
-                exec_run_length,
+                run_length,
                 status_millis,
                 target_latency,
                 EPSILON,
@@ -543,14 +535,14 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_millis: u64 = 0;
             let target_latency = Duration::from_micros(10);
             let status_millis: u64 = 0;
-            let exec_run_length = RunLength::Count(0);
+            let run_length = RunLength::Count(0);
 
-            // exec_count must be > 0 but exec_run_length makes it 0
+            // exec_count must be > 0 but run_length makes it 0
             let result = {
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     run_test(
                         warmup_millis,
-                        exec_run_length,
+                        run_length,
                         status_millis,
                         target_latency,
                         EPSILON,
@@ -572,11 +564,11 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_millis: u64 = 0;
             let target_latency = Duration::from_micros(10);
             let status_millis: u64 = 1;
-            let exec_run_length = RunLength::Count(200);
+            let run_length = RunLength::Count(200);
 
             run_test(
                 warmup_millis,
-                exec_run_length,
+                run_length,
                 status_millis,
                 target_latency,
                 EPSILON,
@@ -590,11 +582,11 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
             let status_millis: u64 = 0;
-            let exec_run_length = RunLength::Count(200);
+            let run_length = RunLength::Count(200);
 
             run_test(
                 warmup_millis,
-                exec_run_length,
+                run_length,
                 status_millis,
                 target_latency,
                 EPSILON,
@@ -608,11 +600,11 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
             let status_millis: u64 = 1;
-            let exec_run_length = RunLength::Count(200);
+            let run_length = RunLength::Count(200);
 
             run_test(
                 warmup_millis,
-                exec_run_length,
+                run_length,
                 status_millis,
                 target_latency,
                 EPSILON,
@@ -626,11 +618,11 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
             let status_millis: u64 = 1;
-            let exec_run_length = RunLength::Count(300);
+            let run_length = RunLength::Count(300);
 
             run_test(
                 warmup_millis,
-                exec_run_length,
+                run_length,
                 status_millis,
                 target_latency,
                 EPSILON,
@@ -644,11 +636,11 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
             let warmup_millis: u64 = 1;
             let target_latency = Duration::from_micros(10);
             let status_millis: u64 = 1;
-            let exec_run_length = RunLength::CountWithTimeout(300, Duration::from_micros(2000));
+            let run_length = RunLength::CountWithTimeout(300, Duration::from_micros(2000));
 
             run_test(
                 warmup_millis,
-                exec_run_length,
+                run_length,
                 status_millis,
                 target_latency,
                 EPSILON,
