@@ -88,12 +88,14 @@ impl BusyWork {
             {
                 // Estimate of target effort based on latest iteration.
                 let iter_target_effort = (target_latency.as_secs_f64() * iter_effort as f64
-                    / iter_latency.as_secs_f64()) as u32;
+                    / iter_latency.as_secs_f64())
+                .round() as u32;
 
                 // Estimate of target effort based on weighted average of the estimated target efforts
                 // for all iterations.
                 let acc_target_effort = (target_latency.as_secs_f64() * acc_effort as f64
-                    / acc_latency.as_secs_f64()) as u32;
+                    / acc_latency.as_secs_f64())
+                .round() as u32;
 
                 // The last iteration should have been the most efficient due to previous warming;
                 // if that's not the case, returns the weighted average estimated target effort.
