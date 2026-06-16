@@ -19,47 +19,52 @@ impl<const K: usize, T: LatencySrc<K>> LatencySrc<K> for &mut T {}
 
 /// A [`LatencySrc`] that yields the latency of the invocation of a single closure on each
 /// call to `next()`.
-pub struct LatencySrc1<F0: FnMut()>(F0);
+pub struct LatencySrc1<F: FnMut()> {
+    f: F,
+}
 
-impl<F0: FnMut()> LatencySrc1<F0> {
+impl<F: FnMut()> LatencySrc1<F> {
     /// Returns an instance of `Self`.
-    pub fn new(f: F0) -> Self {
-        Self(f)
+    pub fn new(f: F) -> Self {
+        Self { f }
     }
 }
 
-impl<F0: FnMut()> Iterator for LatencySrc1<F0> {
+impl<F: FnMut()> Iterator for LatencySrc1<F> {
     type Item = [Duration; 1];
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
-        Some([latency(&mut self.0)])
+        Some([latency(&mut self.f)])
     }
 }
 
-impl<F0: FnMut()> LatencySrc<1> for LatencySrc1<F0> {}
+impl<F: FnMut()> LatencySrc<1> for LatencySrc1<F> {}
 
 /// A [`LatencySrc`] that yields the latencies of the invocations of two closures on each
 /// call to `next()`.
-pub struct LatencySrc2<F0: FnMut(), F1: FnMut()>(F0, F1);
+pub struct LatencySrc2<F1: FnMut(), F2: FnMut()> {
+    f1: F1,
+    f2: F2,
+}
 
-impl<F0: FnMut(), F1: FnMut()> LatencySrc2<F0, F1> {
+impl<F1: FnMut(), F2: FnMut()> LatencySrc2<F1, F2> {
     /// Returns an instance of `Self`.
-    pub fn new(f0: F0, f1: F1) -> Self {
-        Self(f0, f1)
+    pub fn new(f1: F1, f2: F2) -> Self {
+        Self { f1, f2 }
     }
 }
 
-impl<F0: FnMut(), F1: FnMut()> Iterator for LatencySrc2<F0, F1> {
+impl<F1: FnMut(), F2: FnMut()> Iterator for LatencySrc2<F1, F2> {
     type Item = [Duration; 2];
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
-        Some([latency(&mut self.0), latency(&mut self.1)])
+        Some([latency(&mut self.f1), latency(&mut self.f2)])
     }
 }
 
-impl<F0: FnMut(), F1: FnMut()> LatencySrc<2> for LatencySrc2<F0, F1> {}
+impl<F1: FnMut(), F2: FnMut()> LatencySrc<2> for LatencySrc2<F1, F2> {}
 
 /// Helper iterator that doles out group averages for batched latency sources.
 struct Doler<V> {
@@ -98,26 +103,35 @@ impl<V: Copy> Iterator for Doler<V> {
     }
 }
 
+fn div_mod(dur: Duration, n: u32) -> (Duration, Duration) {
+    let quotient = dur / n;
+    let remainder = dur - quotient * n;
+    (quotient, remainder)
+}
+
 /// A [`LatencySrc`] that batches invocations of a single `f` into groups of size `batch` and yields
 /// the average latency of each group `batch` times before proceding to the next group execution.
-pub struct LatencySrc1b<F0: FnMut()> {
+pub struct LatencySrc1b<F: FnMut()> {
     /// Target closure
-    f: F0,
+    f: F,
+    /// Left from previous division
+    residual: Duration,
     /// doler
     doler: Doler<[Duration; 1]>,
 }
 
-impl<F0: FnMut()> LatencySrc1b<F0> {
+impl<F1: FnMut()> LatencySrc1b<F1> {
     /// Returns an instance of `Self`.
-    pub fn new(f: F0, batch: u32) -> Self {
+    pub fn new(f: F1, batch: u32) -> Self {
         Self {
             f,
+            residual: Duration::ZERO,
             doler: Doler::new(batch, [Duration::ZERO]),
         }
     }
 }
 
-impl<F0: FnMut()> Iterator for LatencySrc1b<F0> {
+impl<F: FnMut()> Iterator for LatencySrc1b<F> {
     type Item = [Duration; 1];
 
     #[inline(always)]
@@ -126,37 +140,44 @@ impl<F0: FnMut()> Iterator for LatencySrc1b<F0> {
             ret @ Some(_) => ret,
             None => {
                 let batch = self.doler.batch;
-                let value = [latency_n(&mut self.f, batch) / batch];
-                self.doler.update(value);
+                // adding the previous residual to the batch latency to reduce accumulation of truncation error
+                let (value, residual) =
+                    div_mod(latency_n(&mut self.f, batch) + self.residual, batch);
+                self.residual = residual;
+                self.doler.update([value]);
                 self.doler.next()
             }
         }
     }
 }
 
-impl<F0: FnMut()> LatencySrc<1> for LatencySrc1b<F0> {}
+impl<F1: FnMut()> LatencySrc<1> for LatencySrc1b<F1> {}
 
 /// A [`LatencySrc`] that batches invocations of two closures` into groups of size `batch` and yields
 /// the respective average latencies of the closures for each group `batch` times before proceding
 /// to the next group execution..
-pub struct LatencySrc2b<F0: FnMut(), F1: FnMut()> {
-    f0: F0,
+pub struct LatencySrc2b<F1: FnMut(), F2: FnMut()> {
     f1: F1,
+    f2: F2,
+    residual1: Duration,
+    residual2: Duration,
     doler: Doler<[Duration; 2]>,
 }
 
-impl<F0: FnMut(), F1: FnMut()> LatencySrc2b<F0, F1> {
+impl<F1: FnMut(), F2: FnMut()> LatencySrc2b<F1, F2> {
     /// Returns an instance of `Self`.
-    pub fn new(f0: F0, f1: F1, batch: u32) -> Self {
+    pub fn new(f1: F1, f2: F2, batch: u32) -> Self {
         Self {
-            f0,
             f1,
+            f2,
+            residual1: Duration::ZERO,
+            residual2: Duration::ZERO,
             doler: Doler::new(batch, [Duration::ZERO; 2]),
         }
     }
 }
 
-impl<F0: FnMut(), F1: FnMut()> Iterator for LatencySrc2b<F0, F1> {
+impl<F1: FnMut(), F2: FnMut()> Iterator for LatencySrc2b<F1, F2> {
     type Item = [Duration; 2];
 
     #[inline(always)]
@@ -165,18 +186,21 @@ impl<F0: FnMut(), F1: FnMut()> Iterator for LatencySrc2b<F0, F1> {
             ret @ Some(_) => ret,
             None => {
                 let batch = self.doler.batch;
-                let value = [
-                    latency_n(&mut self.f0, batch) / batch,
-                    latency_n(&mut self.f1, batch) / batch,
-                ];
-                self.doler.update(value);
+                // adding the previous residual to the batch latency to reduce accumulation of truncation error
+                let (value1, residual1) =
+                    div_mod(latency_n(&mut self.f1, batch) + self.residual1, batch);
+                let (value2, residual2) =
+                    div_mod(latency_n(&mut self.f2, batch) + self.residual2, batch);
+                self.residual1 = residual1;
+                self.residual2 = residual2;
+                self.doler.update([value1, value2]);
                 self.doler.next()
             }
         }
     }
 }
 
-impl<F0: FnMut(), F1: FnMut()> LatencySrc<2> for LatencySrc2b<F0, F1> {}
+impl<F1: FnMut(), F2: FnMut()> LatencySrc<2> for LatencySrc2b<F1, F2> {}
 
 #[cfg(feature = "_test_support")]
 pub mod test_support {
