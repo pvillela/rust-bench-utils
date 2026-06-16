@@ -90,6 +90,7 @@ impl<V: Copy> Iterator for Doler<V> {
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.i < self.batch {
+            self.i += 1;
             Some(self.value)
         } else {
             None

@@ -6,29 +6,68 @@
 //! cargo run -r --example busy_work --features load
 //! ```
 
-use bench_utils::{latency, load::BusyWork};
-use std::time::Duration;
+use bench_utils::{RunLength, bench_run, bench_run_b, load::BusyWork};
+use env_logger;
+use std::time::{Duration, Instant};
 
-fn main() {
-    const N: u64 = 10;
-
-    let target_latency = Duration::from_nanos(2000);
-    let target_latency_nanos = target_latency.as_nanos() as f64;
-    println!("target_latency_nanos={}", target_latency.as_nanos());
-
+fn run(target_latency: Duration, run_length: RunLength, batch: Option<u32>) {
+    println!(
+        "\nRunning with target_latency={target_latency:?}, run_length={run_length:?}, batch={batch:?}"
+    );
     let effort = BusyWork::calibrate(target_latency);
     let f = BusyWork::fun(effort);
+    let start = Instant::now();
+    let out = match batch {
+        None => bench_run(f, run_length),
+        Some(batch) => bench_run_b(f, run_length, batch),
+    };
+    let elapsed = start.elapsed();
+    println!("elaped time={elapsed:?}");
+    println!(
+        "target_latency/median_latency={}",
+        target_latency.as_secs_f64() / out.median().as_secs_f64()
+    );
+    println!("{:?}", out.summary());
+}
 
-    let mut sum2dev = 0.;
-    for _ in 0..N {
-        let latency_nanos = latency(&f).as_nanos() as f64;
-        sum2dev += (latency_nanos - target_latency_nanos).powi(2);
+fn main() {
+    _ = env_logger::try_init();
+    // const RUN_LENGTH: RunLength = RunLength::Time(Duration::from_millis(100));
+    const RUN_LENGTH: RunLength = RunLength::Count(100_000);
 
-        println!("latency_nanos={}", latency_nanos);
+    {
+        let target_latency = Duration::from_nanos(10);
+        let batch = Some(100_000);
+        run(target_latency, RUN_LENGTH, batch);
     }
 
-    let stdev = (sum2dev / N as f64).sqrt();
-    let rel_stdev = stdev / target_latency_nanos;
+    {
+        let target_latency = Duration::from_nanos(100);
+        let batch = Some(10_000);
+        run(target_latency, RUN_LENGTH, batch);
+    }
 
-    println!("stdev={stdev}, rel_stdev={rel_stdev}");
+    {
+        let target_latency = Duration::from_micros(1);
+        let batch = None;
+        run(target_latency, RUN_LENGTH, batch);
+    }
+
+    {
+        let target_latency = Duration::from_micros(1);
+        let batch = Some(10);
+        run(target_latency, RUN_LENGTH, batch);
+    }
+
+    {
+        let target_latency = Duration::from_micros(1);
+        let batch = Some(100);
+        run(target_latency, RUN_LENGTH, batch);
+    }
+
+    {
+        let target_latency = Duration::from_micros(1);
+        let batch = Some(1000);
+        run(target_latency, RUN_LENGTH, batch);
+    }
 }
