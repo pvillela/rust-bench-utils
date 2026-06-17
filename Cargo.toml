@@ -70,10 +70,12 @@ features = ["load"]
 [[bench]]
 name = "criterion_comp"
 harness = false
+required-features = ["_bench"]
 
 [[bench]]
 name = "criterion_plain"
 harness = false
+required-features = ["_bench"]
 
 [[bench]]
 name = "validate_bench_run"
