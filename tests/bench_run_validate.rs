@@ -143,7 +143,7 @@ mod ungrouped {
 
     fn fsrc1(
         base_target_latency: Duration,
-    ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
+    ) -> FnsLatencySrc<impl FnMut() + Clone, impl FnMut() + Clone, impl LatencySrc<1>> {
         let effort = BusyWork::calibrate(base_target_latency);
         let f = BusyWork::fun(effort);
         let src = LatencySrc1::new(f.clone());
@@ -152,13 +152,13 @@ mod ungrouped {
 
     fn fsrc2(
         base_target_latency: Duration,
-    ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<2>> {
+    ) -> FnsLatencySrc<impl FnMut() + Clone, impl FnMut() + Clone, impl LatencySrc<2>> {
         let effort0 = BusyWork::calibrate(base_target_latency);
         let effort_delta = effort0 / 10;
 
         let f0 = BusyWork::fun(effort0);
-        let f1a = BusyWork::fun(effort0 - effort_delta);
-        let f1b = BusyWork::fun(effort_delta);
+        let mut f1a = BusyWork::fun(effort0 - effort_delta);
+        let mut f1b = BusyWork::fun(effort_delta);
         let f1 = move || {
             f1a();
             f1b()
@@ -360,7 +360,7 @@ mod grouped_10 {
     fn fsrc1_grouped(
         base_target_latency: Duration,
         batch: u32,
-    ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<1>> {
+    ) -> FnsLatencySrc<impl FnMut() + Clone, impl FnMut() + Clone, impl LatencySrc<1>> {
         let effort = BusyWork::calibrate(base_target_latency);
         let f = BusyWork::fun(effort);
         let src = LatencySrc1b::new(f.clone(), batch);
@@ -370,13 +370,13 @@ mod grouped_10 {
     fn fsrc2_grouped(
         base_target_latency: Duration,
         batch: u32,
-    ) -> FnsLatencySrc<impl Fn() + Clone, impl Fn() + Clone, impl LatencySrc<2>> {
+    ) -> FnsLatencySrc<impl FnMut() + Clone, impl FnMut() + Clone, impl LatencySrc<2>> {
         let effort0 = BusyWork::calibrate(base_target_latency);
         let effort_delta = effort0 / 10;
 
         let f0 = BusyWork::fun(effort0);
-        let f1a = BusyWork::fun(effort0 - effort_delta);
-        let f1b = BusyWork::fun(effort_delta);
+        let mut f1a = BusyWork::fun(effort0 - effort_delta);
+        let mut f1b = BusyWork::fun(effort_delta);
         let f1 = move || {
             f1a();
             f1b()

@@ -29,10 +29,11 @@ pub fn validate_latency_overhead(
     );
     let name = "Group of ".to_owned() + &batch.to_string();
     let effort = BusyWork::calibrate(target_latency);
-    let solo_f = BusyWork::fun(effort);
+    let mut solo_f = BusyWork::fun(effort);
+    let mut solo_fc = solo_f.clone();
     let group_f = || {
         for _ in 0..batch {
-            solo_f();
+            solo_fc();
         }
     };
 
@@ -42,7 +43,8 @@ pub fn validate_latency_overhead(
     let exec_count_solo = exec_count_group * batch;
 
     println!("running solo_f: {name}");
-    let out_solo = bench_run_with_status_arg_cfg(cfg, &solo_f, RunLength::Count(exec_count_solo));
+    let out_solo =
+        bench_run_with_status_arg_cfg(cfg, &mut solo_f, RunLength::Count(exec_count_solo));
     println!("{:?}", out_solo.summary());
     let solo_median = out_solo.median();
     println!(

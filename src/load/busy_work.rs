@@ -9,12 +9,6 @@ use std::{hint::black_box, time::Duration};
 ///
 /// The closure executes a work function whose latency is controlled by an `effort` value that is obtained by
 /// running a calibration associated function.
-///
-/// Given a desired target latency at a milliseconds scale, the latency of the resulting closure is not as reliable as
-/// using `|| thread::sleep(target_latency)`. However, the busy work closure is a more realistic synthetic load as its
-/// latency is the result of computations, and it is more reliable for latencies at the microseconds scale.
-/// In any case, the ratio of the latencies of two closures created from two `effort` values is reliably
-/// proportional to the ratio of the respective `effort` values, the more so the higher the sample size.
 pub struct BusyWork;
 
 impl BusyWork {
@@ -23,23 +17,32 @@ impl BusyWork {
     /// See [`calibrate`](Self::calibrate) and [`calibrate_with_budget`](Self::calibrate_with_budget) for how to
     /// determine the `effort` argument to achieve a desired target latency.
     #[inline(always)]
-    pub fn fun(effort: u32) -> impl Fn() + Clone + use<> {
-        move || Self::work(effort)
+    pub fn fun(effort: u32) -> impl FnMut() + Clone + use<> {
+        let (buf, mut hasher): ([u8; 8], Sha256) = Self::pre_work();
+        move || Self::work(effort, &buf, &mut hasher)
+    }
+
+    // error[E0507]: cannot move out of `hasher`, a captured variable in an `FnMut` closure
+
+    #[inline(always)]
+    /// Does the set-up for [`Self::work`] (using the 'sha2' crate) so that the latter's latency is directly
+    /// proportional to `effort`.
+    fn pre_work() -> ([u8; 8], Sha256) {
+        let seed = 0_u64;
+        let buf = seed.to_be_bytes();
+        let hasher = Sha256::new();
+        (buf, hasher)
     }
 
     #[inline(always)]
     /// Does a significant amount of computation, based on SHA-256 (using the 'sha2' crate).
-    /// Its latency is controlled by `effort`.
-    pub fn work(effort: u32) {
-        let effort = black_box(effort);
-        let seed = black_box(0_u64);
-        let buf = seed.to_be_bytes();
-        let mut hasher = Sha256::new();
-        for _ in 0..effort {
+    /// Its latency is proportional to `effort`.
+    /// Depends on [`Self::pre_work`] being called before it to set-up `buf` and `hasher`.
+    fn work(effort: u32, buf: &[u8; 8], hasher: &mut Sha256) {
+        for _ in 0..black_box(effort) {
             hasher.update(buf);
         }
-        let hash = hasher.finalize();
-        black_box(hash);
+        black_box(hasher);
     }
 
     /// Estimates the `effort` required for the resulting closure to have the `target_latency`, using
@@ -73,10 +76,11 @@ impl BusyWork {
         let (budget_count, budget_dur) = budget.exec_count_and_duration();
         let mut acc_latency = Duration::ZERO;
         let mut acc_effort: u32 = 0;
+        let (buf, mut hasher): ([u8; 8], Sha256) = Self::pre_work();
 
         for i in 1.. {
             let iter_effort = 2u32.pow(i - 1);
-            let iter_latency = latency(|| Self::work(iter_effort));
+            let iter_latency = latency(|| Self::work(iter_effort, &buf, &mut hasher));
 
             acc_latency += iter_latency;
             acc_effort += iter_effort;
@@ -183,15 +187,15 @@ mod validate_ratio {
     fn run(dur1: Duration, ratio: f64, repeats: u32) -> f64 {
         let effort1 = BusyWork::calibrate(dur1);
         let effort2 = (effort1 as f64 * ratio) as u32;
-        let f1 = BusyWork::fun(effort1);
-        let f2 = BusyWork::fun(effort2);
+        let mut f1 = BusyWork::fun(effort1);
+        let mut f2 = BusyWork::fun(effort2);
 
         let mut latency1 = Duration::ZERO;
         let mut latency2 = Duration::ZERO;
 
         for _ in 0..repeats {
-            latency1 += latency(&f1);
-            latency2 += latency(&f2);
+            latency1 += latency(&mut f1);
+            latency2 += latency(&mut f2);
         }
 
         let latency_ratio = latency2.as_secs_f64() / latency1.as_secs_f64();

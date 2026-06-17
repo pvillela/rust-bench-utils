@@ -67,15 +67,15 @@ fn validate_ratio() {
         let effort1 = BusyWork::calibrate(dur1);
         let effort2 = (effort1 as f64 * ratio) as u32;
 
-        let f1 = BusyWork::fun(effort1);
-        let f2 = BusyWork::fun(effort2);
+        let mut f1 = BusyWork::fun(effort1);
+        let mut f2 = BusyWork::fun(effort2);
 
         let mut latency_secs1 = 0.0;
         let mut latency_secs2 = 0.0;
 
         for _ in 0..repeats {
-            latency_secs1 += latency(&f1).as_secs_f64();
-            latency_secs2 += latency(&f2).as_secs_f64();
+            latency_secs1 += latency(&mut f1).as_secs_f64();
+            latency_secs2 += latency(&mut f2).as_secs_f64();
         }
 
         let latency_ratio = latency_secs2 / latency_secs1;
