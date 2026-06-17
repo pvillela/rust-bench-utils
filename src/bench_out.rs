@@ -190,6 +190,15 @@ impl BenchOut {
         self.recording_unit.latency_from_f64(mean_rec)
     }
 
+    /// Sample mean of latencies in seconds as an `f64`.
+    ///
+    /// # Panics
+    /// Panics if the number of observations is zero.
+    pub fn mean_secs_f64(&self) -> f64 {
+        let mean_rec = sample_mean(self.n(), self.sum).expect("number of observations is zero");
+        mean_rec * self.recording_unit.factor_to_secs()
+    }
+
     /// Sample standard deviation of latencies.
     ///
     /// # Panics

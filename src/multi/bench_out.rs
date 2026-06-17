@@ -162,6 +162,14 @@ impl<const K: usize> BenchOut<K> {
         array::from_fn(|k| self.arr[k].mean())
     }
 
+    /// Sample means of latencies in seconds as an `f64`.
+    ///
+    /// # Panics
+    /// Panics if the number of observations is zero.
+    pub fn means_secs_f64(&self) -> [f64; K] {
+        array::from_fn(|k| self.arr[k].mean_secs_f64())
+    }
+
     /// Sample standard deviations of latencies.
     ///
     /// # Panics

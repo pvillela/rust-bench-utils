@@ -107,11 +107,19 @@ impl LatencyUnit {
     /// `NaN` is converted to a zero duration rather than panic.
     #[inline(always)]
     pub fn latency_from_f64(&self, elapsed: f64) -> Duration {
-        // self.latency_from_u64(elapsed as u64)
         match self {
             Self::Nano => Duration::from_nanos(elapsed.round() as u64),
             Self::Micro => Duration::from_nanos((elapsed * 1_000.0).round() as u64),
             Self::Milli => Duration::from_nanos((elapsed * 1_000_000.0).round() as u64),
+        }
+    }
+
+    /// Multiplicative factor to convert the latency unit to seconds.
+    pub const fn factor_to_secs(&self) -> f64 {
+        match self {
+            Self::Nano => 1e-9,
+            Self::Micro => 1e-6,
+            Self::Milli => 1e-3,
         }
     }
 }
