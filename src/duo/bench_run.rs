@@ -292,3 +292,46 @@ pub fn bench_run_parallel_src_arg_cfg(
         arr: [out1.into(), out2.into()],
     }
 }
+
+#[cfg(feature = "_test_support")]
+pub fn bench_run_x_o<'a, S: Status<'a>>(
+    cfg: &BenchCfg,
+    f1: impl FnMut(),
+    f2: impl FnMut(),
+    run_length: RunLength,
+    s: S,
+    batch: Option<u32>,
+) -> DuoOut {
+    match batch {
+        None => bench_run_x(&cfg, f1, f2, run_length, s),
+        Some(batch) => bench_run_x_b(&cfg, f1, f2, run_length, s, batch),
+    }
+}
+
+#[cfg(feature = "_test_support")]
+pub fn bench_run_arg_cfg_o(
+    cfg: &BenchCfg,
+    f1: impl FnMut(),
+    f2: impl FnMut(),
+    run_length: RunLength,
+    batch: Option<u32>,
+) -> DuoOut {
+    match batch {
+        None => bench_run_arg_cfg(&cfg, f1, f2, run_length),
+        Some(batch) => bench_run_arg_cfg_b(&cfg, f1, f2, run_length, batch),
+    }
+}
+
+#[cfg(feature = "_test_support")]
+pub fn bench_run_with_status_arg_cfg_o(
+    cfg: &BenchCfg,
+    f1: impl FnMut(),
+    f2: impl FnMut(),
+    run_length: RunLength,
+    batch: Option<u32>,
+) -> DuoOut {
+    match batch {
+        None => bench_run_with_status_arg_cfg(&cfg, f1, f2, run_length),
+        Some(batch) => bench_run_with_status_arg_cfg_b(&cfg, f1, f2, run_length, batch),
+    }
+}

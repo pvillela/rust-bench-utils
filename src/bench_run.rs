@@ -163,6 +163,46 @@ pub fn bench_run_with_status_arg_cfg_b(
     multi::bench_run_with_status_arg_cfg(cfg, LatencySrc1b::new(f, batch), run_length).into()
 }
 
+#[cfg(feature = "_test_support")]
+pub fn bench_run_x_o<'a, S: Status<'a>>(
+    cfg: &BenchCfg,
+    f: impl FnMut(),
+    run_length: RunLength,
+    s: S,
+    batch: Option<u32>,
+) -> BenchOut {
+    match batch {
+        None => bench_run_x(&cfg, f, run_length, s),
+        Some(batch) => bench_run_x_b(&cfg, f, run_length, s, batch),
+    }
+}
+
+#[cfg(feature = "_test_support")]
+pub fn bench_run_arg_cfg_o(
+    cfg: &BenchCfg,
+    f: impl FnMut(),
+    run_length: RunLength,
+    batch: Option<u32>,
+) -> BenchOut {
+    match batch {
+        None => bench_run_arg_cfg(&cfg, f, run_length),
+        Some(batch) => bench_run_arg_cfg_b(&cfg, f, run_length, batch),
+    }
+}
+
+#[cfg(feature = "_test_support")]
+pub fn bench_run_with_status_arg_cfg_o(
+    cfg: &BenchCfg,
+    f: impl FnMut(),
+    run_length: RunLength,
+    batch: Option<u32>,
+) -> BenchOut {
+    match batch {
+        None => bench_run_with_status_arg_cfg(&cfg, f, run_length),
+        Some(batch) => bench_run_with_status_arg_cfg_b(&cfg, f, run_length, batch),
+    }
+}
+
 #[cfg(test)]
 #[cfg(feature = "_test")]
 /// Tests for `bench_run`, `bench_run_with_status`, `bench_run_x` — K=1 wrappers around `multi` functions.
