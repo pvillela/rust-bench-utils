@@ -19,47 +19,6 @@ pub fn latency_n(mut f: impl FnMut(), n: u32) -> Duration {
     start.elapsed()
 }
 
-/// An infinite iterator that encapsulates a closure `f` and, for each invocation
-/// of `next()`, yields the wall-clock latency duration from one invocation of `f`.
-pub struct LatencyIter<F: FnMut()>(F);
-
-impl<F: FnMut()> LatencyIter<F> {
-    /// Constructs `Self`.
-    pub fn new(f: F) -> Self {
-        Self(f)
-    }
-}
-
-impl<F: FnMut()> Iterator for LatencyIter<F> {
-    type Item = Duration;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        Some(latency(&mut self.0))
-    }
-}
-
-/// An infinite iterator that encapsulates a closure `f` and, for each invocation
-/// of `next()`, yields the wall-clock latency duration from one invocation of `f`.
-pub struct LatencyIterN<F: FnMut()>(F, u32);
-
-impl<F: FnMut()> LatencyIterN<F> {
-    /// Constructs `Self`.
-    pub fn new(f: F, n: u32) -> Self {
-        Self(f, n)
-    }
-}
-
-/// An infinite iterator that encapsulates a closure `f` and, for each invocation
-/// of `next()`, yields the wall-clock latency duration from
-/// [`n`](Self::n) invocations of `f`.
-impl<F: FnMut()> Iterator for LatencyIterN<F> {
-    type Item = Duration;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        Some(latency_n(&mut self.0, self.1))
-    }
-}
-
 /// Unit of time used to record latencies. Used as an argument in benchmarking functions.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LatencyUnit {
@@ -383,6 +342,7 @@ mod test_execs_per_second {
         test_support::{ConstLatencySrc, EmptyLatencySrc, LognormalLatencySrc},
     };
     use basic_stats::rel_approx_eq;
+    use std::iter;
 
     #[test]
     fn src_lognormal() {
@@ -421,8 +381,8 @@ mod test_execs_per_second {
     }
 
     #[test]
-    fn no_op_src_yields_positive_finite_estimate() {
-        let src = LatencyIter::new(|| ());
+    fn no_op_yields_positive_finite_estimate() {
+        let src = iter::from_fn(|| Some(latency(|| ())));
         let e = execs_per_sec(src, RunLength::Count(1000));
         assert!(e > 0.0, "src no-op should yield positive: {}", e);
         assert!(e.is_finite(), "src no-op estimate should be finite: {}", e);
