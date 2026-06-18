@@ -63,12 +63,14 @@ impl<F: FnMut()> Iterator for LatencyIterN<F> {
 /// Unit of time used to record latencies. Used as an argument in benchmarking functions.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LatencyUnit {
-    /// Milliseconds.
-    Milli,
-    /// Microseconds.
-    Micro,
+    /// Picoseconds.
+    Pico,
     /// Nanoseconds.
     Nano,
+    /// Microseconds.
+    Micro,
+    /// Milliseconds.
+    Milli,
 }
 
 impl LatencyUnit {
@@ -76,6 +78,7 @@ impl LatencyUnit {
     #[inline(always)]
     pub fn latency_as_u64(&self, latency: Duration) -> u64 {
         match self {
+            Self::Pico => latency.as_nanos() as u64 * 1000,
             Self::Nano => latency.as_nanos() as u64,
             Self::Micro => latency.as_micros() as u64,
             Self::Milli => latency.as_millis() as u64,
@@ -86,6 +89,7 @@ impl LatencyUnit {
     #[inline(always)]
     pub fn latency_from_u64(&self, elapsed: u64) -> Duration {
         match self {
+            Self::Pico => Duration::from_nanos(elapsed / 1000),
             Self::Nano => Duration::from_nanos(elapsed),
             Self::Micro => Duration::from_micros(elapsed),
             Self::Milli => Duration::from_millis(elapsed),
@@ -96,6 +100,7 @@ impl LatencyUnit {
     #[inline(always)]
     pub fn latency_as_f64(&self, latency: Duration) -> f64 {
         match self {
+            Self::Pico => latency.as_nanos() as f64 * 1_000.0,
             Self::Nano => latency.as_nanos() as f64,
             Self::Micro => latency.as_nanos() as f64 / 1_000.0,
             Self::Milli => latency.as_nanos() as f64 / 1_000_000.0,
@@ -108,6 +113,7 @@ impl LatencyUnit {
     #[inline(always)]
     pub fn latency_from_f64(&self, elapsed: f64) -> Duration {
         match self {
+            Self::Pico => Duration::from_nanos((elapsed / 1_000.0).round() as u64),
             Self::Nano => Duration::from_nanos(elapsed.round() as u64),
             Self::Micro => Duration::from_nanos((elapsed * 1_000.0).round() as u64),
             Self::Milli => Duration::from_nanos((elapsed * 1_000_000.0).round() as u64),
@@ -117,6 +123,7 @@ impl LatencyUnit {
     /// Multiplicative factor to convert the latency unit to seconds.
     pub const fn factor_to_secs(&self) -> f64 {
         match self {
+            Self::Pico => 1e-12,
             Self::Nano => 1e-9,
             Self::Micro => 1e-6,
             Self::Milli => 1e-3,
