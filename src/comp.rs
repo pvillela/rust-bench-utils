@@ -73,7 +73,7 @@ impl<'a> Comp<'a> {
     ///
     /// Panics if `self.out_f1().n() == 0` or `self.out_f2().n() == 0`.
     pub fn mean_diff_f1_f2(&self) -> f64 {
-        self.0.mean().as_secs_f64() - self.1.mean().as_secs_f64()
+        self.0.mean().0 - self.1.mean().0
     }
 
     /// The difference between the mean of the natural logarithms of `f1`'s latencies and
@@ -451,10 +451,7 @@ mod test {
                 comp.diff_medians_f1_f2()
             );
             approx_eq!(ratio_medians, comp.ratio_medians_f1_f2(), EPSILON);
-            assert_eq!(
-                f1_out.mean().as_secs_f64() - f2_out.mean().as_secs_f64(),
-                comp.mean_diff_f1_f2()
-            );
+            assert_eq!(f1_out.mean().0 - f2_out.mean().0, comp.mean_diff_f1_f2());
             assert_eq!(
                 f1_out.mean_ln() - f2_out.mean_ln(),
                 comp.mean_diff_ln_f1_f2()
@@ -741,13 +738,10 @@ mod wilcoxon_tests {
     #[test]
     fn test_wilcoxon_equal_distribution_null() {
         let cfg = BenchCfg::default();
-        let ru = cfg.recording_unit();
         let mu = 8.0;
         let sigma = *LO_STDEV_LN;
         let samp_size = 500;
-        let durations: Vec<Duration> = lognormal_samp(mu, sigma, samp_size)
-            .map(|v| ru.latency_from_f64(v))
-            .collect();
+        let durations: Vec<Duration> = lognormal_samp(mu, sigma, samp_size).collect();
         let out1 = BenchOut::from_iter(&cfg, durations.iter().cloned());
         let out2 = BenchOut::from_iter(&cfg, durations.iter().cloned());
         let comp = Comp::new(&out1, &out2);

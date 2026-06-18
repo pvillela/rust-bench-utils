@@ -2,6 +2,7 @@ mod support;
 
 use bench_utils::load::BusyWork;
 use criterion::{Criterion, criterion_group, criterion_main};
+use std::time::Duration;
 use support::bench_basic_naive::{Args, get_args};
 
 fn criterion_benchmark(c: &mut Criterion) {
@@ -15,7 +16,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         nrepeats,
     } = args;
 
-    let base_latency = latency_unit.latency_from_f64(base_median);
+    let base_latency = Duration::from_secs_f64(latency_unit.factor_to_secs() * base_median);
     let base_effort = BusyWork::calibrate(base_latency);
 
     eprintln!("base_latency={base_latency:?}");

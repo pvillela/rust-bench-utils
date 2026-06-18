@@ -1,7 +1,6 @@
+use crate::{BenchOut, FpSeconds};
 use hdrhistogram::Histogram;
 use std::time::Duration;
-
-use crate::BenchOut;
 
 #[doc(hidden)]
 /// Alias of [`Histogram<u64>`].
@@ -24,9 +23,9 @@ pub struct SummaryStats {
     /// Sample size (number of observations).
     pub count: u64,
     /// Arithmetic mean of the latencies observations.
-    pub mean: Duration,
+    pub mean: FpSeconds,
     /// Sample standard deviation of the latencies observations.
-    pub stdev: Duration,
+    pub stdev: FpSeconds,
     /// Minimum observed latency.
     pub min: Duration,
     /// 1st percentile latency.
@@ -125,8 +124,16 @@ mod test {
         let exp_p95 = normal.inverse_cdf(0.95).exp();
         let exp_p99 = normal.inverse_cdf(0.99).exp();
 
-        rel_approx_eq_dur!(Duration::from_secs_f64(exp_mean), summary.mean, EPSILON);
-        rel_approx_eq_dur!(Duration::from_secs_f64(exp_stdev), summary.stdev, EPSILON);
+        rel_approx_eq_dur!(
+            Duration::from_secs_f64(exp_mean),
+            summary.mean.as_duration(),
+            EPSILON
+        );
+        rel_approx_eq_dur!(
+            Duration::from_secs_f64(exp_stdev),
+            summary.stdev.as_duration(),
+            EPSILON
+        );
         rel_approx_eq_dur!(Duration::from_secs_f64(exp_median), summary.median, EPSILON);
         rel_approx_eq_dur!(Duration::from_secs_f64(exp_p1), summary.p1, EPSILON);
         rel_approx_eq_dur!(Duration::from_secs_f64(exp_p5), summary.p5, EPSILON);
@@ -142,5 +149,4 @@ mod test {
         assert!(summary.min > Duration::ZERO);
         assert!(summary.max > summary.p99);
     }
-
 }

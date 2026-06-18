@@ -91,7 +91,7 @@ fn run<const K: usize, R, F1, F2, Src>(
     let base_target_latency_secs_f64 = base_target_latency.as_secs_f64();
 
     for i in 0..K {
-        let out_mean_secs_f64 = out[i].mean_secs_f64();
+        let out_mean_secs_f64 = out[i].mean().0;
         let raw_mean = raw_means[i];
 
         println!(
@@ -113,7 +113,7 @@ fn run<const K: usize, R, F1, F2, Src>(
     }
 
     let aggregate_raw_mean = raw_latencies.iter().sum::<Duration>().as_secs_f64() / count as f64;
-    let aggregate_out_mean = out.iter().map(|x| x.mean_secs_f64()).sum();
+    let aggregate_out_mean = out.iter().map(|x| x.mean().0).sum();
 
     if K >= 2 {
         println!(
@@ -135,7 +135,7 @@ fn run<const K: usize, R, F1, F2, Src>(
         }
 
         for i in 0..K {
-            rel_approx_eq!(raw_means[i], out[i].mean_secs_f64(), epsilon);
+            rel_approx_eq!(raw_means[i], out[i].mean().0, epsilon);
         }
     }
 }

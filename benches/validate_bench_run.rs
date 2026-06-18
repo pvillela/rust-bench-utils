@@ -36,7 +36,7 @@ fn run_bench_with_status(
     let out_mean = out.mean();
     println!(
         "target_mean={target_latency:?}, out.mean()={out_mean:?}, rel_diff={}",
-        target_latency.abs_rel_diff(out_mean)
+        target_latency.abs_rel_diff(out_mean.as_duration())
     );
 
     let raw_latency = latency(|| {
@@ -52,10 +52,10 @@ fn run_bench_with_status(
 
     println!(
         "raw_mean={out_mean:?}, out_mean()={raw_mean:?}, rel_diff={}",
-        raw_mean.abs_rel_diff(out_mean)
+        raw_mean.abs_rel_diff(out_mean.as_duration())
     );
 
-    rel_approx_eq_dur!(raw_mean, out_mean, epsilon);
+    rel_approx_eq_dur!(raw_mean, out_mean.as_duration(), epsilon);
 }
 
 fn main() {

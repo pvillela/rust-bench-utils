@@ -1,7 +1,7 @@
 //! Module defining the key data structure produced by the [`multi::bench_run`](super::bench_run) and
 //! related benchmarking functions.
 
-use crate::{BenchCfg, LatencyUnit, SummaryStats, summary_stats};
+use crate::{BenchCfg, FpSeconds, LatencyUnit, SummaryStats, summary_stats};
 use basic_stats::core::{AltHyp, Ci, HypTestResult, PositionWrtCi};
 use std::{
     array,
@@ -141,12 +141,6 @@ impl<const K: usize> BenchOut<K> {
         self.first().n()
     }
 
-    /// Number of observations (sample size) for a function, as a floating point number.
-    #[inline(always)]
-    pub fn nf(&self) -> f64 {
-        self.first().nf()
-    }
-
     /// Summary descriptive statistics.
     ///
     /// Includes sample size, mean, standard deviation, median, several percentiles, min, and max.
@@ -158,23 +152,15 @@ impl<const K: usize> BenchOut<K> {
     ///
     /// # Panics
     /// Panics if the number of observations is zero.
-    pub fn means(&self) -> [Duration; K] {
+    pub fn means(&self) -> [FpSeconds; K] {
         array::from_fn(|k| self.arr[k].mean())
-    }
-
-    /// Sample means of latencies in seconds as an `f64`.
-    ///
-    /// # Panics
-    /// Panics if the number of observations is zero.
-    pub fn means_secs_f64(&self) -> [f64; K] {
-        array::from_fn(|k| self.arr[k].mean_secs_f64())
     }
 
     /// Sample standard deviations of latencies.
     ///
     /// # Panics
     /// Panics if the number of observations is zero.
-    pub fn stdevs(&self) -> [Duration; K] {
+    pub fn stdevs(&self) -> [FpSeconds; K] {
         array::from_fn(|k| self.arr[k].stdev())
     }
 
@@ -349,15 +335,11 @@ mod test {
     const ALPHA: f64 = 0.05;
 
     fn lognormal_samp2(
-        cfg: &BenchCfg,
         rec_mu: f64,
         sigma: f64,
         samp_size: usize,
     ) -> impl Iterator<Item = [Duration; 2]> {
-        lognormal_samp(rec_mu, sigma, samp_size).map(|x| {
-            let y = cfg.recording_unit().latency_from_f64(x);
-            [y, y]
-        })
+        lognormal_samp(rec_mu, sigma, samp_size).map(|x| [x, x])
     }
 
     #[test]
@@ -366,19 +348,18 @@ mod test {
 
         // in ln of microseconds
         let mu_micro = 8.;
-        // in ln of nanoseconds (recording unit is Nano by default)
-        let mu = mu_micro + (1000_f64).ln();
+        // in ln of seconds: ln(exp(mu_micro)*1e-6) = mu_micro - ln(1e6)
+        let mu = mu_micro - 1e6_f64.ln();
         let sigma = *LO_STDEV_LN;
         let samp_size = 20_000;
 
         let cfg = BenchCfg::default();
         let ru = cfg.recording_unit();
 
-        let out = BenchOut::<2>::from_iter(&cfg, lognormal_samp2(&cfg, mu, sigma, samp_size));
+        let out = BenchOut::<2>::from_iter(&cfg, lognormal_samp2(mu, sigma, samp_size));
 
         assert_eq!(ru, LatencyUnit::Nano);
         assert_eq!(out.n() as usize, samp_size);
-        assert_eq!(out.nf(), out.n() as f64);
 
         let normal = Normal::new(mu, sigma).unwrap();
 
@@ -400,78 +381,98 @@ mod test {
 
         println!(
             "exp_mean={:?}, out.means={:?}",
-            ru.latency_from_f64(exp_mean),
+            Duration::from_secs_f64(exp_mean),
             out.means()
         );
         println!("exp_stdev={:?}, out.stdevs={:?}", exp_stdev, out.stdevs());
         println!(
             "exp_p1={:?}, summaries.p1={:?}",
-            ru.latency_from_f64(exp_p1),
+            Duration::from_secs_f64(exp_p1),
             summaries.iter().map(|s| s.p1).collect::<Vec<_>>()
         );
         println!(
             "exp_p5={:?}, summaries.p5={:?}",
-            ru.latency_from_f64(exp_p5),
+            Duration::from_secs_f64(exp_p5),
             summaries.iter().map(|s| s.p5).collect::<Vec<_>>()
         );
         println!(
             "exp_p10={:?}, summaries.p10={:?}",
-            ru.latency_from_f64(exp_p10),
+            Duration::from_secs_f64(exp_p10),
             summaries.iter().map(|s| s.p10).collect::<Vec<_>>()
         );
         println!(
             "exp_p25={:?}, summaries.p25={:?}",
-            ru.latency_from_f64(exp_p25),
+            Duration::from_secs_f64(exp_p25),
             summaries.iter().map(|s| s.p25).collect::<Vec<_>>()
         );
         println!(
             "exp_median={:?}, summaries.median={:?}",
-            ru.latency_from_f64(exp_median),
+            Duration::from_secs_f64(exp_median),
             summaries.iter().map(|s| s.median).collect::<Vec<_>>()
         );
         println!(
             "exp_p75={:?}, summaries.p75={:?}",
-            ru.latency_from_f64(exp_p75),
+            Duration::from_secs_f64(exp_p75),
             summaries.iter().map(|s| s.p75).collect::<Vec<_>>()
         );
         println!(
             "exp_p90={:?}, summaries.p90={:?}",
-            ru.latency_from_f64(exp_p90),
+            Duration::from_secs_f64(exp_p90),
             summaries.iter().map(|s| s.p90).collect::<Vec<_>>()
         );
         println!(
             "exp_p95={:?}, summaries.p95={:?}",
-            ru.latency_from_f64(exp_p95),
+            Duration::from_secs_f64(exp_p95),
             summaries.iter().map(|s| s.p95).collect::<Vec<_>>()
         );
         println!(
             "exp_p99={:?}, summaries.p99={:?}",
-            ru.latency_from_f64(exp_p99),
+            Duration::from_secs_f64(exp_p99),
             summaries.iter().map(|s| s.p99).collect::<Vec<_>>()
         );
 
         for k in 0..out.arity() {
-            rel_approx_eq_dur!(ru.latency_from_f64(exp_mean), out[k].mean(), EPSILON);
-            rel_approx_eq_dur!(ru.latency_from_f64(exp_stdev), out[k].stdev(), EPSILON);
-            rel_approx_eq_dur!(ru.latency_from_f64(exp_median), out[k].median(), EPSILON);
+            rel_approx_eq_dur!(
+                Duration::from_secs_f64(exp_mean),
+                out[k].mean().as_duration(),
+                EPSILON
+            );
+            rel_approx_eq_dur!(
+                Duration::from_secs_f64(exp_stdev),
+                out[k].stdev().as_duration(),
+                EPSILON
+            );
+            rel_approx_eq_dur!(
+                Duration::from_secs_f64(exp_median),
+                out[k].median(),
+                EPSILON
+            );
             approx_eq!(exp_mean_ln, out[k].mean_ln(), EPSILON);
             approx_eq!(exp_stdev_ln, out[k].stdev_ln(), EPSILON);
 
-            rel_approx_eq_dur!(ru.latency_from_f64(exp_mean), summaries[k].mean, EPSILON);
-            rel_approx_eq_dur!(ru.latency_from_f64(exp_stdev), summaries[k].stdev, EPSILON);
-            rel_approx_eq_dur!(ru.latency_from_f64(exp_p1), summaries[k].p1, EPSILON);
-            rel_approx_eq_dur!(ru.latency_from_f64(exp_p5), summaries[k].p5, EPSILON);
-            rel_approx_eq_dur!(ru.latency_from_f64(exp_p10), summaries[k].p10, EPSILON);
-            rel_approx_eq_dur!(ru.latency_from_f64(exp_p25), summaries[k].p25, EPSILON);
             rel_approx_eq_dur!(
-                ru.latency_from_f64(exp_median),
+                Duration::from_secs_f64(exp_mean),
+                summaries[k].mean.as_duration(),
+                EPSILON
+            );
+            rel_approx_eq_dur!(
+                Duration::from_secs_f64(exp_stdev),
+                summaries[k].stdev.as_duration(),
+                EPSILON
+            );
+            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p1), summaries[k].p1, EPSILON);
+            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p5), summaries[k].p5, EPSILON);
+            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p10), summaries[k].p10, EPSILON);
+            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p25), summaries[k].p25, EPSILON);
+            rel_approx_eq_dur!(
+                Duration::from_secs_f64(exp_median),
                 summaries[k].median,
                 EPSILON
             );
-            rel_approx_eq_dur!(ru.latency_from_f64(exp_p75), summaries[k].p75, EPSILON);
-            rel_approx_eq_dur!(ru.latency_from_f64(exp_p90), summaries[k].p90, EPSILON);
-            rel_approx_eq_dur!(ru.latency_from_f64(exp_p95), summaries[k].p95, EPSILON);
-            rel_approx_eq_dur!(ru.latency_from_f64(exp_p99), summaries[k].p99, EPSILON);
+            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p75), summaries[k].p75, EPSILON);
+            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p90), summaries[k].p90, EPSILON);
+            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p95), summaries[k].p95, EPSILON);
+            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p99), summaries[k].p99, EPSILON);
         }
     }
 
@@ -481,25 +482,22 @@ mod test {
 
         // in ln of microseconds
         let mu_micro = 8.;
-        // in ln of nanoseconds (recording unit is Nano by default)
-        let mu = mu_micro + (1000_f64).ln();
+        // in ln of seconds: ln(exp(mu_micro)*1e-6) = mu_micro - ln(1e6)
+        let mu = mu_micro - 1e6_f64.ln();
         let sigma = *LO_STDEV_LN;
         let samp_size = 20_000;
 
         let cfg = BenchCfg::default();
-        let ru = cfg.recording_unit();
-
-        let out = BenchOut::<2>::from_iter(&cfg, lognormal_samp2(&cfg, mu, sigma, samp_size));
+        let out = BenchOut::<2>::from_iter(&cfg, lognormal_samp2(mu, sigma, samp_size));
 
         let normal_samp = normal_detm_samp(mu, sigma, samp_size).unwrap();
         let moments_ln = SampleMoments::from_iterator(normal_samp);
 
         assert_eq!(out.recording_unit(), LatencyUnit::Nano);
         assert_eq!(out.n() as usize, samp_size);
-        assert_eq!(out.nf(), out.n() as f64);
 
         // The true median should lie inside the CI
-        let true_median = ru.latency_from_f64(mu.exp());
+        let true_median = Duration::from_secs_f64(mu.exp());
         let positions = out.student_value_position_wrt_median_cis(true_median, ALPHA);
         assert_eq!(positions, array::from_fn(|_| PositionWrtCi::In));
 
@@ -521,12 +519,12 @@ mod test {
                 approx_eq!(exp_df, out[k].student_ln_df(), EPSILON);
                 rel_approx_eq!(exp_p, out[k].student_ln_p(mu0, alt_hyp), EPSILON);
                 rel_approx_eq_dur!(
-                    ru.latency_from_f64(exp_ci_ns_low),
+                    Duration::from_secs_f64(exp_ci_ns_low),
                     out[k].student_median_ci(ALPHA).0,
                     EPSILON
                 );
                 rel_approx_eq_dur!(
-                    ru.latency_from_f64(exp_ci_ns_high),
+                    Duration::from_secs_f64(exp_ci_ns_high),
                     out[k].student_median_ci(ALPHA).1,
                     EPSILON
                 );
@@ -554,12 +552,12 @@ mod test {
                 approx_eq!(exp_df, out[k].student_ln_df(), EPSILON);
                 approx_eq!(exp_p, out[k].student_ln_p(mu0, alt_hyp), EPSILON);
                 rel_approx_eq_dur!(
-                    ru.latency_from_f64(exp_ci_ns_low),
+                    Duration::from_secs_f64(exp_ci_ns_low),
                     out[k].student_median_ci(ALPHA).0,
                     EPSILON
                 );
                 rel_approx_eq_dur!(
-                    ru.latency_from_f64(exp_ci_ns_high),
+                    Duration::from_secs_f64(exp_ci_ns_high),
                     out[k].student_median_ci(ALPHA).1,
                     EPSILON
                 );
@@ -578,7 +576,7 @@ mod test {
             [[Duration::from_millis(5)], [Duration::from_millis(7)]].into_iter(),
         );
 
-        assert_eq!(out1.mean(), Duration::from_millis(6));
+        assert_eq!(out1.mean().as_duration(), Duration::from_millis(6));
     }
 
     #[test]
@@ -588,7 +586,7 @@ mod test {
         let samp_size = 200;
 
         let cfg = BenchCfg::default();
-        let out = BenchOut::<2>::from_iter(&cfg, lognormal_samp2(&cfg, mu, sigma, samp_size));
+        let out = BenchOut::<2>::from_iter(&cfg, lognormal_samp2(mu, sigma, samp_size));
 
         let comp = out.comp();
         // Both outputs are fed the same data (`[y, y]`), so medians are equal
