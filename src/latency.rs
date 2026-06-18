@@ -1,5 +1,9 @@
 use log::trace;
-use std::time::{Duration, Instant};
+use std::{
+    fmt::Debug,
+    ops::Deref,
+    time::{Duration, Instant},
+};
 
 /// Invokes `f` once and returns its latency.
 #[inline(always)]
@@ -17,6 +21,75 @@ pub fn latency_n(mut f: impl FnMut(), n: u32) -> Duration {
         f();
     }
     start.elapsed()
+}
+
+/// A floating point duration of seconds. Useful for representing duration values or fractions with
+/// finer granularity than 1ns.
+#[derive(Clone, Copy, PartialEq)]
+pub struct FpSeconds(pub f64);
+
+impl FpSeconds {
+    #[inline(always)]
+    pub fn as_duration(&self) -> Duration {
+        Duration::from_secs_f64(self.0)
+    }
+
+    #[inline(always)]
+    pub fn as_f64(&self) -> f64 {
+        self.0
+    }
+}
+
+impl From<f64> for FpSeconds {
+    #[inline(always)]
+    fn from(value: f64) -> Self {
+        FpSeconds(value)
+    }
+}
+
+impl From<Duration> for FpSeconds {
+    #[inline(always)]
+    fn from(value: Duration) -> Self {
+        FpSeconds(value.as_secs_f64())
+    }
+}
+
+impl From<FpSeconds> for f64 {
+    #[inline(always)]
+    fn from(value: FpSeconds) -> Self {
+        value.0
+    }
+}
+
+impl From<FpSeconds> for Duration {
+    #[inline(always)]
+    fn from(value: FpSeconds) -> Self {
+        Duration::from_secs_f64(value.0)
+    }
+}
+
+impl Deref for FpSeconds {
+    type Target = f64;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Debug for FpSeconds {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let v = self.0;
+        let str = match () {
+            _ if 1.0 <= v => format!("{:?}s", v),
+            _ if 1e-3 <= v && v < 1.0 => format!("{:?}ms", v * 1e3),
+            _ if 1e-6 <= v && v < 1e-3 => format!("{:?}μs", v * 1e6),
+            _ if 1e-9 <= v && v < 1e-6 => format!("{:?}ns", v * 1e9),
+            _ if v < 1e-9 => format!("{:?}ps", v * 1e12),
+            _ => unreachable!(),
+        };
+        f.write_str(&str)
+    }
 }
 
 /// Unit of time used to record latencies. Used as an argument in benchmarking functions.
@@ -52,30 +125,6 @@ impl LatencyUnit {
             Self::Nano => Duration::from_nanos(elapsed),
             Self::Micro => Duration::from_micros(elapsed),
             Self::Milli => Duration::from_millis(elapsed),
-        }
-    }
-
-    /// Converts a `latency` [`Duration`] to an `f64` value according to the unit `self`.
-    #[inline(always)]
-    pub fn latency_as_f64(&self, latency: Duration) -> f64 {
-        match self {
-            Self::Pico => latency.as_nanos() as f64 * 1_000.0,
-            Self::Nano => latency.as_nanos() as f64,
-            Self::Micro => latency.as_nanos() as f64 / 1_000.0,
-            Self::Milli => latency.as_nanos() as f64 / 1_000_000.0,
-        }
-    }
-
-    /// Converts an `f64` value to a [`Duration`] according to the unit `self`.
-    ///
-    /// `NaN` is converted to a zero duration rather than panic.
-    #[inline(always)]
-    pub fn latency_from_f64(&self, elapsed: f64) -> Duration {
-        match self {
-            Self::Pico => Duration::from_nanos((elapsed / 1_000.0).round() as u64),
-            Self::Nano => Duration::from_nanos(elapsed.round() as u64),
-            Self::Micro => Duration::from_nanos((elapsed * 1_000.0).round() as u64),
-            Self::Milli => Duration::from_nanos((elapsed * 1_000_000.0).round() as u64),
         }
     }
 
@@ -242,7 +291,6 @@ mod validate {
 #[cfg(feature = "_test")]
 mod test_latency_unit {
     use super::*;
-    use basic_stats::approx_eq;
 
     #[test]
     fn latency_unit_as_u64() {
@@ -279,56 +327,6 @@ mod test_latency_unit {
         let val: u64 = 1_000_000_000_000_000; // 10^15 nanos = ~11.6 days
         let dur = LatencyUnit::Nano.latency_from_u64(val);
         assert_eq!(val, LatencyUnit::Nano.latency_as_u64(dur));
-    }
-
-    #[test]
-    fn latency_unit_as_f64() {
-        let dur = Duration::from_nanos(2_001_001);
-        approx_eq!(2_001_001.0, LatencyUnit::Nano.latency_as_f64(dur), 1e-6);
-        approx_eq!(2_001.001, LatencyUnit::Micro.latency_as_f64(dur), 1e-9);
-        approx_eq!(2.001_001, LatencyUnit::Milli.latency_as_f64(dur), 1e-12);
-
-        // Duration in nanos less then 1 micro
-        let small = Duration::from_nanos(999);
-        approx_eq!(0.999, LatencyUnit::Micro.latency_as_f64(small), 1e-12);
-    }
-
-    #[test]
-    fn latency_unit_from_f64() {
-        assert_eq!(
-            LatencyUnit::Nano.latency_from_f64(500.45),
-            Duration::from_nanos(500),
-        );
-        assert_eq!(
-            LatencyUnit::Micro.latency_from_f64(500.7),
-            Duration::from_nanos(500_700),
-        );
-        assert_eq!(
-            LatencyUnit::Milli.latency_from_f64(1_000.999_999),
-            Duration::from_nanos(1_000_999_999),
-        );
-        assert_eq!(
-            LatencyUnit::Milli.latency_from_f64(1_000.000_001),
-            Duration::from_nanos(1_000_000_001),
-        );
-    }
-
-    #[test]
-    fn latency_unit_round_trip_f64() {
-        let nanos_u64 = 999_u64;
-        let dur = Duration::from_nanos(nanos_u64);
-
-        let nanos = LatencyUnit::Nano.latency_as_f64(dur);
-        let micros = LatencyUnit::Micro.latency_as_f64(dur);
-        let millis = LatencyUnit::Milli.latency_as_f64(dur);
-
-        let dur_nan = LatencyUnit::Nano.latency_from_f64(nanos);
-        let dur_mic = LatencyUnit::Micro.latency_from_f64(micros);
-        let dur_mil = LatencyUnit::Milli.latency_from_f64(millis);
-
-        assert_eq!(dur, dur_nan);
-        assert_eq!(dur, dur_mic);
-        assert_eq!(dur, dur_mil);
     }
 }
 
