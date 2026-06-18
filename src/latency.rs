@@ -103,6 +103,10 @@ pub enum LatencyUnit {
     Micro,
     /// Milliseconds.
     Milli,
+    /// Seconds.
+    Sec,
+    /// Seconds * 1e-n, where `n` is the variant's single field.
+    SubSec(u8),
 }
 
 impl LatencyUnit {
@@ -114,6 +118,21 @@ impl LatencyUnit {
             Self::Nano => latency.as_nanos() as u64,
             Self::Micro => latency.as_micros() as u64,
             Self::Milli => latency.as_millis() as u64,
+            Self::Sec => latency.as_secs(),
+            Self::SubSec(n) => {
+                let n = *n as u32;
+                match n {
+                    _ if n < 3 => Duration::as_secs(&(latency * 10_u32.pow(n))),
+                    _ if 3 <= n && n < 6 => {
+                        Duration::as_millis(&(latency * 10_u32.pow(n - 3))) as u64
+                    }
+                    _ if 6 <= n && n < 9 => {
+                        Duration::as_micros(&(latency * 10_u32.pow(n - 6))) as u64
+                    }
+                    _ if 9 <= n => Duration::as_nanos(&(latency * 10_u32.pow(n - 9))) as u64,
+                    _ => unreachable!(),
+                }
+            }
         }
     }
 
@@ -125,16 +144,41 @@ impl LatencyUnit {
             Self::Nano => Duration::from_nanos(elapsed),
             Self::Micro => Duration::from_micros(elapsed),
             Self::Milli => Duration::from_millis(elapsed),
+            Self::Sec => Duration::from_secs(elapsed),
+            Self::SubSec(n) => {
+                let n = *n as u32;
+                match n {
+                    _ if n < 3 => Duration::from_secs(elapsed / 10_u64.pow(n)),
+                    _ if 3 <= n && n < 6 => Duration::from_millis(elapsed / 10_u64.pow(n - 3)),
+                    _ if 6 <= n && n < 9 => Duration::from_micros(elapsed / 10_u64.pow(n - 6)),
+                    _ if 9 <= n => Duration::from_nanos(elapsed / 10_u64.pow(n - 9)),
+                    _ => unreachable!(),
+                }
+            }
+        }
+    }
+
+    /// Multiplicative factor to convert seconds to the latency unit.
+    pub fn factor_from_secs(&self) -> f64 {
+        match self {
+            Self::Pico => 1e12,
+            Self::Nano => 1e9,
+            Self::Micro => 1e6,
+            Self::Milli => 1e3,
+            Self::Sec => 1.0,
+            Self::SubSec(n) => 10.0_f64.powi(*n as i32),
         }
     }
 
     /// Multiplicative factor to convert the latency unit to seconds.
-    pub const fn factor_to_secs(&self) -> f64 {
+    pub fn factor_to_secs(&self) -> f64 {
         match self {
             Self::Pico => 1e-12,
             Self::Nano => 1e-9,
             Self::Micro => 1e-6,
             Self::Milli => 1e-3,
+            Self::Sec => 1.0,
+            Self::SubSec(n) => 10.0_f64.powi(-(*n as i32)),
         }
     }
 }
