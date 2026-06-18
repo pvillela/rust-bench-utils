@@ -2,7 +2,7 @@
 //! and constants for low/high log-standard-deviation.
 //! Gated by feature **"_test"**.
 
-use crate::{BenchCfg, BenchOut, LatencyUnit};
+use crate::{BenchCfg, BenchOut};
 use basic_stats::{core::SampleMoments, dev_utils::ApproxEq, normal::normal_detm_samp};
 use std::{io::Write, sync::LazyLock, time::Duration};
 
@@ -114,7 +114,6 @@ pub fn lognormal_out(cfg: &BenchCfg, mu: f64, sigma: f64, k: usize) -> BenchOut 
 /// - `n_jitter` - denominator controlling the jitter period (must be >= 3).
 /// - `jitter_epsilon` - maximum magnitude of the jitter added to each value.
 pub fn lognormal_moments_ln_jittered(
-    ru: LatencyUnit,
     mu: f64,
     sigma: f64,
     samp_size: usize,
@@ -144,8 +143,8 @@ pub fn lognormal_moments_ln_jittered(
 /// - `mu` - mean of the underlying normal distribution (log-scale).
 /// - `sigma` - standard deviation of the underlying normal distribution (log-scale).
 /// - `k` - controls the sample size; the total number of items is `2*k*k - 1`.
-pub fn lognormal_moments_ln(ru: LatencyUnit, mu: f64, sigma: f64, k: usize) -> SampleMoments {
-    lognormal_moments_ln_jittered(ru, mu, sigma, k, 3, 0.)
+pub fn lognormal_moments_ln(mu: f64, sigma: f64, k: usize) -> SampleMoments {
+    lognormal_moments_ln_jittered(mu, sigma, k, 3, 0.)
 }
 
 /// Writer backed by a [`Vec<u8>`] that can process backspace characters ("\u{8}") properly like stdout and stderr do.
