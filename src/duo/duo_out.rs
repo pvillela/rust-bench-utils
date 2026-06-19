@@ -1,5 +1,5 @@
 use crate::{
-    BenchOut, Comp, multi,
+    BenchOut, Comp, FpSeconds, multi,
     stats_types::{AltHyp, Ci, HypTestResult, PositionWrtCi},
 };
 
@@ -24,7 +24,7 @@ impl DuoOut {
 
     /// Difference between the median of `f1`'s latencies and the median of `f2`'s latencies,
     /// in seconds.
-    pub fn diff_medians_f1_f2(&self) -> f64 {
+    pub fn diff_medians_f1_f2(&self) -> FpSeconds {
         self.comp().diff_medians_f1_f2()
     }
 
@@ -46,7 +46,7 @@ impl DuoOut {
     /// # Panics
     ///
     /// Panics if `self.out_f1().n() == 0` or `self.out_f2().n() == 0`.
-    pub fn mean_diff_f1_f2(&self) -> f64 {
+    pub fn mean_diff_f1_f2(&self) -> FpSeconds {
         self.comp().mean_diff_f1_f2()
     }
 

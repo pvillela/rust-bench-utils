@@ -5,7 +5,7 @@
 //! compares solo vs. grouped execution latencies to detect overhead from the measurement harness.
 
 use crate::{
-    BenchCfg, RunLength, bench_run_with_status_arg_cfg, load::BusyWork,
+    BenchCfg, FpSeconds, RunLength, bench_run_with_status_arg_cfg, load::BusyWork,
     test_support::AbsRelDiffFpSecs,
 };
 use std::time::Duration;
@@ -23,7 +23,7 @@ pub fn validate_latency_overhead(
     bench_duration: Duration,
     target_latency: Duration,
     batch: usize,
-) -> (Duration, Duration) {
+) -> (FpSeconds, FpSeconds) {
     assert!(
         target_latency > Duration::ZERO && batch > 0,
         "`target_latency` and `batch` must both be positive"
@@ -50,7 +50,7 @@ pub fn validate_latency_overhead(
     let solo_median = out_solo.median();
     println!(
         "target_median_solo={target_latency:?}, out_solo.median()={solo_median:?}, rel_diff={}",
-        target_latency.abs_rel_diff(solo_median)
+        FpSeconds::from_duration(target_latency).abs_rel_diff(solo_median)
     );
     println!();
 
@@ -61,14 +61,14 @@ pub fn validate_latency_overhead(
     println!(
         "target_median_group={:?}, out_group.median()={group_median:?}, rel_diff={}",
         target_group_latency,
-        target_group_latency.abs_rel_diff(group_median)
+        FpSeconds::from_duration(target_group_latency).abs_rel_diff(group_median)
     );
     println!();
 
     println!(
         "Solo vs. grouped: batch={batch}, out_solo.median()*batch={:?}, out_group.median()={group_median:?}, rel_diff={}",
-        solo_median * batch as u32,
-        (solo_median * batch as u32).abs_rel_diff(group_median)
+        solo_median * batch,
+        (solo_median * batch).abs_rel_diff(group_median)
     );
     println!();
 

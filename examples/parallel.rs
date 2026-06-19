@@ -33,7 +33,7 @@ fn main() {
     let out1 = out.out_f1();
     let out2 = out.out_f2();
 
-    let median_ratio = out1.median().as_secs_f64() / out2.median().as_secs_f64();
+    let median_ratio = out1.median().as_f64() / out2.median().as_f64();
 
     println!("median_ratio={median_ratio}");
     println!("out1.summary={:?}", out1.summary());

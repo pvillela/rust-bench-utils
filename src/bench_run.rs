@@ -104,7 +104,7 @@ pub fn bench_run_x_b<'a, S: Status<'a>>(
     f: impl FnMut(),
     run_length: RunLength,
     s: S,
-    batch: u32,
+    batch: usize,
 ) -> BenchOut {
     multi::bench_run_x(cfg, LatencySrc1b::new(f, batch), run_length, s).into()
 }
@@ -116,7 +116,7 @@ pub fn bench_run_x_b<'a, S: Status<'a>>(
 /// latency values is not impacted by grouping.
 /// However, a potential consequence is that the statistical tests provided by [`BenchOut`] may be somewhat
 /// distorted as the resulting distribution may no longer be approximately logormal.
-pub fn bench_run_b(f: impl FnMut(), run_length: RunLength, batch: u32) -> BenchOut {
+pub fn bench_run_b(f: impl FnMut(), run_length: RunLength, batch: usize) -> BenchOut {
     multi::bench_run(LatencySrc1b::new(f, batch), run_length).into()
 }
 
@@ -131,7 +131,7 @@ pub fn bench_run_arg_cfg_b(
     cfg: &BenchCfg,
     f: impl FnMut(),
     run_length: RunLength,
-    batch: u32,
+    batch: usize,
 ) -> BenchOut {
     multi::bench_run_arg_cfg(cfg, LatencySrc1b::new(f, batch), run_length).into()
 }
@@ -143,7 +143,7 @@ pub fn bench_run_arg_cfg_b(
 /// latency values is not impacted by grouping.
 /// However, a potential consequence is that the statistical tests provided by [`BenchOut`] may be somewhat
 /// distorted as the resulting distribution may no longer be approximately logormal.
-pub fn bench_run_with_status_b(f: impl FnMut(), run_length: RunLength, batch: u32) -> BenchOut {
+pub fn bench_run_with_status_b(f: impl FnMut(), run_length: RunLength, batch: usize) -> BenchOut {
     multi::bench_run_with_status(LatencySrc1b::new(f, batch), run_length).into()
 }
 
@@ -158,7 +158,7 @@ pub fn bench_run_with_status_arg_cfg_b(
     cfg: &BenchCfg,
     f: impl FnMut(),
     run_length: RunLength,
-    batch: u32,
+    batch: usize,
 ) -> BenchOut {
     multi::bench_run_with_status_arg_cfg(cfg, LatencySrc1b::new(f, batch), run_length).into()
 }
@@ -169,7 +169,7 @@ pub fn bench_run_x_o<'a, S: Status<'a>>(
     f: impl FnMut(),
     run_length: RunLength,
     s: S,
-    batch: Option<u32>,
+    batch: Option<usize>,
 ) -> BenchOut {
     match batch {
         None => bench_run_x(&cfg, f, run_length, s),
@@ -182,7 +182,7 @@ pub fn bench_run_arg_cfg_o(
     cfg: &BenchCfg,
     f: impl FnMut(),
     run_length: RunLength,
-    batch: Option<u32>,
+    batch: Option<usize>,
 ) -> BenchOut {
     match batch {
         None => bench_run_arg_cfg(&cfg, f, run_length),
@@ -195,7 +195,7 @@ pub fn bench_run_with_status_arg_cfg_o(
     cfg: &BenchCfg,
     f: impl FnMut(),
     run_length: RunLength,
-    batch: Option<u32>,
+    batch: Option<usize>,
 ) -> BenchOut {
     match batch {
         None => bench_run_with_status_arg_cfg(&cfg, f, run_length),

@@ -10,7 +10,7 @@ use bench_utils::{BenchCfg, RunLength, bench_run_arg_cfg, bench_run_arg_cfg_b, l
 use env_logger;
 use std::time::{Duration, Instant};
 
-fn run(target_latency: Duration, warmup_millis: u64, run_length: RunLength, batch: Option<u32>) {
+fn run(target_latency: Duration, warmup_millis: u64, run_length: RunLength, batch: Option<usize>) {
     let effort = BusyWork::calibrate(target_latency);
     println!(
         "\nRunning with target_latency={target_latency:?}, effort={effort}, run_length={run_length:?}, batch={batch:?}"
@@ -27,7 +27,7 @@ fn run(target_latency: Duration, warmup_millis: u64, run_length: RunLength, batc
     println!("elaped time={elapsed:?}");
     println!(
         "target_latency/median_latency={}",
-        target_latency.as_secs_f64() / out.median().as_secs_f64()
+        target_latency.as_secs_f64() / out.median().as_f64()
     );
     println!("{:?}", out.summary());
 }

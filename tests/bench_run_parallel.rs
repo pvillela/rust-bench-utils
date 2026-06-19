@@ -5,7 +5,7 @@
 //! cargo test -r --test bench_run_parallel --all-features -- --nocapture --test-threads=1
 
 use basic_stats::rel_approx_eq;
-use bench_utils::{BenchCfg, load::BusyWork, RunLength, duo::bench_run_parallel_arg_cfg};
+use bench_utils::{BenchCfg, RunLength, duo::bench_run_parallel_arg_cfg, load::BusyWork};
 use std::time::{Duration, Instant};
 
 #[test]
@@ -34,7 +34,7 @@ fn test() {
     let out1 = out.out_f1();
     let out2 = out.out_f2();
 
-    let median_ratio = out1.median().as_secs_f64() / out2.median().as_secs_f64();
+    let median_ratio = out1.median().as_f64() / out2.median().as_f64();
 
     println!("median_ratio={median_ratio}");
     println!("out1.summary={:?}", out1.summary());

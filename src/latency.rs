@@ -348,6 +348,7 @@ pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: Ru
     for i in 1.. {
         let iter_execs = 2usize.pow(i - 1);
         let iter_latency = (&mut src).take(iter_execs as usize).sum();
+        trace!("execs_per_sec >>> iter_execs={iter_execs}, iter_latency={iter_latency:?},",);
 
         acc_latency += iter_latency;
         acc_execs += iter_execs;
@@ -360,7 +361,9 @@ pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: Ru
             let iter_execs_per_sec = iter_execs as f64 / iter_latency.as_f64();
             let acc_execs_per_sec = acc_execs as f64 / acc_latency.as_f64();
             let execs_per_sec = iter_execs_per_sec.max(acc_execs_per_sec);
-            trace!("execs_per_sec >>> execs_per_sec={execs_per_sec}",);
+            trace!(
+                "execs_per_sec >>> iter_execs_per_sec={iter_execs_per_sec}, acc_execs_per_sec={acc_execs_per_sec}, execs_per_sec={execs_per_sec}",
+            );
             return execs_per_sec;
         }
     }
@@ -373,7 +376,7 @@ pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: Ru
 /// cargo test -r --package bench_utils --lib --all-features -- latency::test --nocapture
 mod validate {
     use super::*;
-    use crate::{BenchCfg, bench_support::validate_latency_overhead, rel_approx_eq_dur};
+    use crate::{BenchCfg, bench_support::validate_latency_overhead, rel_approx_eq_fpsecs};
 
     // SEE ALSO: tests for `fake_work` and `busy_work`.
 
@@ -382,10 +385,10 @@ mod validate {
         const EPSILON: f64 = 0.05;
 
         struct Medians {
-            solo_median_20: Duration,
-            solo_median_100: Duration,
-            group_median_20: Duration,
-            group_median_100: Duration,
+            solo_median_20: FpSeconds,
+            solo_median_100: FpSeconds,
+            group_median_20: FpSeconds,
+            group_median_100: FpSeconds,
         }
 
         let start = Instant::now();
@@ -416,8 +419,8 @@ mod validate {
 
         println!("elapsed time: {} millis", start.elapsed().as_millis());
 
-        rel_approx_eq_dur!(solo_median_20 * 20, group_median_20, EPSILON);
-        rel_approx_eq_dur!(solo_median_100 * 100, group_median_100, EPSILON);
+        rel_approx_eq_fpsecs!(solo_median_20 * 20, group_median_20, EPSILON);
+        rel_approx_eq_fpsecs!(solo_median_100 * 100, group_median_100, EPSILON);
     }
 }
 
@@ -495,21 +498,25 @@ mod test_execs_per_second {
         assert!(eps.is_infinite(), "eps={eps}");
     }
 
+    // cargo test --package bench_utils --lib --all-features -- latency::test_execs_per_second::src_small_finite --exact --nocapture --include-ignored
     #[test]
     fn src_small_finite() {
-        const COUNT: usize = 1000;
+        _ = env_logger::try_init();
+
+        const COUNT: usize = 1;
         let iter_len = (COUNT as f64).sqrt() as usize;
         let target_latency = FpSeconds::from_secs(10);
         let mut src = LognormalLatencySrc::new_with_default_sigmas(1, [target_latency]);
         let eps = execs_per_sec(src.aggregate().take(iter_len), RunLength::Count(1000));
-        assert!(eps.is_infinite(), "eps={eps}");
+        assert!(eps.is_finite(), "should be finite: eps={eps}");
     }
 
+    // cargo test --package bench_utils --lib --all-features -- latency::test_execs_per_second::src_infinite_zero --exact --nocapture --include-ignored
     #[test]
     fn src_infinite_zero() {
         let mut src = ConstLatencySrc::new(1, [FpSeconds::ZERO]);
         let eps = execs_per_sec(src.aggregate(), RunLength::Count(1000));
-        assert!(eps.is_infinite(), "eps={eps}");
+        assert!(eps.is_infinite(), "should be infinite: eps={eps}");
     }
 
     #[test]

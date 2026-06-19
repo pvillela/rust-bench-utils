@@ -1,6 +1,6 @@
 use bench_utils::{
     BenchCfg, RunLength, bench_run_with_status_arg_cfg, bench_run_with_status_arg_cfg_b, latency,
-    load::BusyWork, rel_approx_eq_dur, test_support::AbsRelDiffFpSecs,
+    load::BusyWork, rel_approx_eq_dur, test_support::AbsRelDiffDur,
 };
 use std::time::Duration;
 
@@ -10,7 +10,7 @@ fn run_bench_with_status(
     bench_time: Duration,
     target_latency: Duration,
     epsilon: f64,
-    batch: Option<u32>,
+    batch: Option<usize>,
 ) {
     let name = format!(
         "target_latency={target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}"

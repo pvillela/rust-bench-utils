@@ -1,5 +1,5 @@
 use bench_utils::{
-    BenchCfg, bench_support::validate_latency_overhead, rel_approx_eq_dur,
+    BenchCfg, bench_support::validate_latency_overhead, rel_approx_eq_fpsecs,
     test_support::AbsRelDiffFpSecs,
 };
 use std::time::{Duration, Instant};
@@ -33,6 +33,6 @@ fn main() {
         (solo_median_100 * 100).abs_rel_diff(group_median_100)
     );
 
-    rel_approx_eq_dur!(solo_median_20 * 20, group_median_20, EPSILON);
-    rel_approx_eq_dur!(solo_median_100 * 100, group_median_100, EPSILON);
+    rel_approx_eq_fpsecs!(solo_median_20 * 20, group_median_20, EPSILON);
+    rel_approx_eq_fpsecs!(solo_median_100 * 100, group_median_100, EPSILON);
 }

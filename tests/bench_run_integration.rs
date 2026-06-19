@@ -1,7 +1,7 @@
 #![cfg(feature = "_test")]
 
 use basic_stats::approx_eq;
-use bench_utils::{BenchCfg, Comp, RunLength, bench_run_arg_cfg};
+use bench_utils::{BenchCfg, Comp, FpSeconds, RunLength, bench_run_arg_cfg};
 
 #[test]
 fn test_bench_run_to_comp_roundtrip_with_fn() {
@@ -30,15 +30,14 @@ fn test_bench_run_to_comp_accept_null_hyp() {
     use bench_utils::multi::bench_run_arg_cfg;
     use bench_utils::multi::test_support::LognormalLatencySrc;
     use bench_utils::stats_types::{AltHyp, PositionWrtCi};
-    use std::time::Duration;
 
     let cfg = BenchCfg::default().with_warmup_millis(0);
-    let target = Duration::from_millis(10);
+    let target = FpSeconds::from_millis(10);
 
     // Two independent LognormalLatencySrc instances with the same target median —
     // each draws from its own RNG, so their samples differ.
-    let src1 = LognormalLatencySrc::<1>::new_with_default_sigmas([target]);
-    let src2 = LognormalLatencySrc::<1>::new_with_default_sigmas([target]);
+    let src1 = LognormalLatencySrc::<1>::new_with_default_sigmas(1, [target]);
+    let src2 = LognormalLatencySrc::<1>::new_with_default_sigmas(1, [target]);
 
     // Sample sizes different to show `Comp` works with different sample sizes.
     let out1 = bench_run_arg_cfg(&cfg, src1, RunLength::Count(1000));
@@ -77,16 +76,15 @@ fn test_bench_run_to_comp_reject_null_hyp() {
     use bench_utils::multi::bench_run_arg_cfg;
     use bench_utils::multi::test_support::LognormalLatencySrc;
     use bench_utils::stats_types::{AltHyp, PositionWrtCi};
-    use std::time::Duration;
 
     let cfg = BenchCfg::default().with_warmup_millis(0);
-    let target1 = Duration::from_millis(10);
-    let target2 = Duration::from_millis(9);
+    let target1 = FpSeconds::from_millis(10);
+    let target2 = FpSeconds::from_millis(9);
 
     // Two independent LognormalLatencySrc instances with the same target median —
     // each draws from its own RNG, so their samples differ.
-    let src1 = LognormalLatencySrc::<1>::new_with_default_sigmas([target1]);
-    let src2 = LognormalLatencySrc::<1>::new_with_default_sigmas([target2]);
+    let src1 = LognormalLatencySrc::<1>::new_with_default_sigmas(1, [target1]);
+    let src2 = LognormalLatencySrc::<1>::new_with_default_sigmas(1, [target2]);
 
     let out1 = bench_run_arg_cfg(&cfg, src1, RunLength::Count(1000));
     let out2 = bench_run_arg_cfg(&cfg, src2, RunLength::Count(1000));
