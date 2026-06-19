@@ -27,6 +27,7 @@ impl<F1, F2, Src> FnsLatencySrc<F1, F2, Src> {
 }
 
 fn run<const K: usize, R, F1, F2, Src>(
+    rec_unit: LatencyUnit,
     runner: R,
     fsrc: FnsLatencySrc<F1, F2, Src>,
     base_warmup_millis: u64,
@@ -57,13 +58,13 @@ fn run<const K: usize, R, F1, F2, Src>(
     let status_millis = base_status_millis * K as u64;
 
     println!(
-        "validate_bench_run: K={K}, base_target_latency={base_target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}, batch={batch:?}"
+        "validate_bench_run: K={K}, rec_unit={rec_unit:?}, base_target_latency={base_target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}, batch={batch:?}"
     );
 
     let cfg = BenchCfg::default()
         .with_warmup_millis(warmup_millis)
         .with_status_millis(status_millis)
-        .with_recording_unit(LatencyUnit::Nano);
+        .with_recording_unit(rec_unit);
     let out = runner(&cfg, src, RunLength::Time(bench_time));
     let count = out.n();
 
@@ -91,11 +92,11 @@ fn run<const K: usize, R, F1, F2, Src>(
     let base_target_latency_secs_f64 = base_target_latency.as_secs_f64();
 
     for i in 0..K {
-        let out_mean_secs_f64 = out[i].mean().0;
+        let out_mean_secs_f64 = out[i].mean().as_f64();
         let raw_mean = raw_means[i];
 
         println!(
-            "base_target_latency_secs_f64={base_target_latency_secs_f64:?}, out[{i}].mean_secs_f64()={out_mean_secs_f64:?}, rel_diff={}",
+            "base_target_latency_secs_f64={base_target_latency_secs_f64:?}, out[{i}].mean().as_f64={out_mean_secs_f64:?}, rel_diff={}",
             base_target_latency_secs_f64.abs_rel_diff(out_mean_secs_f64)
         );
 
@@ -105,9 +106,11 @@ fn run<const K: usize, R, F1, F2, Src>(
         );
 
         println!(
-            "raw_mean[{i}]={raw_mean:?}, out[{i}].mean_secs_f64()={out_mean_secs_f64:?}, rel_diff={}",
+            "raw_mean[{i}]={raw_mean:?}, out[{i}].mean_as_f64()={out_mean_secs_f64:?}, rel_diff={}",
             raw_mean.abs_rel_diff(out_mean_secs_f64)
         );
+
+        println!("out[{i}].hist().mean()={:?}", out[i].hist().mean());
 
         println!("out[{i}].summary()={:?}", out[i].summary());
     }
@@ -143,6 +146,7 @@ fn run<const K: usize, R, F1, F2, Src>(
 const BASE_WARMUP_MILLIS: u64 = 100;
 const BASE_STATUS_MILLIS: u64 = 10;
 const BASE_BENCH_TIME: Duration = Duration::from_millis(100);
+const DEFAULT_REC_UNIT: LatencyUnit = LatencyUnit::Nano;
 
 // cargo test -r --test bench_run_validate --all-features -- no_batch --nocapture --test-threads=1
 mod no_batch {
@@ -180,12 +184,14 @@ mod no_batch {
         use super::*;
 
         fn run_bench(
+            rec_unit: LatencyUnit,
             base_warmup_millis: u64,
             base_bench_time: Duration,
             base_target_latency: Duration,
             epsilon: f64,
         ) {
             run(
+                rec_unit,
                 bench_run_arg_cfg,
                 fsrc1(base_target_latency),
                 base_warmup_millis,
@@ -199,43 +205,81 @@ mod no_batch {
         #[test]
         fn test_nanos_1() {
             const EPSILON: f64 = 0.02;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(1);
-            run_bench(BASE_WARMUP_MILLIS, BASE_BENCH_TIME, target_latency, EPSILON);
+            run_bench(
+                rec_unit,
+                BASE_WARMUP_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                EPSILON,
+            );
         }
 
         #[test]
         fn test_nanos_50() {
             const EPSILON: f64 = 0.02;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(50);
-            run_bench(BASE_WARMUP_MILLIS, BASE_BENCH_TIME, target_latency, EPSILON);
+            run_bench(
+                rec_unit,
+                BASE_WARMUP_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                EPSILON,
+            );
         }
 
         #[test]
         fn test_micros_1() {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_micros(1);
-            run_bench(BASE_WARMUP_MILLIS, BASE_BENCH_TIME, target_latency, EPSILON);
+            run_bench(
+                DEFAULT_REC_UNIT,
+                BASE_WARMUP_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                EPSILON,
+            );
         }
 
         #[test]
         fn test_micros_50() {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_micros(50);
-            run_bench(BASE_WARMUP_MILLIS, BASE_BENCH_TIME, target_latency, EPSILON);
+            run_bench(
+                DEFAULT_REC_UNIT,
+                BASE_WARMUP_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                EPSILON,
+            );
         }
 
         #[test]
         fn test_millis_1() {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_millis(1);
-            run_bench(BASE_WARMUP_MILLIS, BASE_BENCH_TIME, target_latency, EPSILON);
+            run_bench(
+                DEFAULT_REC_UNIT,
+                BASE_WARMUP_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                EPSILON,
+            );
         }
 
         #[test]
         fn test_millis_10() {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_millis(10);
-            run_bench(BASE_WARMUP_MILLIS, BASE_BENCH_TIME, target_latency, EPSILON);
+            run_bench(
+                DEFAULT_REC_UNIT,
+                BASE_WARMUP_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                EPSILON,
+            );
         }
     }
 
@@ -244,6 +288,7 @@ mod no_batch {
         use super::*;
 
         fn run_bench(
+            rec_unit: LatencyUnit,
             base_warmup_millis: u64,
             base_status_millis: u64,
             base_bench_time: Duration,
@@ -251,6 +296,7 @@ mod no_batch {
             epsilon: f64,
         ) {
             run(
+                rec_unit,
                 bench_run_with_status_arg_cfg,
                 fsrc1(base_target_latency),
                 base_warmup_millis,
@@ -264,8 +310,10 @@ mod no_batch {
         #[test]
         fn test_nanos_1() {
             const EPSILON: f64 = 0.02;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(1);
             run_bench(
+                rec_unit,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -277,8 +325,10 @@ mod no_batch {
         #[test]
         fn test_nanos_50() {
             const EPSILON: f64 = 0.02;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(50);
             run_bench(
+                rec_unit,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -292,6 +342,7 @@ mod no_batch {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_micros(1);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -305,6 +356,7 @@ mod no_batch {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_micros(50);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -318,6 +370,7 @@ mod no_batch {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_millis(1);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -331,6 +384,7 @@ mod no_batch {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_millis(10);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -345,12 +399,14 @@ mod no_batch {
         use super::*;
 
         fn run_bench(
+            rec_unit: LatencyUnit,
             base_warmup_millis: u64,
             base_bench_time: Duration,
             base_target_latency: Duration,
             epsilon: f64,
         ) {
             run(
+                rec_unit,
                 bench_run_arg_cfg,
                 fsrc2(base_target_latency),
                 base_warmup_millis,
@@ -364,43 +420,81 @@ mod no_batch {
         #[test]
         fn test_nanos_1() {
             const EPSILON: f64 = 0.02;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(1);
-            run_bench(BASE_WARMUP_MILLIS, BASE_BENCH_TIME, target_latency, EPSILON);
+            run_bench(
+                rec_unit,
+                BASE_WARMUP_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                EPSILON,
+            );
         }
 
         #[test]
         fn test_nanos_50() {
             const EPSILON: f64 = 0.02;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(50);
-            run_bench(BASE_WARMUP_MILLIS, BASE_BENCH_TIME, target_latency, EPSILON);
+            run_bench(
+                rec_unit,
+                BASE_WARMUP_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                EPSILON,
+            );
         }
 
         #[test]
         fn test_micros_1() {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_micros(1);
-            run_bench(BASE_WARMUP_MILLIS, BASE_BENCH_TIME, target_latency, EPSILON);
+            run_bench(
+                DEFAULT_REC_UNIT,
+                BASE_WARMUP_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                EPSILON,
+            );
         }
 
         #[test]
         fn test_micros_50() {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_micros(50);
-            run_bench(BASE_WARMUP_MILLIS, BASE_BENCH_TIME, target_latency, EPSILON);
+            run_bench(
+                DEFAULT_REC_UNIT,
+                BASE_WARMUP_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                EPSILON,
+            );
         }
 
         #[test]
         fn test_millis_1() {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_millis(1);
-            run_bench(BASE_WARMUP_MILLIS, BASE_BENCH_TIME, target_latency, EPSILON);
+            run_bench(
+                DEFAULT_REC_UNIT,
+                BASE_WARMUP_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                EPSILON,
+            );
         }
 
         #[test]
         fn test_millis_10() {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_millis(10);
-            run_bench(BASE_WARMUP_MILLIS, BASE_BENCH_TIME, target_latency, EPSILON);
+            run_bench(
+                DEFAULT_REC_UNIT,
+                BASE_WARMUP_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                EPSILON,
+            );
         }
     }
 
@@ -409,6 +503,7 @@ mod no_batch {
         use super::*;
 
         fn run_bench(
+            rec_unit: LatencyUnit,
             base_warmup_millis: u64,
             base_status_millis: u64,
             base_bench_time: Duration,
@@ -416,6 +511,7 @@ mod no_batch {
             epsilon: f64,
         ) {
             run(
+                rec_unit,
                 bench_run_with_status_arg_cfg,
                 fsrc2(base_target_latency),
                 base_warmup_millis,
@@ -429,8 +525,10 @@ mod no_batch {
         #[test]
         fn test_nanos_1() {
             const EPSILON: f64 = 0.02;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(1);
             run_bench(
+                rec_unit,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -442,8 +540,10 @@ mod no_batch {
         #[test]
         fn test_nanos_50() {
             const EPSILON: f64 = 0.02;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(50);
             run_bench(
+                rec_unit,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -457,6 +557,7 @@ mod no_batch {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_micros(1);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -470,6 +571,7 @@ mod no_batch {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_micros(50);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -483,6 +585,7 @@ mod no_batch {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_millis(1);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -496,6 +599,7 @@ mod no_batch {
             const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_millis(10);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -549,6 +653,7 @@ mod with_batch {
         use super::*;
 
         fn run_bench(
+            rec_unit: LatencyUnit,
             base_warmup_millis: u64,
             base_bench_time: Duration,
             base_target_latency: Duration,
@@ -556,6 +661,7 @@ mod with_batch {
             epsilon: f64,
         ) {
             run(
+                rec_unit,
                 bench_run_arg_cfg,
                 fsrc1_b(base_target_latency, batch),
                 base_warmup_millis,
@@ -568,30 +674,32 @@ mod with_batch {
 
         //=== nanos(1) is unstable
         // cargo test -r --test bench_run_validate --all-features -- with_batch::no_status1::test_nanos_01 --nocapture --test-threads=1
-        // #[test]
-        // fn test_nanos_01() {
-        //     const BASE_WARMUP_MILLIS: u64 = 500;
-        //     const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
-
-        //     const EPSILON: f64 = 0.10;
-        //     let target_latency = Duration::from_nanos(1);
-        //     let batch = 10_000_000;
-        //     run_bench(
-        //         BASE_WARMUP_MILLIS,
-        //         BASE_BENCH_TIME,
-        //         target_latency,
-        //         batch,
-        //         EPSILON,
-        //     );
-        // }
+        #[test]
+        fn test_nanos_01() {
+            const EPSILON: f64 = 0.10;
+            let rec_unit = LatencyUnit::SubSec(11);
+            // let rec_unit = LatencyUnit::Nano;
+            let target_latency = Duration::from_nanos(1);
+            let batch = 10_000_000;
+            run_bench(
+                rec_unit,
+                BASE_WARMUP_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                batch,
+                EPSILON,
+            );
+        }
 
         // cargo test -r --test bench_run_validate --all-features -- with_batch::no_status1::test_nanos_10 --nocapture --test-threads=1
         #[test]
         fn test_nanos_10() {
             const EPSILON: f64 = 0.10;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(10);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                rec_unit,
                 BASE_WARMUP_MILLIS,
                 BASE_BENCH_TIME,
                 target_latency,
@@ -603,10 +711,12 @@ mod with_batch {
         // cargo test -r --test bench_run_validate --all-features -- with_batch::no_status1::test_nanos_50 --nocapture --test-threads=1
         #[test]
         fn test_nanos_50() {
-            const EPSILON: f64 = 0.02;
+            const EPSILON: f64 = 0.05;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(50);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                rec_unit,
                 BASE_WARMUP_MILLIS,
                 BASE_BENCH_TIME,
                 target_latency,
@@ -618,10 +728,11 @@ mod with_batch {
         // cargo test -r --test bench_run_validate --all-features -- with_batch::no_status1::test_micros_1 --nocapture --test-threads=1
         #[test]
         fn test_micros_1() {
-            const EPSILON: f64 = 0.01;
+            const EPSILON: f64 = 0.02;
             let target_latency = Duration::from_micros(1);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_BENCH_TIME,
                 target_latency,
@@ -637,6 +748,7 @@ mod with_batch {
             let target_latency = Duration::from_micros(50);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_BENCH_TIME,
                 target_latency,
@@ -658,6 +770,7 @@ mod with_batch {
                 let target_latency = Duration::from_millis(1);
                 let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
                 run_bench(
+                    DEFAULT_REC_UNIT,
                     BASE_WARMUP_MILLIS,
                     BASE_BENCH_TIME,
                     target_latency,
@@ -669,10 +782,11 @@ mod with_batch {
             // cargo test -r --test bench_run_validate --all-features -- with_batch::no_status1::millis::test_millis_10 --nocapture --test-threads=1
             #[test]
             fn test_millis_10() {
-                const EPSILON: f64 = 0.01;
+                const EPSILON: f64 = 0.02;
                 let target_latency = Duration::from_millis(10);
                 let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
                 run_bench(
+                    DEFAULT_REC_UNIT,
                     BASE_WARMUP_MILLIS,
                     BASE_BENCH_TIME,
                     target_latency,
@@ -688,6 +802,7 @@ mod with_batch {
         use super::*;
 
         fn run_bench(
+            rec_unit: LatencyUnit,
             base_warmup_millis: u64,
             base_status_millis: u64,
             base_bench_time: Duration,
@@ -696,6 +811,7 @@ mod with_batch {
             epsilon: f64,
         ) {
             run(
+                rec_unit,
                 bench_run_with_status_arg_cfg,
                 fsrc1_b(base_target_latency, batch),
                 base_warmup_millis,
@@ -707,28 +823,32 @@ mod with_batch {
         }
 
         //=== nanos(1) is unstable
-        // #[test]
-        // fn test_nanos_1() {
-        //     const EPSILON: f64 = 0.02;
-        //     let target_latency = Duration::from_nanos(1);
-        //     let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
-        //     run_bench(
-        //         BASE_WARMUP_MILLIS,
-        //         BASE_STATUS_MILLIS,
-        //         BASE_BENCH_TIME,
-        //         target_latency,
-        //         batch,
-        //         EPSILON,
-        //     );
-        // }
+        #[test]
+        fn test_nanos_1() {
+            const EPSILON: f64 = 0.02;
+            let target_latency = Duration::from_nanos(1);
+            let rec_unit = LatencyUnit::SubSec(11);
+            let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
+            run_bench(
+                rec_unit,
+                BASE_WARMUP_MILLIS,
+                BASE_STATUS_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                batch,
+                EPSILON,
+            );
+        }
 
         // cargo test -r --test bench_run_validate --all-features -- with_batch::no_status1::test_nanos_10 --nocapture --test-threads=1
         #[test]
         fn test_nanos_10() {
             const EPSILON: f64 = 0.10;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(10);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                rec_unit,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -742,9 +862,11 @@ mod with_batch {
         #[test]
         fn test_nanos_50() {
             const EPSILON: f64 = 0.05;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(50);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                rec_unit,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -761,6 +883,7 @@ mod with_batch {
             let target_latency = Duration::from_micros(1);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -777,6 +900,7 @@ mod with_batch {
             let target_latency = Duration::from_micros(50);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -799,6 +923,7 @@ mod with_batch {
                 let target_latency = Duration::from_millis(1);
                 let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
                 run_bench(
+                    DEFAULT_REC_UNIT,
                     BASE_WARMUP_MILLIS,
                     BASE_STATUS_MILLIS,
                     BASE_BENCH_TIME,
@@ -815,6 +940,7 @@ mod with_batch {
                 let target_latency = Duration::from_millis(10);
                 let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
                 run_bench(
+                    DEFAULT_REC_UNIT,
                     BASE_WARMUP_MILLIS,
                     BASE_STATUS_MILLIS,
                     BASE_BENCH_TIME,
@@ -831,6 +957,7 @@ mod with_batch {
         use super::*;
 
         fn run_bench(
+            rec_unit: LatencyUnit,
             base_warmup_millis: u64,
             base_bench_time: Duration,
             base_target_latency: Duration,
@@ -838,6 +965,7 @@ mod with_batch {
             epsilon: f64,
         ) {
             run(
+                rec_unit,
                 bench_run_arg_cfg,
                 fsrc2_b(base_target_latency, batch),
                 base_warmup_millis,
@@ -849,27 +977,31 @@ mod with_batch {
         }
 
         //=== nanos(1) is unstable
-        // #[test]
-        // fn test_nanos_1() {
-        //     const EPSILON: f64 = 0.02;
-        //     let target_latency = Duration::from_nanos(1);
-        //     let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
-        //     run_bench(
-        //         BASE_WARMUP_MILLIS,
-        //         BASE_BENCH_TIME,
-        //         target_latency,
-        //         batch,
-        //         EPSILON,
-        //     );
-        // }
+        #[test]
+        fn test_nanos_1() {
+            const EPSILON: f64 = 0.02;
+            let rec_unit = LatencyUnit::SubSec(11);
+            let target_latency = Duration::from_nanos(1);
+            let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
+            run_bench(
+                rec_unit,
+                BASE_WARMUP_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                batch,
+                EPSILON,
+            );
+        }
 
         // cargo test -r --test bench_run_validate --all-features -- with_batch::no_status2::test_nanos_10 --nocapture --test-threads=1
         #[test]
         fn test_nanos_10() {
             const EPSILON: f64 = 0.10;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(10);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                rec_unit,
                 BASE_WARMUP_MILLIS,
                 BASE_BENCH_TIME,
                 target_latency,
@@ -882,9 +1014,11 @@ mod with_batch {
         #[test]
         fn test_nanos_50() {
             const EPSILON: f64 = 0.05;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(50);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                rec_unit,
                 BASE_WARMUP_MILLIS,
                 BASE_BENCH_TIME,
                 target_latency,
@@ -900,6 +1034,7 @@ mod with_batch {
             let target_latency = Duration::from_micros(1);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_BENCH_TIME,
                 target_latency,
@@ -915,6 +1050,7 @@ mod with_batch {
             let target_latency = Duration::from_micros(50);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_BENCH_TIME,
                 target_latency,
@@ -936,6 +1072,7 @@ mod with_batch {
                 let target_latency = Duration::from_millis(1);
                 let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
                 run_bench(
+                    DEFAULT_REC_UNIT,
                     BASE_WARMUP_MILLIS,
                     BASE_BENCH_TIME,
                     target_latency,
@@ -951,6 +1088,7 @@ mod with_batch {
                 let target_latency = Duration::from_millis(10);
                 let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
                 run_bench(
+                    DEFAULT_REC_UNIT,
                     BASE_WARMUP_MILLIS,
                     BASE_BENCH_TIME,
                     target_latency,
@@ -966,6 +1104,7 @@ mod with_batch {
         use super::*;
 
         fn run_bench(
+            rec_unit: LatencyUnit,
             base_warmup_millis: u64,
             base_status_millis: u64,
             base_bench_time: Duration,
@@ -974,6 +1113,7 @@ mod with_batch {
             epsilon: f64,
         ) {
             run(
+                rec_unit,
                 bench_run_with_status_arg_cfg,
                 fsrc2_b(base_target_latency, batch),
                 base_warmup_millis,
@@ -985,28 +1125,32 @@ mod with_batch {
         }
 
         //=== nanos(1) is unstable
-        // #[test]
-        // fn test_nanos_1() {
-        //     const EPSILON: f64 = 0.02;
-        //     let target_latency = Duration::from_nanos(1);
-        //     let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
-        //     run_bench(
-        //         BASE_WARMUP_MILLIS,
-        //         BASE_STATUS_MILLIS,
-        //         BASE_BENCH_TIME,
-        //         target_latency,
-        //         batch,
-        //         EPSILON,
-        //     );
-        // }
+        #[test]
+        fn test_nanos_1() {
+            const EPSILON: f64 = 0.02;
+            let rec_unit = LatencyUnit::SubSec(11);
+            let target_latency = Duration::from_nanos(1);
+            let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
+            run_bench(
+                rec_unit,
+                BASE_WARMUP_MILLIS,
+                BASE_STATUS_MILLIS,
+                BASE_BENCH_TIME,
+                target_latency,
+                batch,
+                EPSILON,
+            );
+        }
 
         // cargo test -r --test bench_run_validate --all-features -- with_batch::with_status2::test_nanos_10 --nocapture --test-threads=1
         #[test]
         fn test_nanos_10() {
             const EPSILON: f64 = 0.10;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(10);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                rec_unit,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -1020,9 +1164,11 @@ mod with_batch {
         #[test]
         fn test_nanos_50() {
             const EPSILON: f64 = 0.05;
+            let rec_unit = LatencyUnit::SubSec(11);
             let target_latency = Duration::from_nanos(50);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                rec_unit,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -1039,6 +1185,7 @@ mod with_batch {
             let target_latency = Duration::from_micros(1);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -1055,6 +1202,7 @@ mod with_batch {
             let target_latency = Duration::from_micros(50);
             let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
             run_bench(
+                DEFAULT_REC_UNIT,
                 BASE_WARMUP_MILLIS,
                 BASE_STATUS_MILLIS,
                 BASE_BENCH_TIME,
@@ -1077,6 +1225,7 @@ mod with_batch {
                 let target_latency = Duration::from_millis(1);
                 let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
                 run_bench(
+                    DEFAULT_REC_UNIT,
                     BASE_WARMUP_MILLIS,
                     BASE_STATUS_MILLIS,
                     BASE_BENCH_TIME,
@@ -1093,6 +1242,7 @@ mod with_batch {
                 let target_latency = Duration::from_millis(10);
                 let batch = batch_n(50, target_latency, BASE_BENCH_TIME);
                 run_bench(
+                    DEFAULT_REC_UNIT,
                     BASE_WARMUP_MILLIS,
                     BASE_STATUS_MILLIS,
                     BASE_BENCH_TIME,

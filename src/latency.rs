@@ -15,7 +15,7 @@ pub fn latency(f: impl FnOnce()) -> Duration {
 
 /// Invokes `f` `n` times and returns its latency.
 #[inline(always)]
-pub fn latency_n(mut f: impl FnMut(), n: u32) -> Duration {
+pub fn latency_n(mut f: impl FnMut(), n: usize) -> Duration {
     let start = Instant::now();
     for _ in 0..n {
         f();
