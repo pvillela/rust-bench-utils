@@ -1,6 +1,5 @@
 use crate::{BenchOut, FpSeconds};
 use hdrhistogram::Histogram;
-use std::time::Duration;
 
 #[doc(hidden)]
 /// Alias of [`Histogram<u64>`].
@@ -27,27 +26,27 @@ pub struct SummaryStats {
     /// Sample standard deviation of the latencies observations.
     pub stdev: FpSeconds,
     /// Minimum observed latency.
-    pub min: Duration,
+    pub min: FpSeconds,
     /// 1st percentile latency.
-    pub p1: Duration,
+    pub p1: FpSeconds,
     /// 5th percentile latency.
-    pub p5: Duration,
+    pub p5: FpSeconds,
     /// 10th percentile latency.
-    pub p10: Duration,
+    pub p10: FpSeconds,
     /// 25th percentile latency.
-    pub p25: Duration,
+    pub p25: FpSeconds,
     /// 50th percentile (median) latency.
-    pub median: Duration,
+    pub median: FpSeconds,
     /// 75th percentile latency.
-    pub p75: Duration,
+    pub p75: FpSeconds,
     /// 90th percentile latency.
-    pub p90: Duration,
+    pub p90: FpSeconds,
     /// 95th percentile latency.
-    pub p95: Duration,
+    pub p95: FpSeconds,
     /// 99th percentile latency.
-    pub p99: Duration,
+    pub p99: FpSeconds,
     /// Maximum observed latency.
-    pub max: Duration,
+    pub max: FpSeconds,
 }
 
 #[doc(hidden)]
@@ -64,17 +63,17 @@ pub fn summary_stats(out: &BenchOut) -> SummaryStats {
         count: hist.len(),
         mean: out.mean(),
         stdev: out.stdev(),
-        min: ru.latency_from_u64(hist.min()),
-        p1: ru.latency_from_u64(hist.value_at_quantile(0.01)),
-        p5: ru.latency_from_u64(hist.value_at_quantile(0.05)),
-        p10: ru.latency_from_u64(hist.value_at_quantile(0.10)),
-        p25: ru.latency_from_u64(hist.value_at_quantile(0.25)),
-        median: ru.latency_from_u64(hist.value_at_quantile(0.50)),
-        p75: ru.latency_from_u64(hist.value_at_quantile(0.75)),
-        p90: ru.latency_from_u64(hist.value_at_quantile(0.90)),
-        p95: ru.latency_from_u64(hist.value_at_quantile(0.95)),
-        p99: ru.latency_from_u64(hist.value_at_quantile(0.99)),
-        max: ru.latency_from_u64(hist.max()),
+        min: ru.fpsecs_from_value(hist.min()),
+        p1: ru.fpsecs_from_value(hist.value_at_quantile(0.01)),
+        p5: ru.fpsecs_from_value(hist.value_at_quantile(0.05)),
+        p10: ru.fpsecs_from_value(hist.value_at_quantile(0.10)),
+        p25: ru.fpsecs_from_value(hist.value_at_quantile(0.25)),
+        median: ru.fpsecs_from_value(hist.value_at_quantile(0.50)),
+        p75: ru.fpsecs_from_value(hist.value_at_quantile(0.75)),
+        p90: ru.fpsecs_from_value(hist.value_at_quantile(0.90)),
+        p95: ru.fpsecs_from_value(hist.value_at_quantile(0.95)),
+        p99: ru.fpsecs_from_value(hist.value_at_quantile(0.99)),
+        max: ru.fpsecs_from_value(hist.max()),
     }
 }
 
@@ -84,14 +83,13 @@ mod test {
     use super::*;
     use crate::BenchCfg;
     use crate::multi::{LatencySrc, test_support::LognormalLatencySrc};
-    use crate::rel_approx_eq_dur;
+    use basic_stats::rel_approx_eq;
     use statrs::distribution::{ContinuousCDF, Normal};
-    use std::time::Duration;
 
     #[test]
     fn test_summary_stats_panics_on_empty() {
         let cfg = BenchCfg::default();
-        let out = crate::BenchOut::from_iter(&cfg, std::iter::empty::<std::time::Duration>());
+        let out = crate::BenchOut::from_iter(&cfg, std::iter::empty::<FpSeconds>());
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| summary_stats(&out)));
         assert!(result.is_err(), "expected panic on empty sample");
     }
@@ -101,11 +99,11 @@ mod test {
         const SAMPLE_SIZE: usize = 50_000;
         const EPSILON: f64 = 0.01;
 
-        let target = Duration::from_millis(10);
+        let target = FpSeconds::from_millis(10);
         let sigma = 1.15_f64.ln() / 2.0;
-        let mu = target.as_secs_f64().ln();
+        let mu = target.as_f64().ln();
 
-        let mut src = LognormalLatencySrc::<1>::new([(target, sigma)]);
+        let mut src = LognormalLatencySrc::<1>::new(1, [(target, sigma)]);
         let cfg = BenchCfg::default();
         let out = BenchOut::from_iter(&cfg, src.aggregate().take(SAMPLE_SIZE));
         let summary = summary_stats(&out);
@@ -124,29 +122,21 @@ mod test {
         let exp_p95 = normal.inverse_cdf(0.95).exp();
         let exp_p99 = normal.inverse_cdf(0.99).exp();
 
-        rel_approx_eq_dur!(
-            Duration::from_secs_f64(exp_mean),
-            summary.mean.as_duration(),
-            EPSILON
-        );
-        rel_approx_eq_dur!(
-            Duration::from_secs_f64(exp_stdev),
-            summary.stdev.as_duration(),
-            EPSILON
-        );
-        rel_approx_eq_dur!(Duration::from_secs_f64(exp_median), summary.median, EPSILON);
-        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p1), summary.p1, EPSILON);
-        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p5), summary.p5, EPSILON);
-        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p10), summary.p10, EPSILON);
-        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p25), summary.p25, EPSILON);
-        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p75), summary.p75, EPSILON);
-        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p90), summary.p90, EPSILON);
-        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p95), summary.p95, EPSILON);
-        rel_approx_eq_dur!(Duration::from_secs_f64(exp_p99), summary.p99, EPSILON);
+        rel_approx_eq!(exp_mean, summary.mean.0, EPSILON);
+        rel_approx_eq!(exp_stdev, summary.stdev.0, EPSILON);
+        rel_approx_eq!(exp_median, summary.median.0, EPSILON);
+        rel_approx_eq!(exp_p1, summary.p1.0, EPSILON);
+        rel_approx_eq!(exp_p5, summary.p5.0, EPSILON);
+        rel_approx_eq!(exp_p10, summary.p10.0, EPSILON);
+        rel_approx_eq!(exp_p25, summary.p25.0, EPSILON);
+        rel_approx_eq!(exp_p75, summary.p75.0, EPSILON);
+        rel_approx_eq!(exp_p90, summary.p90.0, EPSILON);
+        rel_approx_eq!(exp_p95, summary.p95.0, EPSILON);
+        rel_approx_eq!(exp_p99, summary.p99.0, EPSILON);
 
         assert_eq!(out.n(), SAMPLE_SIZE as u64);
         assert_eq!(summary.count, SAMPLE_SIZE as u64);
-        assert!(summary.min > Duration::ZERO);
+        assert!(summary.min > FpSeconds::ZERO);
         assert!(summary.max > summary.p99);
     }
 }

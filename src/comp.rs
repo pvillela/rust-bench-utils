@@ -1,4 +1,4 @@
-use crate::BenchOut;
+use crate::{BenchOut, FpSeconds};
 use basic_stats::{
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments},
     normal::{welch_ci, welch_df, welch_p, welch_t, welch_test},
@@ -49,9 +49,9 @@ impl<'a> Comp<'a> {
     }
 
     /// Difference between the median of `f1`'s latencies and the median of `f2`'s latencies,
-    /// in seconds.
-    pub fn diff_medians_f1_f2(&self) -> f64 {
-        self.0.median().as_secs_f64() - self.1.median().as_secs_f64()
+    /// in [`FpSeconds`].
+    pub fn diff_medians_f1_f2(&self) -> FpSeconds {
+        self.0.median() - self.1.median()
     }
 
     /// Ratio of the median of `f1`'s latencies to the median of `f2`'s latencies.
@@ -63,17 +63,17 @@ impl<'a> Comp<'a> {
     ///
     /// Panics if `self.out_f1().n() == 0` or `self.out_f2().n() == 0`, since
     pub fn ratio_medians_f1_f2(&self) -> f64 {
-        self.0.median().as_secs_f64() / self.1.median().as_secs_f64()
+        self.0.median().as_f64() / self.1.median().as_f64()
     }
 
     /// The difference between the mean of `f1`'s latencies and the mean of `f2`'s latencies,
-    /// in seconds.
+    /// in [`FpSeconds`].
     ///
     /// # Panics
     ///
     /// Panics if `self.out_f1().n() == 0` or `self.out_f2().n() == 0`.
-    pub fn mean_diff_f1_f2(&self) -> f64 {
-        self.0.mean().0 - self.1.mean().0
+    pub fn mean_diff_f1_f2(&self) -> FpSeconds {
+        self.0.mean() - self.1.mean()
     }
 
     /// The difference between the mean of the natural logarithms of `f1`'s latencies and
@@ -348,7 +348,6 @@ mod test {
     };
     use crate::{BenchCfg, LatencyUnit};
     use basic_stats::{approx_eq, core::AcceptedHyp};
-    use std::time::Duration;
 
     const EPSILON: f64 = 0.001;
     const JITTER_EPSILON: f64 = EPSILON;
@@ -445,12 +444,9 @@ mod test {
             assert!(are_eq_bench_out(o1, f1_out));
             assert!(are_eq_bench_out(o2, f2_out));
 
-            assert_eq!(
-                f1_out.median().as_secs_f64() - f2_out.median().as_secs_f64(),
-                comp.diff_medians_f1_f2()
-            );
+            assert_eq!(f1_out.median() - f2_out.median(), comp.diff_medians_f1_f2());
             approx_eq!(ratio_medians, comp.ratio_medians_f1_f2(), EPSILON);
-            assert_eq!(f1_out.mean().0 - f2_out.mean().0, comp.mean_diff_f1_f2());
+            assert_eq!(f1_out.mean() - f2_out.mean(), comp.mean_diff_f1_f2());
             assert_eq!(
                 f1_out.mean_ln() - f2_out.mean_ln(),
                 comp.mean_diff_ln_f1_f2()
@@ -565,8 +561,8 @@ mod test {
     #[test]
     fn test_comp_panics_on_empty_sample() {
         let cfg = BenchCfg::default();
-        let out1 = BenchOut::from_iter(&cfg, std::iter::empty::<Duration>());
-        let mut src2 = ConstLatencySrc::new([Duration::from_millis(3)]);
+        let out1 = BenchOut::from_iter(&cfg, std::iter::empty::<FpSeconds>());
+        let mut src2 = ConstLatencySrc::new(1, [FpSeconds::from_millis(3)]);
         let out2 = BenchOut::from_iter(&cfg, src2.aggregate().take(10));
         let comp = Comp::new(&out1, &out2);
 
@@ -598,9 +594,9 @@ mod test {
     #[test]
     fn test_comp_panics_on_singleton_sample() {
         let cfg = BenchCfg::default();
-        let mut src1 = ConstLatencySrc::new([Duration::from_millis(3)]);
+        let mut src1 = ConstLatencySrc::new(1, [FpSeconds::from_millis(3)]);
         let out1 = BenchOut::from_iter(&cfg, src1.aggregate().take(10));
-        let out2 = BenchOut::from_iter(&cfg, [Duration::from_millis(1)].into_iter());
+        let out2 = BenchOut::from_iter(&cfg, [FpSeconds::from_millis(1)].into_iter());
         let comp = Comp::new(&out1, &out2);
 
         assert!(
@@ -633,11 +629,11 @@ mod test {
         let cfg = BenchCfg::default();
         let out1 = BenchOut::from_iter(
             &cfg,
-            [Duration::from_millis(5), Duration::from_millis(5)].into_iter(),
+            [FpSeconds::from_millis(5), FpSeconds::from_millis(5)].into_iter(),
         );
         let out2 = BenchOut::from_iter(
             &cfg,
-            [Duration::from_millis(5), Duration::from_millis(5)].into_iter(),
+            [FpSeconds::from_millis(5), FpSeconds::from_millis(5)].into_iter(),
         );
         let comp = Comp::new(&out1, &out2);
 
@@ -672,8 +668,6 @@ mod test {
 #[cfg(feature = "_experimental")]
 // cargo test --package bench_utils --lib --all-features -- comp::test::wilcoxon_tests::test_wilcoxon_rank_sum_methods --exact --nocapture --include-ignored
 mod wilcoxon_tests {
-    use std::time::Duration;
-
     use basic_stats::core::AcceptedHyp;
 
     use super::*;
@@ -721,8 +715,8 @@ mod wilcoxon_tests {
     #[test]
     fn test_wilcoxon_empty_sample_panic() {
         let cfg = BenchCfg::default();
-        let out1 = BenchOut::from_iter(&cfg, std::iter::empty::<Duration>());
-        let mut src2 = ConstLatencySrc::new([Duration::from_millis(3)]);
+        let out1 = BenchOut::from_iter(&cfg, std::iter::empty::<FpSeconds>());
+        let mut src2 = ConstLatencySrc::new(1, [FpSeconds::from_millis(3)]);
         let out2 = BenchOut::from_iter(&cfg, src2.aggregate().take(10));
         let comp = Comp::new(&out1, &out2);
 
@@ -740,9 +734,9 @@ mod wilcoxon_tests {
         let mu = 8.0;
         let sigma = *LO_STDEV_LN;
         let samp_size = 500;
-        let durations: Vec<Duration> = lognormal_samp(mu, sigma, samp_size).collect();
-        let out1 = BenchOut::from_iter(&cfg, durations.iter().cloned());
-        let out2 = BenchOut::from_iter(&cfg, durations.iter().cloned());
+        let latencies: Vec<FpSeconds> = lognormal_samp(mu, sigma, samp_size).collect();
+        let out1 = BenchOut::from_iter(&cfg, latencies.iter().cloned());
+        let out2 = BenchOut::from_iter(&cfg, latencies.iter().cloned());
         let comp = Comp::new(&out1, &out2);
 
         let p = comp.wilcoxon_rank_sum_p(AltHyp::Ne);

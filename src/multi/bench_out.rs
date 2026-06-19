@@ -7,7 +7,6 @@ use std::{
     array,
     fmt::Debug,
     ops::{Deref, Index},
-    time::Duration,
 };
 
 /// Contains the data resulting from benchmarking a group of closures.
@@ -71,9 +70,9 @@ impl<const K: usize> BenchOut<K> {
         }
     }
 
-    /// Creates a [`BenchOut<K>`] from a **finite** iterator of `[Duration; K]` arrays.
+    /// Creates a [`BenchOut<K>`] from a **finite** iterator of `[FpSeconds; K]` arrays.
     ///
-    /// Each item in the iterator must be an array of `K` [`Duration`] values — one per closure.
+    /// Each item in the iterator must be an array of `K` [`FpSeconds`] values — one per closure.
     /// The durations are recorded into the corresponding inner [`BenchOut`](crate::BenchOut).
     ///
     /// # Arguments
@@ -83,12 +82,12 @@ impl<const K: usize> BenchOut<K> {
     ///
     /// # May hang
     /// Hangs if the iterator is not finite.
-    pub fn from_iter(cfg: &BenchCfg, src: impl Iterator<Item = [Duration; K]>) -> Self {
+    pub fn from_iter(cfg: &BenchCfg, src: impl Iterator<Item = [FpSeconds; K]>) -> Self {
         let mut out = Self::new(cfg);
 
         for lat_arr in src {
-            for (b, d) in out.arr.iter_mut().zip(lat_arr.iter()) {
-                b.capture_data(*d);
+            for (b, fps) in out.arr.iter_mut().zip(lat_arr.iter()) {
+                b.capture_data((*fps, 1));
             }
         }
         out
@@ -124,9 +123,9 @@ impl<const K: usize> BenchOut<K> {
     #[doc(hidden)]
     // TODO: remove
     /// Updates `self` with an elapsed time observation for the functions.
-    pub fn capture_data(&mut self, latencies: [Duration; K]) {
+    pub fn capture_data(&mut self, batch_latencies: ([FpSeconds; K], usize)) {
         for (i, b) in &mut self.arr.iter_mut().enumerate() {
-            b.capture_data(latencies[i]);
+            b.capture_data((batch_latencies.0[i], batch_latencies.1));
         }
     }
 
@@ -165,7 +164,7 @@ impl<const K: usize> BenchOut<K> {
     }
 
     /// Sample medians of latencies.
-    pub fn medians(&self) -> [Duration; K] {
+    pub fn medians(&self) -> [FpSeconds; K] {
         array::from_fn(|k| self.arr[k].median())
     }
 
@@ -263,7 +262,7 @@ impl<const K: usize> BenchOut<K> {
     /// Panics if any of the following conditions is true:
     /// - `Sample size <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_median_cis(&self, alpha: f64) -> [(Duration, Duration); K] {
+    pub fn student_median_cis(&self, alpha: f64) -> [(FpSeconds, FpSeconds); K] {
         array::from_fn(|k| self.arr[k].student_median_ci(alpha))
     }
 
@@ -282,7 +281,7 @@ impl<const K: usize> BenchOut<K> {
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_value_position_wrt_median_cis(
         &self,
-        value: Duration,
+        value: FpSeconds,
         alpha: f64,
     ) -> [PositionWrtCi; K] {
         array::from_fn(|k| self.arr[k].student_value_position_wrt_median_ci(value, alpha))
@@ -316,7 +315,7 @@ impl<const K: usize> BenchOut<K> {
 #[cfg(feature = "_test")]
 mod test {
     use super::*;
-    use crate::rel_approx_eq_dur;
+    use crate::rel_approx_eq_fpsecs;
     use crate::{
         BenchCfg,
         test_support::{LO_STDEV_LN, lognormal_samp},
@@ -338,7 +337,7 @@ mod test {
         rec_mu: f64,
         sigma: f64,
         samp_size: usize,
-    ) -> impl Iterator<Item = [Duration; 2]> {
+    ) -> impl Iterator<Item = [FpSeconds; 2]> {
         lognormal_samp(rec_mu, sigma, samp_size).map(|x| [x, x])
     }
 
@@ -381,98 +380,74 @@ mod test {
 
         println!(
             "exp_mean={:?}, out.means={:?}",
-            Duration::from_secs_f64(exp_mean),
+            FpSeconds(exp_mean),
             out.means()
         );
         println!("exp_stdev={:?}, out.stdevs={:?}", exp_stdev, out.stdevs());
         println!(
             "exp_p1={:?}, summaries.p1={:?}",
-            Duration::from_secs_f64(exp_p1),
+            FpSeconds(exp_p1),
             summaries.iter().map(|s| s.p1).collect::<Vec<_>>()
         );
         println!(
             "exp_p5={:?}, summaries.p5={:?}",
-            Duration::from_secs_f64(exp_p5),
+            FpSeconds(exp_p5),
             summaries.iter().map(|s| s.p5).collect::<Vec<_>>()
         );
         println!(
             "exp_p10={:?}, summaries.p10={:?}",
-            Duration::from_secs_f64(exp_p10),
+            FpSeconds(exp_p10),
             summaries.iter().map(|s| s.p10).collect::<Vec<_>>()
         );
         println!(
             "exp_p25={:?}, summaries.p25={:?}",
-            Duration::from_secs_f64(exp_p25),
+            FpSeconds(exp_p25),
             summaries.iter().map(|s| s.p25).collect::<Vec<_>>()
         );
         println!(
             "exp_median={:?}, summaries.median={:?}",
-            Duration::from_secs_f64(exp_median),
+            FpSeconds(exp_median),
             summaries.iter().map(|s| s.median).collect::<Vec<_>>()
         );
         println!(
             "exp_p75={:?}, summaries.p75={:?}",
-            Duration::from_secs_f64(exp_p75),
+            FpSeconds(exp_p75),
             summaries.iter().map(|s| s.p75).collect::<Vec<_>>()
         );
         println!(
             "exp_p90={:?}, summaries.p90={:?}",
-            Duration::from_secs_f64(exp_p90),
+            FpSeconds(exp_p90),
             summaries.iter().map(|s| s.p90).collect::<Vec<_>>()
         );
         println!(
             "exp_p95={:?}, summaries.p95={:?}",
-            Duration::from_secs_f64(exp_p95),
+            FpSeconds(exp_p95),
             summaries.iter().map(|s| s.p95).collect::<Vec<_>>()
         );
         println!(
             "exp_p99={:?}, summaries.p99={:?}",
-            Duration::from_secs_f64(exp_p99),
+            FpSeconds(exp_p99),
             summaries.iter().map(|s| s.p99).collect::<Vec<_>>()
         );
 
         for k in 0..out.arity() {
-            rel_approx_eq_dur!(
-                Duration::from_secs_f64(exp_mean),
-                out[k].mean().as_duration(),
-                EPSILON
-            );
-            rel_approx_eq_dur!(
-                Duration::from_secs_f64(exp_stdev),
-                out[k].stdev().as_duration(),
-                EPSILON
-            );
-            rel_approx_eq_dur!(
-                Duration::from_secs_f64(exp_median),
-                out[k].median(),
-                EPSILON
-            );
+            rel_approx_eq_fpsecs!(FpSeconds(exp_mean), out[k].mean(), EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_stdev), out[k].stdev(), EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_median), out[k].median(), EPSILON);
             approx_eq!(exp_mean_ln, out[k].mean_ln(), EPSILON);
             approx_eq!(exp_stdev_ln, out[k].stdev_ln(), EPSILON);
 
-            rel_approx_eq_dur!(
-                Duration::from_secs_f64(exp_mean),
-                summaries[k].mean.as_duration(),
-                EPSILON
-            );
-            rel_approx_eq_dur!(
-                Duration::from_secs_f64(exp_stdev),
-                summaries[k].stdev.as_duration(),
-                EPSILON
-            );
-            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p1), summaries[k].p1, EPSILON);
-            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p5), summaries[k].p5, EPSILON);
-            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p10), summaries[k].p10, EPSILON);
-            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p25), summaries[k].p25, EPSILON);
-            rel_approx_eq_dur!(
-                Duration::from_secs_f64(exp_median),
-                summaries[k].median,
-                EPSILON
-            );
-            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p75), summaries[k].p75, EPSILON);
-            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p90), summaries[k].p90, EPSILON);
-            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p95), summaries[k].p95, EPSILON);
-            rel_approx_eq_dur!(Duration::from_secs_f64(exp_p99), summaries[k].p99, EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_mean), summaries[k].mean, EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_stdev), summaries[k].stdev, EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_p1), summaries[k].p1, EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_p5), summaries[k].p5, EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_p10), summaries[k].p10, EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_p25), summaries[k].p25, EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_median), summaries[k].median, EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_p75), summaries[k].p75, EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_p90), summaries[k].p90, EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_p95), summaries[k].p95, EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_p99), summaries[k].p99, EPSILON);
         }
     }
 
@@ -497,7 +472,7 @@ mod test {
         assert_eq!(out.n() as usize, samp_size);
 
         // The true median should lie inside the CI
-        let true_median = Duration::from_secs_f64(mu.exp());
+        let true_median = FpSeconds(mu.exp());
         let positions = out.student_value_position_wrt_median_cis(true_median, ALPHA);
         assert_eq!(positions, array::from_fn(|_| PositionWrtCi::In));
 
@@ -518,13 +493,13 @@ mod test {
                 approx_eq!(exp_t, out[k].student_ln_t(mu0), EPSILON);
                 approx_eq!(exp_df, out[k].student_ln_df(), EPSILON);
                 rel_approx_eq!(exp_p, out[k].student_ln_p(mu0, alt_hyp), EPSILON);
-                rel_approx_eq_dur!(
-                    Duration::from_secs_f64(exp_ci_ns_low),
+                rel_approx_eq_fpsecs!(
+                    FpSeconds(exp_ci_ns_low),
                     out[k].student_median_ci(ALPHA).0,
                     EPSILON
                 );
-                rel_approx_eq_dur!(
-                    Duration::from_secs_f64(exp_ci_ns_high),
+                rel_approx_eq_fpsecs!(
+                    FpSeconds(exp_ci_ns_high),
                     out[k].student_median_ci(ALPHA).1,
                     EPSILON
                 );
@@ -551,13 +526,13 @@ mod test {
                 rel_approx_eq!(exp_t, out[k].student_ln_t(mu0), EPSILON);
                 approx_eq!(exp_df, out[k].student_ln_df(), EPSILON);
                 approx_eq!(exp_p, out[k].student_ln_p(mu0, alt_hyp), EPSILON);
-                rel_approx_eq_dur!(
-                    Duration::from_secs_f64(exp_ci_ns_low),
+                rel_approx_eq_fpsecs!(
+                    FpSeconds(exp_ci_ns_low),
                     out[k].student_median_ci(ALPHA).0,
                     EPSILON
                 );
-                rel_approx_eq_dur!(
-                    Duration::from_secs_f64(exp_ci_ns_high),
+                rel_approx_eq_fpsecs!(
+                    FpSeconds(exp_ci_ns_high),
                     out[k].student_median_ci(ALPHA).1,
                     EPSILON
                 );
@@ -573,10 +548,10 @@ mod test {
         let cfg = &BenchCfg::default().with_recording_unit(LatencyUnit::Nano);
         let out1 = BenchOut::<1>::from_iter(
             cfg,
-            [[Duration::from_millis(5)], [Duration::from_millis(7)]].into_iter(),
+            [[FpSeconds::from_millis(5)], [FpSeconds::from_millis(7)]].into_iter(),
         );
 
-        assert_eq!(out1.mean().as_duration(), Duration::from_millis(6));
+        assert_eq!(out1.mean(), FpSeconds::from_millis(6));
     }
 
     #[test]
@@ -601,7 +576,7 @@ mod test {
         let cfg = BenchCfg::default();
         let out = BenchOut::<1>::from_iter(
             &cfg,
-            [[Duration::from_millis(5)], [Duration::from_millis(7)]].into_iter(),
+            [[FpSeconds::from_millis(5)], [FpSeconds::from_millis(7)]].into_iter(),
         );
 
         let flat: crate::BenchOut = out.flatten();
@@ -614,8 +589,8 @@ mod test {
         let mut out = BenchOut::<2>::from_iter(
             &cfg,
             [
-                [Duration::from_millis(1), Duration::from_millis(2)],
-                [Duration::from_millis(3), Duration::from_millis(4)],
+                [FpSeconds::from_millis(1), FpSeconds::from_millis(2)],
+                [FpSeconds::from_millis(3), FpSeconds::from_millis(4)],
             ]
             .into_iter(),
         );
@@ -627,7 +602,7 @@ mod test {
     #[test]
     fn test_bench_out_2_panics_on_empty() {
         let cfg = BenchCfg::default();
-        let out = BenchOut::<2>::from_iter(&cfg, std::iter::empty::<[Duration; 2]>());
+        let out = BenchOut::<2>::from_iter(&cfg, std::iter::empty::<[FpSeconds; 2]>());
 
         assert_eq!(out.n(), 0);
         assert_eq!(out[0].n(), 0);

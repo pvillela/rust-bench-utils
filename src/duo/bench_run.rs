@@ -1,11 +1,10 @@
-use std::thread;
-
 use crate::{
     BenchCfg, RunLength,
     duo::DuoOut,
     multi::{self, BenchOut, LatencySrc, LatencySrc1, LatencySrc1b, LatencySrc2, LatencySrc2b},
     status::Status,
 };
+use std::thread;
 
 /// Executes both closures `f1` and `f2` in each iteration, collects the resulting latency data in a [`BenchOut<2>`]
 /// object, and *optionally* reports progress status during benchmark execution. Closure executions are interleaved.
@@ -120,7 +119,7 @@ pub fn bench_run_x_b<'a, S: Status<'a>>(
     f2: impl FnMut(),
     run_length: RunLength,
     s: S,
-    batch: u32,
+    batch: usize,
 ) -> DuoOut {
     multi::bench_run_x(cfg, LatencySrc2b::new(f1, f2, batch), run_length, s).into()
 }
@@ -136,7 +135,7 @@ pub fn bench_run_b(
     f1: impl FnMut(),
     f2: impl FnMut(),
     run_length: RunLength,
-    batch: u32,
+    batch: usize,
 ) -> DuoOut {
     multi::bench_run(LatencySrc2b::new(f1, f2, batch), run_length).into()
 }
@@ -153,7 +152,7 @@ pub fn bench_run_arg_cfg_b(
     f1: impl FnMut(),
     f2: impl FnMut(),
     run_length: RunLength,
-    batch: u32,
+    batch: usize,
 ) -> DuoOut {
     multi::bench_run_arg_cfg(cfg, LatencySrc2b::new(f1, f2, batch), run_length).into()
 }
@@ -169,7 +168,7 @@ pub fn bench_run_with_status_b(
     f1: impl FnMut(),
     f2: impl FnMut(),
     run_length: RunLength,
-    batch: u32,
+    batch: usize,
 ) -> DuoOut {
     multi::bench_run_with_status(LatencySrc2b::new(f1, f2, batch), run_length).into()
 }
@@ -186,7 +185,7 @@ pub fn bench_run_with_status_arg_cfg_b(
     f1: impl FnMut(),
     f2: impl FnMut(),
     run_length: RunLength,
-    batch: u32,
+    batch: usize,
 ) -> DuoOut {
     multi::bench_run_with_status_arg_cfg(cfg, LatencySrc2b::new(f1, f2, batch), run_length).into()
 }
@@ -238,7 +237,7 @@ pub fn bench_run_parallel_b(
     f1: impl FnMut() + Send,
     f2: impl FnMut() + Send,
     run_length: RunLength,
-    batch: u32,
+    batch: usize,
 ) -> DuoOut {
     let cfg = BenchCfg::default();
     bench_run_parallel_arg_cfg_b(&cfg, f1, f2, run_length, batch)
@@ -256,7 +255,7 @@ pub fn bench_run_parallel_arg_cfg_b(
     f1: impl FnMut() + Send,
     f2: impl FnMut() + Send,
     run_length: RunLength,
-    batch: u32,
+    batch: usize,
 ) -> DuoOut {
     let src1 = LatencySrc1b::new(f1, batch);
     let src2 = LatencySrc1b::new(f2, batch);
@@ -300,7 +299,7 @@ pub fn bench_run_x_o<'a, S: Status<'a>>(
     f2: impl FnMut(),
     run_length: RunLength,
     s: S,
-    batch: Option<u32>,
+    batch: Option<usize>,
 ) -> DuoOut {
     match batch {
         None => bench_run_x(&cfg, f1, f2, run_length, s),
@@ -314,7 +313,7 @@ pub fn bench_run_arg_cfg_o(
     f1: impl FnMut(),
     f2: impl FnMut(),
     run_length: RunLength,
-    batch: Option<u32>,
+    batch: Option<usize>,
 ) -> DuoOut {
     match batch {
         None => bench_run_arg_cfg(&cfg, f1, f2, run_length),
@@ -328,7 +327,7 @@ pub fn bench_run_with_status_arg_cfg_o(
     f1: impl FnMut(),
     f2: impl FnMut(),
     run_length: RunLength,
-    batch: Option<u32>,
+    batch: Option<usize>,
 ) -> DuoOut {
     match batch {
         None => bench_run_with_status_arg_cfg(&cfg, f1, f2, run_length),

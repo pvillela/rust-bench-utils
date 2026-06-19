@@ -1,6 +1,6 @@
 use bench_utils::{
     BenchCfg, bench_support::validate_latency_overhead, rel_approx_eq_dur,
-    test_support::AbsRelDiffDur,
+    test_support::AbsRelDiffFpSecs,
 };
 use std::time::{Duration, Instant};
 

@@ -1,7 +1,7 @@
 //! Implements functions to collect latency statistics for a closure.
 
 use crate::{
-    BenchCfg, RunLength,
+    BenchCfg, FpSeconds, RunLength,
     multi::{BenchOut, LatencySrc},
     status::{DefaultStatus, NoStatus, Status},
 };
@@ -28,13 +28,14 @@ impl<const K: usize> BenchState<K> {
         let (exec_count, run_time) = run_length.exec_count_and_duration();
         assert!(exec_count > 0, "exec_count must be > 0");
 
-        let mut acc_latency = Duration::ZERO; // enables testing with synthetic latency sources
+        let mut acc_latency = FpSeconds::ZERO; // enables testing with synthetic latency sources
         let start = Instant::now();
 
         for i in 1..=exec_count {
-            let src_finished = if let Some(latencies) = src.next() {
-                acc_latency += latencies.iter().sum();
-                self.capture_data(latencies);
+            let src_finished = if let Some(batch_latencies) = src.next() {
+                acc_latency +=
+                    batch_latencies.0.iter().cloned().sum::<FpSeconds>() * batch_latencies.1;
+                self.capture_data(batch_latencies);
                 false
             } else {
                 true
@@ -45,12 +46,12 @@ impl<const K: usize> BenchState<K> {
             if i == exec_count
                 || elapsed >= run_time
                 || i.is_multiple_of(status_count)
-                || acc_latency >= run_time
+                || acc_latency.as_duration() >= run_time
                 || src_finished
             {
                 let finished = i == exec_count
                     || elapsed >= run_time
-                    || acc_latency >= run_time
+                    || acc_latency.as_duration() >= run_time
                     || src_finished;
 
                 if (i % status_count == 0 || finished)
@@ -324,12 +325,18 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
     // Use `ConstLatencySrc` to allow accurate checking of status output.
 
     fn src1(base_target_latency: Duration) -> impl LatencySrc<1> {
-        ConstLatencySrc::new([base_target_latency])
+        ConstLatencySrc::new(1, [base_target_latency.into()])
     }
 
     fn src2(base_target_latency: Duration) -> impl LatencySrc<2> {
         let delta = base_target_latency / 10;
-        ConstLatencySrc::new([base_target_latency + delta, base_target_latency - delta])
+        ConstLatencySrc::new(
+            1,
+            [
+                (base_target_latency + delta).into(),
+                (base_target_latency - delta).into(),
+            ],
+        )
     }
 
     mod status1 {
@@ -704,7 +711,8 @@ mod simple_tests {
 
     #[test]
     fn test_bench_run_time_with_synthetic_source() {
-        let src = LognormalLatencySrc::<1>::new_with_default_sigmas([Duration::from_millis(10)]);
+        let src =
+            LognormalLatencySrc::<1>::new_with_default_sigmas(1, [FpSeconds::from_millis(10)]);
         let out = bench_run_arg_cfg(
             &quick_cfg(),
             src,
@@ -716,7 +724,7 @@ mod simple_tests {
 
     #[test]
     fn test_bench_run_count_with_timeout_synthetic() {
-        let src = LognormalLatencySrc::<1>::new_with_default_sigmas([Duration::from_millis(5)]);
+        let src = LognormalLatencySrc::<1>::new_with_default_sigmas(1, [FpSeconds::from_millis(5)]);
         let out = bench_run_arg_cfg(
             &quick_cfg(),
             src,

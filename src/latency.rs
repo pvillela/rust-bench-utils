@@ -1,7 +1,8 @@
 use log::trace;
 use std::{
     fmt::Debug,
-    ops::Deref,
+    iter::Sum,
+    ops::{Add, AddAssign, Deref, Div, Mul, Sub},
     time::{Duration, Instant},
 };
 
@@ -25,10 +26,12 @@ pub fn latency_n(mut f: impl FnMut(), n: usize) -> Duration {
 
 /// A floating point duration of seconds. Useful for representing duration values or fractions with
 /// finer granularity than 1ns.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, PartialOrd)]
 pub struct FpSeconds(pub f64);
 
 impl FpSeconds {
+    pub const ZERO: FpSeconds = FpSeconds(0.0);
+
     #[inline(always)]
     pub fn as_duration(&self) -> Duration {
         Duration::from_secs_f64(self.0)
@@ -37,6 +40,30 @@ impl FpSeconds {
     #[inline(always)]
     pub fn as_f64(&self) -> f64 {
         self.0
+    }
+
+    pub fn from_duration(dur: Duration) -> Self {
+        dur.into()
+    }
+
+    pub fn from_secs(value: u64) -> Self {
+        (value as f64).into()
+    }
+
+    pub fn from_millis(value: u64) -> Self {
+        (value as f64 * 1e-3).into()
+    }
+
+    pub fn from_micros(value: u64) -> Self {
+        (value as f64 * 1e-6).into()
+    }
+
+    pub fn from_nanos(value: u64) -> Self {
+        (value as f64 * 1e-9).into()
+    }
+
+    pub fn from_picos(value: u64) -> Self {
+        (value as f64 * 1e-12).into()
     }
 }
 
@@ -77,6 +104,58 @@ impl Deref for FpSeconds {
     }
 }
 
+impl Add for FpSeconds {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        (self.0 + rhs.0).into()
+    }
+}
+
+impl AddAssign for FpSeconds {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0
+    }
+}
+
+impl Sub for FpSeconds {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        (self.0 - rhs.0).into()
+    }
+}
+
+impl Mul<f64> for FpSeconds {
+    type Output = Self;
+
+    fn mul(self, rhs: f64) -> Self::Output {
+        (self.0 * rhs).into()
+    }
+}
+
+impl Mul<usize> for FpSeconds {
+    type Output = Self;
+
+    fn mul(self, rhs: usize) -> Self::Output {
+        (self.0 * rhs as f64).into()
+    }
+}
+
+impl Div<usize> for FpSeconds {
+    type Output = Self;
+
+    fn div(self, rhs: usize) -> Self::Output {
+        (self.0 / rhs as f64).into()
+    }
+}
+
+impl Sum for FpSeconds {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.map(|v| v.0).sum::<f64>().into()
+    }
+}
+
 impl Debug for FpSeconds {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let v = self.0;
@@ -110,23 +189,23 @@ pub enum LatencyUnit {
 }
 
 impl LatencyUnit {
-    /// Converts a `latency` [`Duration`] to a `u64` value according to the unit `self`.
+    /// Converts a [`Duration`] to a `u64` value according to the unit `self`.
     #[inline(always)]
-    pub fn latency_as_u64(&self, latency: Duration) -> u64 {
+    pub fn value_from_duration(&self, dur: Duration) -> u64 {
         match self {
-            Self::Pico => latency.as_nanos() as u64 * 1000,
-            Self::Nano => latency.as_nanos() as u64,
-            Self::Micro => latency.as_micros() as u64,
-            Self::Milli => latency.as_millis() as u64,
-            Self::Sec => latency.as_secs(),
+            Self::Pico => dur.as_nanos() as u64 * 1000,
+            Self::Nano => dur.as_nanos() as u64,
+            Self::Micro => dur.as_micros() as u64,
+            Self::Milli => dur.as_millis() as u64,
+            Self::Sec => dur.as_secs(),
             Self::SubSec(n) => {
                 let n = *n as u32;
                 match n {
-                    0 => Duration::as_secs(&latency),
-                    _ if n <= 3 => (Duration::as_millis(&latency) / 10_u128.pow(3 - n)) as u64,
-                    _ if n <= 6 => (Duration::as_micros(&latency) / 10_u128.pow(6 - 3)) as u64,
-                    _ if n <= 9 => (Duration::as_nanos(&latency) / 10_u128.pow(9 - n)) as u64,
-                    _ if 9 < n => (Duration::as_nanos(&latency) * 10_u128.pow(n - 9)) as u64,
+                    0 => Duration::as_secs(&dur),
+                    _ if n <= 3 => (Duration::as_millis(&dur) / 10_u128.pow(3 - n)) as u64,
+                    _ if n <= 6 => (Duration::as_micros(&dur) / 10_u128.pow(6 - 3)) as u64,
+                    _ if n <= 9 => (Duration::as_nanos(&dur) / 10_u128.pow(9 - n)) as u64,
+                    _ if 9 < n => (Duration::as_nanos(&dur) * 10_u128.pow(n - 9)) as u64,
                     _ => unreachable!(),
                 }
             }
@@ -135,7 +214,7 @@ impl LatencyUnit {
 
     /// Converts a `u64` value to a [`Duration`] according to the unit `self`.
     #[inline(always)]
-    pub fn latency_from_u64(&self, elapsed: u64) -> Duration {
+    pub fn duration_from_value(&self, elapsed: u64) -> Duration {
         match self {
             Self::Pico => Duration::from_nanos(elapsed / 1000),
             Self::Nano => Duration::from_nanos(elapsed),
@@ -154,6 +233,18 @@ impl LatencyUnit {
                 }
             }
         }
+    }
+
+    /// Converts a [`Duration`] to a `u64` value according to the unit `self`.
+    #[inline(always)]
+    pub fn value_from_fpsecs(&self, fpsecs: FpSeconds) -> u64 {
+        (fpsecs.0 * self.factor_from_secs()).round() as u64
+    }
+
+    /// Converts a `u64` value to a [`Duration`] according to the unit `self`.
+    #[inline(always)]
+    pub fn fpsecs_from_value(&self, value: u64) -> FpSeconds {
+        (value as f64 * self.factor_to_secs()).into()
     }
 
     /// Multiplicative factor to convert seconds to the latency unit.
@@ -248,9 +339,10 @@ impl RunLength {
 /// Returns `f64::INFINITY` if the aggregate latency for any iteration is zero.
 /// In particular, this can happen if `src` is finite and its length is less than or equal to one half
 /// of the estimation budget count.
-pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: RunLength) -> f64 {
+pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: RunLength) -> f64 {
     let (budget_count, budget_dur) = budget.exec_count_and_duration();
-    let mut acc_latency = Duration::ZERO;
+    let budget_fps: FpSeconds = budget_dur.into();
+    let mut acc_latency = FpSeconds::ZERO;
     let mut acc_execs: usize = 0;
 
     for i in 1.. {
@@ -261,12 +353,12 @@ pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = Duration>, budget: Run
         acc_execs += iter_execs;
         trace!("src_execs_per_sec >>> i={i}");
         // Castings to f64 to avoid integer overflow or truncation to zero.
-        if iter_latency >= budget_dur / 3
-            || acc_latency.as_secs_f64() >= budget_dur.as_secs_f64() * (2.0 / 3.0)
+        if iter_latency >= budget_fps / 3
+            || acc_latency >= budget_fps * (2.0 / 3.0)
             || acc_execs as f64 >= budget_count as f64 * (2.0 / 3.0)
         {
-            let iter_execs_per_sec = iter_execs as f64 / iter_latency.as_secs_f64();
-            let acc_execs_per_sec = acc_execs as f64 / acc_latency.as_secs_f64();
+            let iter_execs_per_sec = iter_execs as f64 / iter_latency.as_f64();
+            let acc_execs_per_sec = acc_execs as f64 / acc_latency.as_f64();
             let execs_per_sec = iter_execs_per_sec.max(acc_execs_per_sec);
             trace!("execs_per_sec >>> execs_per_sec={execs_per_sec}",);
             return execs_per_sec;
@@ -337,38 +429,38 @@ mod test_latency_unit {
     #[test]
     fn latency_unit_as_u64() {
         let dur = Duration::new(1, 500_000_000); // 1.5 seconds
-        assert_eq!(1500, LatencyUnit::Milli.latency_as_u64(dur));
-        assert_eq!(1_500_000, LatencyUnit::Micro.latency_as_u64(dur));
-        assert_eq!(1_500_000_000, LatencyUnit::Nano.latency_as_u64(dur));
+        assert_eq!(1500, LatencyUnit::Milli.value_from_duration(dur));
+        assert_eq!(1_500_000, LatencyUnit::Micro.value_from_duration(dur));
+        assert_eq!(1_500_000_000, LatencyUnit::Nano.value_from_duration(dur));
 
         let zero = Duration::ZERO;
-        assert_eq!(0, LatencyUnit::Milli.latency_as_u64(zero));
-        assert_eq!(0, LatencyUnit::Micro.latency_as_u64(zero));
-        assert_eq!(0, LatencyUnit::Nano.latency_as_u64(zero));
+        assert_eq!(0, LatencyUnit::Milli.value_from_duration(zero));
+        assert_eq!(0, LatencyUnit::Micro.value_from_duration(zero));
+        assert_eq!(0, LatencyUnit::Nano.value_from_duration(zero));
     }
 
     #[test]
     fn latency_unit_from_u64_roundtrip() {
         // Milli round-trip
-        let dur = LatencyUnit::Milli.latency_from_u64(42);
-        assert_eq!(42, LatencyUnit::Milli.latency_as_u64(dur));
+        let dur = LatencyUnit::Milli.duration_from_value(42);
+        assert_eq!(42, LatencyUnit::Milli.value_from_duration(dur));
 
         // Micro round-trip
-        let dur = LatencyUnit::Micro.latency_from_u64(42);
-        assert_eq!(42, LatencyUnit::Micro.latency_as_u64(dur));
+        let dur = LatencyUnit::Micro.duration_from_value(42);
+        assert_eq!(42, LatencyUnit::Micro.value_from_duration(dur));
 
         // Nano round-trip
-        let dur = LatencyUnit::Nano.latency_from_u64(42);
-        assert_eq!(42, LatencyUnit::Nano.latency_as_u64(dur));
+        let dur = LatencyUnit::Nano.duration_from_value(42);
+        assert_eq!(42, LatencyUnit::Nano.value_from_duration(dur));
 
         // Zero
-        let dur = LatencyUnit::Micro.latency_from_u64(0);
-        assert_eq!(0, LatencyUnit::Micro.latency_as_u64(dur));
+        let dur = LatencyUnit::Micro.duration_from_value(0);
+        assert_eq!(0, LatencyUnit::Micro.value_from_duration(dur));
 
         // Large value (fits exactly in Duration)
         let val: u64 = 1_000_000_000_000_000; // 10^15 nanos = ~11.6 days
-        let dur = LatencyUnit::Nano.latency_from_u64(val);
-        assert_eq!(val, LatencyUnit::Nano.latency_as_u64(dur));
+        let dur = LatencyUnit::Nano.duration_from_value(val);
+        assert_eq!(val, LatencyUnit::Nano.value_from_duration(dur));
     }
 }
 
@@ -388,9 +480,9 @@ mod test_execs_per_second {
     fn src_lognormal() {
         const EPSILON: f64 = 0.01;
 
-        let target_latency = Duration::from_millis(10);
+        let target_latency = FpSeconds::from_millis(10);
         let exp_eps = 100.0;
-        let mut src = LognormalLatencySrc::new_with_default_sigmas([target_latency]);
+        let mut src = LognormalLatencySrc::new_with_default_sigmas(1, [target_latency]);
         let eps = execs_per_sec(src.aggregate(), RunLength::Count(1000));
 
         rel_approx_eq!(exp_eps, eps, EPSILON);
@@ -407,22 +499,22 @@ mod test_execs_per_second {
     fn src_small_finite() {
         const COUNT: usize = 1000;
         let iter_len = (COUNT as f64).sqrt() as usize;
-        let target_latency = Duration::from_secs(10);
-        let mut src = LognormalLatencySrc::new_with_default_sigmas([target_latency]);
+        let target_latency = FpSeconds::from_secs(10);
+        let mut src = LognormalLatencySrc::new_with_default_sigmas(1, [target_latency]);
         let eps = execs_per_sec(src.aggregate().take(iter_len), RunLength::Count(1000));
         assert!(eps.is_infinite(), "eps={eps}");
     }
 
     #[test]
     fn src_infinite_zero() {
-        let mut src = ConstLatencySrc::new([Duration::ZERO]);
+        let mut src = ConstLatencySrc::new(1, [FpSeconds::ZERO]);
         let eps = execs_per_sec(src.aggregate(), RunLength::Count(1000));
         assert!(eps.is_infinite(), "eps={eps}");
     }
 
     #[test]
     fn no_op_yields_positive_finite_estimate() {
-        let src = iter::from_fn(|| Some(latency(|| ())));
+        let src = iter::from_fn(|| Some(latency(|| ()).into()));
         let e = execs_per_sec(src, RunLength::Count(1000));
         assert!(e > 0.0, "src no-op should yield positive: {}", e);
         assert!(e.is_finite(), "src no-op estimate should be finite: {}", e);

@@ -1,7 +1,5 @@
 //! Module defining the key data structure produced by [`crate::bench_run`].
 
-use std::{fmt::Debug, time::Duration};
-
 use crate::{
     BenchCfg, FpSeconds, LatencyUnit, SummaryStats, Timing, multi, new_timing, summary_stats,
 };
@@ -9,36 +7,7 @@ use basic_stats::{
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean, sample_stdev},
     normal::{student_1samp_ci, student_1samp_p, student_1samp_t, student_1samp_test},
 };
-
-struct FlatIterator<I> {
-    it: I,
-    value_opt: Option<Duration>,
-    count: u64,
-}
-
-impl<I: Iterator<Item = (Duration, u64)>> Iterator for FlatIterator<I> {
-    type Item = Duration;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.count > 0 {
-            self.count -= 1;
-            self.value_opt
-        } else {
-            match self.it.next() {
-                Some((value, count)) => {
-                    assert!(
-                        count > 0,
-                        "counts from iterator with counts must be positive"
-                    );
-                    self.count = count - 1;
-                    self.value_opt = Some(value);
-                    self.value_opt
-                }
-                None => None,
-            }
-        }
-    }
-}
+use std::{fmt::Debug, iter};
 
 /// Contains the latency observations resulting from benchmarking a closure.
 ///
@@ -83,7 +52,7 @@ impl BenchOut {
     }
 
     #[doc(hidden)]
-    /// Creates a [`BenchOut`] from a **finite** iterator of [`Duration`] values.
+    /// Creates a [`BenchOut`] from a **finite** iterator of [`FpSeconds`] values.
     ///
     /// Each item in the iterator is recorded as a single latency observation.
     /// The HDR histogram, running sums, and log-latency sums are updated accordingly.
@@ -95,10 +64,10 @@ impl BenchOut {
     ///
     /// ## May hang
     /// Hangs if th iterator is not finite.
-    pub fn from_iter(cfg: &BenchCfg, src: impl Iterator<Item = Duration>) -> Self {
+    pub fn from_iter(cfg: &BenchCfg, src: impl Iterator<Item = FpSeconds>) -> Self {
         let mut out = Self::new(cfg);
         for item in src {
-            out.capture_data(item);
+            out.capture_data((item, 1));
         }
         out
     }
@@ -116,17 +85,19 @@ impl BenchOut {
 
     #[inline(always)]
     /// Updates `self` with an elapsed time observation for the target function.
-    pub(crate) fn capture_data(&mut self, latency: Duration) {
-        let elapsed_u64 = self.recording_unit.latency_as_u64(latency);
+    pub(crate) fn capture_data(&mut self, batch_latency: (FpSeconds, usize)) {
+        let elapsed_u64 = self
+            .recording_unit
+            .value_from_fpsecs(batch_latency.0 * batch_latency.1);
         self.hist
-            .record(elapsed_u64)
+            .record_n(elapsed_u64, batch_latency.1 as u64)
             .expect("can't happen: histogram is auto-resizable");
 
-        let elapsed_f64 = latency.as_secs_f64();
+        let elapsed_f64 = batch_latency.0.as_f64();
         self.sum += elapsed_f64;
         self.sum2 += elapsed_f64.powi(2);
 
-        if latency > Duration::ZERO {
+        if batch_latency.0 > FpSeconds::ZERO {
             let ln = elapsed_f64.ln();
             self.n_nz += 1;
             self.sum_ln += ln;
@@ -138,23 +109,21 @@ impl BenchOut {
     /// measurement and each count is the number of occurences of the latency measurment.
     ///
     /// The iterator yields values in strictly increasing order and all counts are positive.
-    pub fn iter_with_counts(&self) -> impl Iterator<Item = (Duration, u64)> {
+    pub fn iter_with_counts(&self) -> impl Iterator<Item = (FpSeconds, usize)> {
         self.hist.iter_recorded().map(|x| {
-            let value = self.recording_unit.latency_from_u64(x.value_iterated_to());
+            let value = self.recording_unit.fpsecs_from_value(x.value_iterated_to());
             let count = x.count_at_value();
-            (value, count)
+            (value, count as usize)
         })
     }
 
     /// Returns all the latency data collected as an iterator of durations.
     ///
     /// The iterator yields values in monotonically non-decreasing order.
-    pub fn iter_flat(&self) -> impl Iterator<Item = Duration> {
-        FlatIterator {
-            it: self.iter_with_counts(),
-            value_opt: None,
-            count: 0,
-        }
+    pub fn iter_flat(&self) -> impl Iterator<Item = FpSeconds> {
+        self.iter_with_counts()
+            .map(|(value, count)| iter::repeat_n(value, count))
+            .flatten()
     }
 
     /// Latency unit used in data collection.
@@ -201,7 +170,7 @@ impl BenchOut {
     ///
     /// # Panics
     /// Panics if the number of observations is zero.
-    pub fn median(&self) -> Duration {
+    pub fn median(&self) -> FpSeconds {
         self.summary().median
     }
 
@@ -299,7 +268,7 @@ impl BenchOut {
     /// `median(latency(f))`,
     /// with confidence level `(1 - alpha)`.
     ///
-    /// The confidence interval is expressed as a pair of [`Duration`] representing the
+    /// The confidence interval is expressed as a pair of [`FpSeconds`] representing the
     /// low and high ends of the interval.
     ///
     /// Assumes that `latency(f)` is approximately log-normal.
@@ -310,10 +279,10 @@ impl BenchOut {
     /// Panics if any of the following conditions is true:
     /// - `Sample size <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_median_ci(&self, alpha: f64) -> (Duration, Duration) {
+    pub fn student_median_ci(&self, alpha: f64) -> (FpSeconds, FpSeconds) {
         let Ci(log_low, log_high) = self.student_ln_ci(alpha);
-        let low = Duration::from_secs_f64(log_low.exp());
-        let high = Duration::from_secs_f64(log_high.exp());
+        let low = log_low.exp().into();
+        let high = log_high.exp().into();
         (low, high)
     }
 
@@ -332,7 +301,7 @@ impl BenchOut {
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_value_position_wrt_median_ci(
         &self,
-        value: Duration,
+        value: FpSeconds,
         alpha: f64,
     ) -> PositionWrtCi {
         let (low, high) = self.student_median_ci(alpha);
@@ -438,7 +407,7 @@ impl From<multi::BenchOut<1>> for BenchOut {
 // cargo test --package bench_utils --lib --all-features -- bench_out::test --nocapture
 mod test {
     use super::*;
-    use crate::rel_approx_eq_dur;
+    use crate::rel_approx_eq_fpsecs;
     use crate::{
         BenchCfg,
         test_support::{LO_STDEV_LN, lognormal_samp},
@@ -508,21 +477,21 @@ mod test {
 
         rel_approx_eq!(exp_mean, out.mean().0, EPSILON);
         rel_approx_eq!(exp_stdev, out.stdev().0, EPSILON);
-        rel_approx_eq!(exp_median, out.median().as_secs_f64(), EPSILON);
+        rel_approx_eq!(exp_median, out.median().as_f64(), EPSILON);
         approx_eq!(exp_mean_ln, out.mean_ln(), EPSILON);
         approx_eq!(exp_stdev_ln, out.stdev_ln(), EPSILON);
 
         rel_approx_eq!(exp_mean, summary.mean.0, EPSILON);
         rel_approx_eq!(exp_stdev, summary.stdev.0, EPSILON);
-        rel_approx_eq!(exp_p1, summary.p1.as_secs_f64(), EPSILON);
-        rel_approx_eq!(exp_p5, summary.p5.as_secs_f64(), EPSILON);
-        rel_approx_eq!(exp_p10, summary.p10.as_secs_f64(), EPSILON);
-        rel_approx_eq!(exp_p25, summary.p25.as_secs_f64(), EPSILON);
-        rel_approx_eq!(exp_median, summary.median.as_secs_f64(), EPSILON);
-        rel_approx_eq!(exp_p75, summary.p75.as_secs_f64(), EPSILON);
-        rel_approx_eq!(exp_p90, summary.p90.as_secs_f64(), EPSILON);
-        rel_approx_eq!(exp_p95, summary.p95.as_secs_f64(), EPSILON);
-        rel_approx_eq!(exp_p99, summary.p99.as_secs_f64(), EPSILON);
+        rel_approx_eq!(exp_p1, summary.p1.as_f64(), EPSILON);
+        rel_approx_eq!(exp_p5, summary.p5.as_f64(), EPSILON);
+        rel_approx_eq!(exp_p10, summary.p10.as_f64(), EPSILON);
+        rel_approx_eq!(exp_p25, summary.p25.as_f64(), EPSILON);
+        rel_approx_eq!(exp_median, summary.median.as_f64(), EPSILON);
+        rel_approx_eq!(exp_p75, summary.p75.as_f64(), EPSILON);
+        rel_approx_eq!(exp_p90, summary.p90.as_f64(), EPSILON);
+        rel_approx_eq!(exp_p95, summary.p95.as_f64(), EPSILON);
+        rel_approx_eq!(exp_p99, summary.p99.as_f64(), EPSILON);
     }
 
     #[test]
@@ -548,7 +517,7 @@ mod test {
         assert_eq!(out.n() as usize, samp_size);
 
         // The true median should lie inside the CI
-        let true_median = Duration::from_secs_f64(mu.exp());
+        let true_median = FpSeconds(mu.exp());
         let position = out.student_value_position_wrt_median_ci(true_median, ALPHA);
         assert_eq!(position, PositionWrtCi::In);
 
@@ -568,13 +537,13 @@ mod test {
             approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON);
             approx_eq!(exp_df, out.student_ln_df(), EPSILON);
             rel_approx_eq!(exp_p, out.student_ln_p(mu0, alt_hyp), EPSILON);
-            rel_approx_eq_dur!(
-                Duration::from_secs_f64(exp_ci_ns_low),
+            rel_approx_eq_fpsecs!(
+                FpSeconds(exp_ci_ns_low),
                 out.student_median_ci(ALPHA).0,
                 EPSILON
             );
-            rel_approx_eq_dur!(
-                Duration::from_secs_f64(exp_ci_ns_high),
+            rel_approx_eq_fpsecs!(
+                FpSeconds(exp_ci_ns_high),
                 out.student_median_ci(ALPHA).1,
                 EPSILON
             );
@@ -599,13 +568,13 @@ mod test {
             rel_approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON);
             approx_eq!(exp_df, out.student_ln_df(), EPSILON);
             approx_eq!(exp_p, out.student_ln_p(mu0, alt_hyp), EPSILON);
-            rel_approx_eq_dur!(
-                Duration::from_secs_f64(exp_ci_ns_low),
+            rel_approx_eq_fpsecs!(
+                FpSeconds(exp_ci_ns_low),
                 out.student_median_ci(ALPHA).0,
                 EPSILON
             );
-            rel_approx_eq_dur!(
-                Duration::from_secs_f64(exp_ci_ns_high),
+            rel_approx_eq_fpsecs!(
+                FpSeconds(exp_ci_ns_high),
                 out.student_median_ci(ALPHA).1,
                 EPSILON
             );
@@ -658,7 +627,7 @@ mod test {
     #[test]
     fn test_bench_out_student_ln_t_panics_on_single() {
         let cfg = BenchCfg::default();
-        let out = BenchOut::from_iter(&cfg, [Duration::from_millis(1)].into_iter());
+        let out = BenchOut::from_iter(&cfg, [FpSeconds::from_millis(1)].into_iter());
         let result = std::panic::catch_unwind(|| out.student_ln_t(0.0));
         assert!(result.is_err());
     }
@@ -670,9 +639,9 @@ mod test {
         let out = BenchOut::from_iter(
             &cfg,
             [
-                Duration::from_millis(1),
-                Duration::from_millis(1),
-                Duration::from_millis(2),
+                FpSeconds::from_millis(1),
+                FpSeconds::from_millis(1),
+                FpSeconds::from_millis(2),
             ]
             .into_iter(),
         );
@@ -681,8 +650,8 @@ mod test {
         assert_eq!(pairs[0].1, 2);
         assert_eq!(pairs[1].1, 1);
         // HDR histogram has slight quantization; compare approximately
-        rel_approx_eq_dur!(pairs[0].0, Duration::from_millis(1), EPSILON);
-        rel_approx_eq_dur!(pairs[1].0, Duration::from_millis(2), EPSILON);
+        rel_approx_eq_fpsecs!(pairs[0].0, FpSeconds::from_millis(1), EPSILON);
+        rel_approx_eq_fpsecs!(pairs[1].0, FpSeconds::from_millis(2), EPSILON);
     }
 
     #[test]
@@ -691,9 +660,9 @@ mod test {
         let out = BenchOut::from_iter(
             &cfg,
             [
-                Duration::from_millis(1),
-                Duration::from_millis(1),
-                Duration::from_millis(2),
+                FpSeconds::from_millis(1),
+                FpSeconds::from_millis(1),
+                FpSeconds::from_millis(2),
             ]
             .into_iter(),
         );
@@ -705,7 +674,7 @@ mod test {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::from_iter(
             &cfg,
-            [Duration::from_millis(1), Duration::from_millis(2)].into_iter(),
+            [FpSeconds::from_millis(1), FpSeconds::from_millis(2)].into_iter(),
         );
         assert_eq!(out.n(), 2);
         out.reset();
