@@ -727,7 +727,7 @@ mod with_batch {
             );
         }
 
-        // cargo test -r --test bench_run_validate --all-features -- with_batch::no_status1::test_micros_1 --nocapture --test-threads=1
+        // cargo test -r --test bench_run_validate --all-features -- with_batch::no_status1::test_micros_1 --exact --nocapture --test-threads=1
         #[test]
         fn test_micros_1() {
             const EPSILON: f64 = 0.02;

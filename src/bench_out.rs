@@ -86,19 +86,18 @@ impl BenchOut {
     #[inline(always)]
     /// Updates `self` with an elapsed time observation for the target function.
     pub(crate) fn capture_data(&mut self, batch_latency: (FpSeconds, usize)) {
-        let elapsed_u64 = self
-            .recording_unit
-            .value_from_fpsecs(batch_latency.0 * batch_latency.1);
+        let (mean_latency, batch) = batch_latency;
+        let mean_elapsed_u64 = self.recording_unit.value_from_fpsecs(mean_latency);
         self.hist
-            .record_n(elapsed_u64, batch_latency.1 as u64)
+            .record_n(mean_elapsed_u64, batch as u64)
             .expect("can't happen: histogram is auto-resizable");
 
-        let elapsed_f64 = batch_latency.0.as_f64();
-        self.sum += elapsed_f64;
-        self.sum2 += elapsed_f64.powi(2);
+        let total_elapsed_f64 = (mean_latency * batch).as_f64();
+        self.sum += total_elapsed_f64;
+        self.sum2 += total_elapsed_f64.powi(2);
 
         if batch_latency.0 > FpSeconds::ZERO {
-            let ln = elapsed_f64.ln();
+            let ln = total_elapsed_f64.ln();
             self.n_nz += 1;
             self.sum_ln += ln;
             self.sum2_ln += ln.powi(2);

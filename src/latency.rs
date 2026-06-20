@@ -160,11 +160,11 @@ impl Debug for FpSeconds {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let v = self.0;
         let str = match () {
-            _ if 1.0 <= v => format!("{:?}s", v),
-            _ if 1e-3 <= v && v < 1.0 => format!("{:?}ms", v * 1e3),
-            _ if 1e-6 <= v && v < 1e-3 => format!("{:?}μs", v * 1e6),
-            _ if 1e-9 <= v && v < 1e-6 => format!("{:?}ns", v * 1e9),
-            _ if v < 1e-9 => format!("{:?}ps", v * 1e12),
+            _ if 1.0 <= v => format!("{:.6}s", v),
+            _ if 1e-3 <= v && v < 1.0 => format!("{:.6}ms", v * 1e3),
+            _ if 1e-6 <= v && v < 1e-3 => format!("{:.6}μs", v * 1e6),
+            _ if 1e-9 <= v && v < 1e-6 => format!("{:.6}ns", v * 1e9),
+            _ if v < 1e-9 => format!("{:.6}ps", v * 1e12),
             _ => unreachable!(),
         };
         f.write_str(&str)
@@ -352,7 +352,7 @@ pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: Ru
 
         acc_latency += iter_latency;
         acc_execs += iter_execs;
-        trace!("src_execs_per_sec >>> i={i}");
+        trace!("execs_per_sec >>> i={i}");
         // Castings to f64 to avoid integer overflow or truncation to zero.
         if iter_latency >= budget_fps / 3
             || acc_latency >= budget_fps * (2.0 / 3.0)

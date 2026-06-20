@@ -5,7 +5,7 @@ use crate::{
     multi::{BenchOut, LatencySrc},
     status::{DefaultStatus, NoStatus, Status},
 };
-use log::debug;
+use log::{debug, trace};
 use std::{
     io::stderr,
     time::{Duration, Instant},
@@ -26,6 +26,7 @@ impl<const K: usize> BenchState<K> {
         assert!(status_count > 0, "status_count must be > 0");
 
         let (exec_count, run_time) = run_length.exec_count_and_duration();
+        debug!("execute >>> exec_count={exec_count}, run_time={run_time:?}");
         assert!(exec_count > 0, "exec_count must be > 0");
 
         let mut acc_latency = FpSeconds::ZERO; // enables testing with synthetic latency sources
@@ -35,6 +36,9 @@ impl<const K: usize> BenchState<K> {
             let src_finished = if let Some(batch_latencies) = src.next() {
                 acc_latency +=
                     batch_latencies.0.iter().cloned().sum::<FpSeconds>() * batch_latencies.1;
+                trace!(
+                    "execute >>> i={i}, batch_latencies={batch_latencies:?}, acc_latency={acc_latency:?}"
+                );
                 self.capture_data(batch_latencies);
                 false
             } else {
@@ -42,6 +46,7 @@ impl<const K: usize> BenchState<K> {
             };
 
             let elapsed = start.elapsed();
+            trace!("execute >>> i={i}, elapsed={elapsed:?}");
 
             if i == exec_count
                 || elapsed >= run_time
@@ -62,7 +67,7 @@ impl<const K: usize> BenchState<K> {
 
                 if finished {
                     debug!(
-                        "execute >>> i={i}, elapsed={elapsed:?}, exec_count={exec_count}, acc_latency={acc_latency:?}, run_time={run_time:?}, src_finished={src_finished}"
+                        "execute >>> i={i}, elapsed={elapsed:?}, acc_latency={acc_latency:?}, src_finished={src_finished}"
                     );
                     break;
                 }
