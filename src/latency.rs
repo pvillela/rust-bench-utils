@@ -160,11 +160,13 @@ impl Debug for FpSeconds {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let v = self.0;
         let str = match () {
-            _ if 1.0 <= v => format!("{:.6}s", v),
-            _ if 1e-3 <= v && v < 1.0 => format!("{:.6}ms", v * 1e3),
-            _ if 1e-6 <= v && v < 1e-3 => format!("{:.6}μs", v * 1e6),
-            _ if 1e-9 <= v && v < 1e-6 => format!("{:.6}ns", v * 1e9),
-            _ if v < 1e-9 => format!("{:.6}ps", v * 1e12),
+            _ if 1e3 <= v => format!("{0:.3e}s", v),
+            _ if 1.0 <= v => format!("{0:.3}s", v),
+            _ if 1e-3 <= v => format!("{0:.3}ms", v * 1e3),
+            _ if 1e-6 <= v => format!("{0:.3}μs", v * 1e6),
+            _ if 1e-9 <= v => format!("{0:.3}ns", v * 1e9),
+            _ if 1e-12 <= v => format!("{0:.3}ps", v * 1e12),
+            _ if v < 1e-9 => format!("{0:.3e}ps", v * 1e12),
             _ => unreachable!(),
         };
         f.write_str(&str)
