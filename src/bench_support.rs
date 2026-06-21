@@ -50,7 +50,7 @@ pub fn validate_latency_overhead(
     let solo_median = out_solo.median();
     println!(
         "target_median_solo={target_latency:?}, out_solo.median()={solo_median:?}, rel_diff={}",
-        FpSeconds::from_duration(target_latency).abs_rel_diff(solo_median)
+        FpSeconds::from_duration(target_latency).abs_rel_diff_fpsecs(solo_median)
     );
     println!();
 
@@ -61,14 +61,14 @@ pub fn validate_latency_overhead(
     println!(
         "target_median_group={:?}, out_group.median()={group_median:?}, rel_diff={}",
         target_group_latency,
-        FpSeconds::from_duration(target_group_latency).abs_rel_diff(group_median)
+        FpSeconds::from_duration(target_group_latency).abs_rel_diff_fpsecs(group_median)
     );
     println!();
 
     println!(
         "Solo vs. grouped: batch={batch}, out_solo.median()*batch={:?}, out_group.median()={group_median:?}, rel_diff={}",
         solo_median * batch,
-        (solo_median * batch).abs_rel_diff(group_median)
+        (solo_median * batch).abs_rel_diff_fpsecs(group_median)
     );
     println!();
 

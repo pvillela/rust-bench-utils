@@ -24,13 +24,13 @@ fn main() {
         "solo_median_20 * 20 = {:?}, group_median_20 = {:?}, abs_rel_diff = {}",
         solo_median_20 * 20,
         group_median_20,
-        (solo_median_20 * 20).abs_rel_diff(group_median_20)
+        (solo_median_20 * 20).abs_rel_diff_fpsecs(group_median_20)
     );
     println!(
         "solo_median_100 * 100 = {:?}, group_median_100 = {:?}, abs_rel_diff = {}",
         solo_median_100 * 100,
         group_median_100,
-        (solo_median_100 * 100).abs_rel_diff(group_median_100)
+        (solo_median_100 * 100).abs_rel_diff_fpsecs(group_median_100)
     );
 
     rel_approx_eq_fpsecs!(solo_median_20 * 20, group_median_20, EPSILON);

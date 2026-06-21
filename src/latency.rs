@@ -375,7 +375,7 @@ pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: Ru
 
 #[cfg(test)]
 #[cfg(feature = "_bench")]
-/// cargo test -r --package bench_utils --lib --all-features -- latency::test --nocapture
+/// cargo test -r --package bench_utils --lib --all-features -- latency::validate --nocapture
 mod validate {
     use super::*;
     use crate::{BenchCfg, bench_support::validate_latency_overhead, rel_approx_eq_fpsecs};

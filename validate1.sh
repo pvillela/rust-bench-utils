@@ -14,6 +14,11 @@ cargo run --example list_bench_tests --features "_test_support" | while IFS= rea
     part1="${line%%::*}"
     part2="${line#*::}"
     # ./processor "$part1" "$part2"
-    echo "*** part1=$part1, part2=$part2"
-    cargo test -r --test "$part1" --features _ALL_NON_TEST,_bench -- --test-threads=1 --exact "$part2"
+    echo "*** file=$part1, test=$part2" >&2
+    # cargo test --no-run -q --message-format short -r --test "$part1" --features _ALL_NON_TEST,_bench -- --test-threads=1 --exact "$part2" \
+    #     > test.out
+    # sleep 0.5
+    cargo test -q --message-format short -r --test "$part1" --features _ALL_NON_TEST,_bench -- --test-threads=1 --exact "$part2" \
+        > test.out
+    sleep 10.0
 done

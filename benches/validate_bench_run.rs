@@ -36,7 +36,7 @@ fn run_bench_with_status(
     let out_mean = out.mean();
     println!(
         "target_mean={target_latency:?}, out.mean()={out_mean:?}, rel_diff={}",
-        target_latency.abs_rel_diff(out_mean.as_duration())
+        target_latency.abs_rel_diff_dur(out_mean.as_duration())
     );
 
     let raw_latency = latency(|| {
@@ -47,12 +47,12 @@ fn run_bench_with_status(
     let raw_mean = raw_latency / exec_count as u32;
     println!(
         "target_mean={target_latency:?}, raw_mean()={raw_mean:?}, rel_diff={}",
-        target_latency.abs_rel_diff(raw_mean)
+        target_latency.abs_rel_diff_dur(raw_mean)
     );
 
     println!(
         "raw_mean={out_mean:?}, out_mean()={raw_mean:?}, rel_diff={}",
-        raw_mean.abs_rel_diff(out_mean.as_duration())
+        raw_mean.abs_rel_diff_dur(out_mean.as_duration())
     );
 
     rel_approx_eq_dur!(raw_mean, out_mean.as_duration(), epsilon);
