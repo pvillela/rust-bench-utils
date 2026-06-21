@@ -21,7 +21,7 @@ impl<const K: usize> BenchState<K> {
         src: &mut impl LatencySrc<K>,
         run_length: RunLength,
         status_count: usize,
-        status: &mut Option<impl FnMut(usize)>,
+        mut status: Option<impl FnMut(usize)>,
     ) {
         assert!(status_count > 0, "status_count must be > 0");
 
@@ -60,7 +60,7 @@ impl<const K: usize> BenchState<K> {
                     || src_finished;
 
                 if (i % status_count == 0 || finished)
-                    && let Some(exec_status) = status
+                    && let Some(exec_status) = &mut status
                 {
                     exec_status(i);
                 }
@@ -106,7 +106,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     let exec_est_count = run_length.estimated_count(execs_per_second);
 
     // Warm-up.
-    let mut warmup_status = S::part_apply(s.warmup_status(), warmup_est_time, warmup_est_count);
+    let warmup_status = S::part_apply(s.warmup_status(), warmup_est_time, warmup_est_count);
     let warmup_status_count = if warmup_status.is_some() {
         cfg.status_count(execs_per_second)
     } else {
@@ -117,20 +117,25 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
         &mut src,
         warmup_run_length,
         warmup_status_count,
-        &mut warmup_status,
+        warmup_status,
     );
+    if let Some(end_warmup_status) = s.end_warmup_status() {
+        end_warmup_status();
+    }
     state.reset();
-    drop(warmup_status);
 
     // Execute.
-    let mut exec_status = S::part_apply(s.exec_status(), exec_est_time, exec_est_count);
+    let exec_status = S::part_apply(s.exec_status(), exec_est_time, exec_est_count);
     let exec_status_count = if exec_status.is_some() {
         cfg.status_count(execs_per_second)
     } else {
         usize::MAX
     };
     debug!("bench_run_x >>> exec_status_count={exec_status_count}");
-    state.execute(&mut src, run_length, exec_status_count, &mut exec_status);
+    state.execute(&mut src, run_length, exec_status_count, exec_status);
+    if let Some(end_exec_status) = s.end_exec_status() {
+        end_exec_status();
+    }
 
     state
 }
@@ -215,7 +220,7 @@ pub fn bench_run_with_status_arg_cfg<const K: usize>(
     let s = DefaultStatus::new(
         &mut w,
         "Warming up".to_owned(),
-        "\nExecuting bench_run".to_owned(),
+        "Executing bench_run".to_owned(),
     );
 
     bench_run_x(cfg, src, run_length, s)
@@ -274,7 +279,7 @@ mod status {
         let status = DefaultStatus::new(
             &mut w,
             "Warming up".to_owned(),
-            "\nExecuting bench_run".to_owned(),
+            "Executing bench_run".to_owned(),
         );
 
         let execs_per_second = cfg.execs_per_sec(&mut src, run_length);

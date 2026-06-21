@@ -18,6 +18,16 @@ pub trait Status<'a> {
     where
         'a: 'b;
 
+    /// Returns an optional closure to end status reporting for the warm-up phase.
+    ///
+    /// The closure receives `(est_time, est_count, i)` where:
+    /// - `est_time` is the estimated warm-up duration.
+    /// - `est_count` is the estimated number of warm-up iterations.
+    /// - `i` is the current warm-up iteration.
+    fn end_warmup_status<'b>(&'b mut self) -> Option<impl FnOnce() + 'b>
+    where
+        'a: 'b;
+
     /// Returns an optional status closure for the execution phase.
     ///
     /// The closure receives `(est_time, est_count, i)` where:
@@ -25,6 +35,16 @@ pub trait Status<'a> {
     /// - `est_count` is the estimated number of execution iterations.
     /// - `i` is the current execution iteration.
     fn exec_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
+    where
+        'a: 'b;
+
+    /// Returns an optional closure to end status reporting for the execution phase.
+    ///
+    /// The closure receives `(est_time, est_count, i)` where:
+    /// - `est_time` is the estimated warm-up duration.
+    /// - `est_count` is the estimated number of warm-up iterations.
+    /// - `i` is the current warm-up iteration.
+    fn end_exec_status<'b>(&'b mut self) -> Option<impl FnOnce() + 'b>
     where
         'a: 'b;
 
@@ -52,11 +72,25 @@ impl<'a> Status<'a> for NoStatus {
         None::<fn(Duration, usize, usize)>
     }
 
+    fn end_warmup_status<'b>(&'b mut self) -> Option<impl FnOnce() + 'b>
+    where
+        'a: 'b,
+    {
+        None::<fn()>
+    }
+
     fn exec_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
     where
         'a: 'b,
     {
         None::<fn(Duration, usize, usize)>
+    }
+
+    fn end_exec_status<'b>(&'b mut self) -> Option<impl FnOnce() + 'b>
+    where
+        'a: 'b,
+    {
+        None::<fn()>
     }
 }
 
@@ -115,6 +149,16 @@ impl<'a, W: Write> DefaultStatus<'a, W> {
             w.flush().expect("unexpected I/O error");
         }
     }
+
+    fn make_end_status<'b>(w: &'b mut W) -> impl FnMut() + 'b
+    where
+        'a: 'b,
+    {
+        || {
+            write!(w, "\n").expect("unexpected error writing to `Write` object `w`");
+            w.flush().expect("unexpected I/O error");
+        }
+    }
 }
 
 impl<'a, W: Write> Status<'a> for DefaultStatus<'a, W> {
@@ -128,11 +172,25 @@ impl<'a, W: Write> Status<'a> for DefaultStatus<'a, W> {
         ))
     }
 
+    fn end_warmup_status<'b>(&'b mut self) -> Option<impl FnOnce() + 'b>
+    where
+        'a: 'b,
+    {
+        Some(Self::make_end_status(self.w))
+    }
+
     fn exec_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
     where
         'a: 'b,
     {
         Some(Self::make_status::<'b>(self.w, self.exec_preamble.clone()))
+    }
+
+    fn end_exec_status<'b>(&'b mut self) -> Option<impl FnOnce() + 'b>
+    where
+        'a: 'b,
+    {
+        Some(Self::make_end_status(self.w))
     }
 }
 
@@ -189,7 +247,9 @@ mod test {
         let mut w = StringWriter::new();
         let mut ds = DefaultStatus::new(&mut w, "Warm".to_owned(), "Exec".to_owned());
         assert!(ds.warmup_status().is_some());
+        assert!(ds.end_warmup_status().is_some());
         assert!(ds.exec_status().is_some());
+        assert!(ds.end_exec_status().is_some());
     }
 
     #[test]
