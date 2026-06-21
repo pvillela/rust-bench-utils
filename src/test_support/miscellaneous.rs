@@ -1,6 +1,6 @@
-//! Lognormal sample generators, a [`StringWriter`](crate::test_support::StringWriter) for testing status output,
-//! and constants for low/high log-standard-deviation.
-//! Gated by feature **"_test"**.
+//! Various types, traits, functions, and macros that support testing.
+//!
+//! Gated by feature **"_test_support"**.
 
 use crate::{BenchCfg, BenchOut, FpSeconds};
 use basic_stats::{core::SampleMoments, dev_utils::ApproxEq, normal::normal_detm_samp};
