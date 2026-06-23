@@ -1,5 +1,4 @@
 use crate::{RunLength, latency};
-use sha2::{Digest, Sha256};
 use std::{hint::black_box, time::Duration};
 
 #[derive(Clone, Copy)]
@@ -18,31 +17,22 @@ impl BusyWork {
     /// determine the `effort` argument to achieve a desired target latency.
     #[inline(always)]
     pub fn fun(effort: u32) -> impl FnMut() + Clone + use<> {
-        let (buf, mut hasher): ([u8; 8], Sha256) = Self::pre_work();
-        move || Self::work(effort, &buf, &mut hasher)
-    }
-
-    // error[E0507]: cannot move out of `hasher`, a captured variable in an `FnMut` closure
-
-    #[inline(always)]
-    /// Does the set-up for [`Self::work`] (using the 'sha2' crate) so that the latter's latency is directly
-    /// proportional to `effort`.
-    fn pre_work() -> ([u8; 8], Sha256) {
-        let seed = 0_u64;
-        let buf = seed.to_be_bytes();
-        let hasher = Sha256::new();
-        (buf, hasher)
+        move || Self::work(effort)
     }
 
     #[inline(always)]
-    /// Does a significant amount of computation, based on SHA-256 (using the 'sha2' crate).
-    /// Its latency is proportional to `effort`.
-    /// Depends on [`Self::pre_work`] being called before it to set-up `buf` and `hasher`.
-    fn work(effort: u32, buf: &[u8; 8], hasher: &mut Sha256) {
-        for _ in 0..black_box(effort) {
-            hasher.update(buf);
+    /// Does a significant amount of computation. Its latency is proportional to `effort`.
+    fn work(effort: u32) {
+        const INNER_STRIDE: u64 = 64;
+        // const INNER_STRIDE: u64 = 1;
+        const MULT: u64 = 6364136223846793005;
+        const INC: u64 = 1442695040888963407;
+
+        let mut state = 0_u64;
+        let total = (effort as u64).wrapping_mul(INNER_STRIDE);
+        for _ in 0..black_box(total) {
+            state = black_box(state.wrapping_mul(MULT).wrapping_add(INC));
         }
-        black_box(hasher);
     }
 
     /// Estimates the `effort` required for the resulting closure to have the `target_latency`, using
@@ -76,11 +66,10 @@ impl BusyWork {
         let (budget_count, budget_dur) = budget.exec_count_and_duration();
         let mut acc_latency = Duration::ZERO;
         let mut acc_effort: u32 = 0;
-        let (buf, mut hasher): ([u8; 8], Sha256) = Self::pre_work();
 
         for i in 1.. {
             let iter_effort = 2u32.pow(i - 1);
-            let iter_latency = latency(|| Self::work(iter_effort, &buf, &mut hasher));
+            let iter_latency = latency(|| Self::work(iter_effort));
 
             acc_latency += iter_latency;
             acc_effort += iter_effort;
@@ -113,7 +102,7 @@ impl BusyWork {
 
 #[cfg(test)]
 #[cfg(feature = "_bench")]
-/// cargo test -r --package bench_utils --lib --all-features -- busy_work::validate_latency --nocapture
+/// cargo test -r --package bench_utils --lib --all-features -- busy_work::validate_latency --nocapture --test-threads=1
 mod validate_latency {
     use super::*;
     use crate::latency;
@@ -126,8 +115,8 @@ mod validate_latency {
         let dur_secs = dur.as_secs_f64();
         let rel_diff = dur_secs.abs_rel_diff(latency_secs);
         println!(
-            "dur={:?}, dur_secs={}, latency_secs={}, rel_diff={}",
-            dur, dur_secs, latency_secs, rel_diff
+            "dur={:?}, effort={}, dur_secs={}, latency_secs={}, rel_diff={}",
+            dur, effort, dur_secs, latency_secs, rel_diff
         );
         (dur_secs, latency_secs)
     }
