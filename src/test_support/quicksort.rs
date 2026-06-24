@@ -1,6 +1,10 @@
 //! In-place quicksort and quickselect algorithms.
 
-use std::{cmp, fmt::Debug};
+use std::{
+    cmp,
+    fmt::Debug,
+    ops::{Add, Div},
+};
 
 #[derive(Debug)]
 enum Movement {
@@ -33,7 +37,7 @@ fn move_j<T: PartialOrd>(arr: &[T], i: usize, j: &mut usize) -> Movement {
     }
 }
 
-fn recurse_sort<T: PartialOrd + Debug>(arr: &mut [T], pivot: usize, pivot_landing: usize) {
+fn recurse_sort<T: PartialOrd>(arr: &mut [T], pivot: usize, pivot_landing: usize) {
     arr.swap(pivot_landing, pivot);
     quicksort(&mut arr[..pivot_landing]);
     quicksort(&mut arr[pivot_landing + 1..]);
@@ -42,7 +46,7 @@ fn recurse_sort<T: PartialOrd + Debug>(arr: &mut [T], pivot: usize, pivot_landin
 /// Implementation of quicksort algorithm.
 ///
 /// Sorts `arr` in place without heap allocations, but there is stack allocation with recursion.
-pub fn quicksort<T: PartialOrd + Debug>(arr: &mut [T]) {
+pub fn quicksort<T: PartialOrd>(arr: &mut [T]) {
     let len = arr.len();
 
     if len <= 1 {
@@ -91,12 +95,7 @@ pub fn quicksort<T: PartialOrd + Debug>(arr: &mut [T]) {
     }
 }
 
-fn recurse_select<T: PartialOrd + Debug>(
-    arr: &mut [T],
-    pivot: usize,
-    pivot_landing: usize,
-    k: usize,
-) {
+fn recurse_select<T: PartialOrd>(arr: &mut [T], pivot: usize, pivot_landing: usize, k: usize) {
     arr.swap(pivot_landing, pivot);
 
     match k.cmp(&pivot_landing) {
@@ -113,7 +112,7 @@ fn recurse_select<T: PartialOrd + Debug>(
 ///
 /// # Panics
 /// - If `k` >= `arr.len()`.
-pub fn quickselect<T: PartialOrd + Debug>(arr: &mut [T], k: usize) {
+pub fn quickselect<T: PartialOrd>(arr: &mut [T], k: usize) {
     let len = arr.len();
     assert!(k < len, "`k` must be less than `arr.len()`");
 
@@ -163,7 +162,7 @@ pub fn quickselect<T: PartialOrd + Debug>(arr: &mut [T], k: usize) {
     }
 }
 
-fn move_max_to_end<T: PartialOrd + Debug>(arr: &mut [T]) {
+fn move_max_to_end<T: PartialOrd>(arr: &mut [T]) {
     let len = arr.len();
 
     for i in 0..len {
@@ -181,7 +180,7 @@ fn move_max_to_end<T: PartialOrd + Debug>(arr: &mut [T]) {
 ///
 /// # Panics
 /// - If `arr.len() == 0`.
-pub fn quickmedian<T: PartialOrd + Debug>(arr: &mut [T]) {
+pub fn quickmedian<T: PartialOrd>(arr: &mut [T]) {
     let len = arr.len();
     assert!(len > 0, "`arr.len()` must be positive");
     let k = len / 2;
@@ -189,6 +188,23 @@ pub fn quickmedian<T: PartialOrd + Debug>(arr: &mut [T]) {
     if len % 2 == 0 {
         move_max_to_end(&mut arr[0..k]);
     }
+}
+
+/// Returns a pair containing the mid-point indices for an arbitrary array slice. If the slice's length is odd,
+/// the indices are the same, otherwise, the indices differ by `1`.
+pub fn midpoint_indices<T>(arr: &[T]) -> (usize, usize) {
+    let len = arr.len();
+    if len.is_multiple_of(2) {
+        (len / 2 - 1, len / 2)
+    } else {
+        (len / 2, len / 2)
+    }
+}
+
+/// Returns the average of `arr`'s values at its [`midpoint_indices`].
+pub fn midpoint_value<T: Add<Output = T> + Div<f64, Output = T> + Copy>(arr: &[T]) -> T {
+    let (idx0, idx1) = midpoint_indices(arr);
+    (arr[idx0] + arr[idx1]) / 2.0
 }
 
 #[cfg(test)]

@@ -7,7 +7,7 @@ use bench_utils::{
     load::BusyWork,
     multi::BenchOut,
     rel_approx_eq_fpsecs,
-    test_support::{AbsRelDiffFpSecs, quickmedian},
+    test_support::{AbsRelDiffFpSecs, midpoint_value, quickmedian},
 };
 use log::debug;
 use std::{
@@ -63,11 +63,6 @@ fn run<const K: usize, R, Src>(
 
     let v_batch = (out.n() as f64).sqrt().round() as usize;
     let v_n_batches = v_batch;
-    let v_mid: (usize, usize) = if v_n_batches.is_multiple_of(2) {
-        (v_n_batches / 2 - 1, v_n_batches / 2)
-    } else {
-        (v_n_batches / 2, v_n_batches / 2)
-    };
     let mut v_latencies: [Vec<FpSeconds>; K] =
         array::from_fn(|_| Vec::<FpSeconds>::with_capacity(v_batch));
 
@@ -86,7 +81,7 @@ fn run<const K: usize, R, Src>(
         .iter_mut()
         .map(|v_lat| {
             quickmedian(v_lat);
-            (v_lat[v_mid.0] + v_lat[v_mid.1]) / 2
+            midpoint_value(v_lat)
         })
         .collect();
 
