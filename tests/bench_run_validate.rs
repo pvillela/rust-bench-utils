@@ -9,14 +9,16 @@ use bench_utils::{
     rel_approx_eq_fpsecs,
     test_support::{AbsRelDiffFpSecs, quickmedian},
 };
+use log::debug;
 use std::{
     array,
     time::{Duration, Instant},
 };
 
-trait FnsSrc<const K: usize> {
+trait FnsSrc<const K: usize>: Clone {
     fn f1(&self) -> impl FnMut();
     fn f2(&self) -> impl FnMut();
+    fn base_effort(&self) -> u32;
 }
 
 fn run<const K: usize, R, Src>(
@@ -31,34 +33,31 @@ fn run<const K: usize, R, Src>(
     epsilon: f64,
 ) where
     Src: FnsSrc<K>,
-    R: FnOnce(Duration, &BenchCfg, RunLength, Option<usize>) -> BenchOut<K>,
+    R: FnOnce(&BenchCfg, Src, RunLength, Option<usize>) -> BenchOut<K>,
 {
     _ = env_logger::try_init();
 
     assert!(1 <= K && K <= 2, "K={K} must be 1 or 2");
     let start = Instant::now();
 
-    let mut f1 = fsrc.f1();
-    let mut f2 = fsrc.f2();
+    let fsrc1 = fsrc.clone();
+    let mut f1 = fsrc1.f1();
+    let mut f2 = fsrc1.f2();
+    let base_effort = fsrc1.base_effort();
 
     let warmup_millis = base_warmup_millis * K as u64;
     let bench_time = base_bench_time * K as u32;
     let status_millis = base_status_millis * K as u64;
 
     println!(
-        "validate_bench_run: K={K}, rec_unit={rec_unit:?}, base_target_latency={base_target_latency:?}, warmup={warmup_millis}, bench_time={bench_time:?}, batch={batch:?}"
+        "validate_bench_run: K={K}, rec_unit={rec_unit:?}, base_target_latency={base_target_latency:?}, base_effort={base_effort}, warmup={warmup_millis}, bench_time={bench_time:?}, batch={batch:?}"
     );
 
     let cfg = BenchCfg::default()
         .with_warmup_millis(warmup_millis)
         .with_status_millis(status_millis)
         .with_recording_unit(rec_unit);
-    let out = runner(
-        base_target_latency,
-        &cfg,
-        RunLength::Time(bench_time),
-        batch,
-    );
+    let out = runner(&cfg, fsrc, RunLength::Time(bench_time), batch);
 
     //=== The `v_*` variables are used to validate the bench_run output.
 
@@ -134,15 +133,17 @@ const BASE_BENCH_TIME: Duration = Duration::from_millis(100);
 const DEFAULT_REC_UNIT: LatencyUnit = LatencyUnit::Nano;
 const DEFAULT_N_BATCHES: usize = 50;
 
+#[derive(Clone)]
 struct Fns1 {
     effort: u32,
 }
 
 impl Fns1 {
     fn new(base_target_latency: Duration) -> Self {
-        Self {
-            effort: BusyWork::calibrate(base_target_latency),
-        }
+        _ = env_logger::try_init();
+        let effort = BusyWork::calibrate(base_target_latency);
+        debug!("Fns1::new >>> effort={effort}");
+        Self { effort }
     }
 }
 
@@ -154,8 +155,13 @@ impl FnsSrc<1> for Fns1 {
     fn f2(&self) -> impl FnMut() {
         || ()
     }
+
+    fn base_effort(&self) -> u32 {
+        self.effort
+    }
 }
 
+#[derive(Clone)]
 struct Fns2 {
     effort0: u32,
     effort_delta: u32,
@@ -183,6 +189,10 @@ impl FnsSrc<2> for Fns2 {
             f2a();
             f2b()
         }
+    }
+
+    fn base_effort(&self) -> u32 {
+        self.effort0
     }
 }
 
@@ -212,12 +222,11 @@ mod no_status1 {
     use bench_utils::bench_run_arg_cfg_o;
 
     fn runner(
-        base_target_latency: Duration,
         cfg: &BenchCfg,
+        fns: impl FnsSrc<1>,
         run_length: RunLength,
         batch: Option<usize>,
     ) -> BenchOut<1> {
-        let fns = Fns1::new(base_target_latency);
         bench_run_arg_cfg_o(cfg, fns.f1(), run_length, batch).into()
     }
 
@@ -365,7 +374,7 @@ mod no_status1 {
     // cargo test -r --test bench_run_validate --all-features -- no_status1::test_nanos_50mb --nocapture --test-threads=1
     #[test]
     fn test_nanos_50mb() {
-        const EPSILON: f64 = 0.10;
+        const EPSILON: f64 = 0.05;
         let rec_unit = LatencyUnit::SubSec(11);
         let target_latency = Duration::from_nanos(50);
         let batch = mid_batch(target_latency, BASE_BENCH_TIME);
@@ -431,7 +440,7 @@ mod no_status1 {
     // cargo test -r --test bench_run_validate --all-features -- no_status1::test_micros_1mb --exact --nocapture --test-threads=1
     #[test]
     fn test_micros_1mb() {
-        const EPSILON: f64 = 0.35;
+        const EPSILON: f64 = 0.05;
         let target_latency = Duration::from_micros(1);
         let batch = high_batch(target_latency, BASE_BENCH_TIME);
         run_bench(
@@ -478,7 +487,7 @@ mod no_status1 {
     // cargo test -r --test bench_run_validate --all-features -- no_status1::test_micros_50mb --nocapture --test-threads=1
     #[test]
     fn test_micros_50mb() {
-        const EPSILON: f64 = 0.30;
+        const EPSILON: f64 = 0.05;
         let target_latency = Duration::from_micros(50);
         let batch = mid_batch(target_latency, BASE_BENCH_TIME);
         run_bench(
@@ -506,15 +515,15 @@ mod no_status1 {
         );
     }
 
-    // cargo test -r --test bench_run_validate --all-features -- no_status1::test_millis_1b --exact --nocapture --test-threads=1
+    // cargo test -r --test bench_run_validate --all-features -- no_status1::test_millis_1mb --exact --nocapture --test-threads=1
     #[test]
-    fn test_millis_1b() {
-        const EPSILON: f64 = 0.20;
-        const BASE_WARMUP_MILLIS: u64 = 500;
-        const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
+    fn test_millis_1mb() {
+        const EPSILON: f64 = 0.02;
+        // const BASE_WARMUP_MILLIS: u64 = 500;
+        // const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
 
         let target_latency = Duration::from_millis(1);
-        let batch = Some(50);
+        let batch = mid_batch(target_latency, BASE_BENCH_TIME);
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
@@ -540,15 +549,49 @@ mod no_status1 {
         );
     }
 
-    // cargo test -r --test bench_run_validate --all-features -- no_status1::test_millis_10b --nocapture --test-threads=1
     #[test]
-    fn test_millis_10b() {
-        const EPSILON: f64 = 0.15;
+    fn test_millis_10a() {
+        const EPSILON: f64 = 0.02;
+        let target_latency = Duration::from_millis(10);
+        let batch = None;
+        run_bench(
+            DEFAULT_REC_UNIT,
+            BASE_WARMUP_MILLIS,
+            BASE_BENCH_TIME,
+            target_latency,
+            batch,
+            EPSILON,
+        );
+    }
+
+    // cargo test -r --test bench_run_validate --all-features -- no_status1::test_millis_10mb --nocapture --test-threads=1
+    #[test]
+    fn test_millis_10mb() {
+        const EPSILON: f64 = 0.02;
         const BASE_WARMUP_MILLIS: u64 = 500;
         const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
 
         let target_latency = Duration::from_millis(10);
-        let batch = batch_n(DEFAULT_N_BATCHES, target_latency, BASE_BENCH_TIME);
+        let batch = mid_batch(target_latency, BASE_BENCH_TIME);
+        run_bench(
+            DEFAULT_REC_UNIT,
+            BASE_WARMUP_MILLIS,
+            BASE_BENCH_TIME,
+            target_latency,
+            batch,
+            EPSILON,
+        );
+    }
+
+    // cargo test -r --test bench_run_validate --all-features -- no_status1::test_millis_50 --nocapture --test-threads=1
+    #[test]
+    fn test_millis_50() {
+        const EPSILON: f64 = 0.02;
+        const BASE_WARMUP_MILLIS: u64 = 500;
+        const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
+
+        let target_latency = Duration::from_millis(50);
+        let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
@@ -566,12 +609,11 @@ mod with_status1 {
     use bench_utils::bench_run_with_status_arg_cfg_o;
 
     fn runner(
-        base_target_latency: Duration,
         cfg: &BenchCfg,
+        fns: impl FnsSrc<1>,
         run_length: RunLength,
         batch: Option<usize>,
     ) -> BenchOut<1> {
-        let fns = Fns1::new(base_target_latency);
         bench_run_with_status_arg_cfg_o(cfg, fns.f1(), run_length, batch).into()
     }
 
@@ -815,12 +857,11 @@ mod no_status2 {
     use bench_utils::duo::bench_run_arg_cfg_o;
 
     fn runner(
-        base_target_latency: Duration,
         cfg: &BenchCfg,
+        fns: impl FnsSrc<2>,
         run_length: RunLength,
         batch: Option<usize>,
     ) -> BenchOut<2> {
-        let fns = Fns2::new(base_target_latency);
         bench_run_arg_cfg_o(cfg, fns.f1(), fns.f2(), run_length, batch)
     }
 
@@ -1051,12 +1092,11 @@ mod with_status2 {
     use bench_utils::duo::bench_run_with_status_arg_cfg_o;
 
     fn runner(
-        base_target_latency: Duration,
         cfg: &BenchCfg,
+        fns: impl FnsSrc<2>,
         run_length: RunLength,
         batch: Option<usize>,
     ) -> BenchOut<2> {
-        let fns = Fns2::new(base_target_latency);
         bench_run_with_status_arg_cfg_o(cfg, fns.f1(), fns.f2(), run_length, batch).into()
     }
 
