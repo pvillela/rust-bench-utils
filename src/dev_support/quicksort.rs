@@ -43,6 +43,7 @@ fn recurse_sort<T: PartialOrd>(arr: &mut [T], pivot: usize, pivot_landing: usize
     quicksort(&mut arr[pivot_landing + 1..]);
 }
 
+#[allow(unused)]
 /// Implementation of quicksort algorithm.
 ///
 /// Sorts `arr` in place without heap allocations, but there is stack allocation with recursion.

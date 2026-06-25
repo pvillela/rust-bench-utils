@@ -3,17 +3,11 @@
 //! cargo test -r --test bench_run_validate --all-features -- with_batch no_batch --nocapture --test-threads=1
 
 use bench_utils::{
-    BenchCfg, FpSeconds, LatencyUnit, RunLength, latency_n,
-    load::BusyWork,
-    multi::BenchOut,
-    rel_approx_eq_fpsecs,
-    test_support::{AbsRelDiffFpSecs, midpoint_value, quickmedian},
+    BenchCfg, FpSeconds, LatencyUnit, RunLength, load::BusyWork, median_batch_latency,
+    multi::BenchOut, rel_approx_eq_fpsecs, test_support::AbsRelDiffFpSecs,
 };
 use log::debug;
-use std::{
-    array,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 trait FnsSrc<const K: usize>: Clone {
     fn f1(&self) -> impl FnMut();
@@ -41,8 +35,8 @@ fn run<const K: usize, R, Src>(
     let start = Instant::now();
 
     let fsrc1 = fsrc.clone();
-    let mut f1 = fsrc1.f1();
-    let mut f2 = fsrc1.f2();
+    let f1 = fsrc1.f1();
+    let f2 = fsrc1.f2();
     let base_effort = fsrc1.base_effort();
 
     let warmup_millis = base_warmup_millis * K as u64;
@@ -63,27 +57,37 @@ fn run<const K: usize, R, Src>(
 
     let v_batch = (out.n() as f64).sqrt().round() as usize;
     let v_n_batches = v_batch;
-    let mut v_latencies: [Vec<FpSeconds>; K] =
-        array::from_fn(|_| Vec::<FpSeconds>::with_capacity(v_batch));
+    // let mut v_latencies: [Vec<FpSeconds>; K] =
+    //     array::from_fn(|_| Vec::<FpSeconds>::with_capacity(v_n_batches));
 
-    if K >= 1 {
-        for _ in 0..v_n_batches {
-            v_latencies[0].push(FpSeconds::from_duration(latency_n(&mut f1, v_batch)) / v_batch);
-        }
-    }
-    if K == 2 {
-        for _ in 0..v_n_batches {
-            v_latencies[1].push(FpSeconds::from_duration(latency_n(&mut f2, v_batch)) / v_batch);
-        }
-    }
+    // if K >= 1 {
+    //     for _ in 0..v_n_batches {
+    //         v_latencies[0].push(FpSeconds::from_duration(latency_n(&mut f1, v_batch)) / v_batch);
+    //     }
+    // }
+    // if K == 2 {
+    //     for _ in 0..v_n_batches {
+    //         v_latencies[1].push(FpSeconds::from_duration(latency_n(&mut f2, v_batch)) / v_batch);
+    //     }
+    // }
 
-    let v_medians: Vec<_> = v_latencies
-        .iter_mut()
-        .map(|v_lat| {
-            quickmedian(v_lat);
-            midpoint_value(v_lat)
-        })
-        .collect();
+    // let v_medians: Vec<_> = v_latencies
+    //     .iter_mut()
+    //     .map(|v_lat| {
+    //         quickmedian(v_lat);
+    //         midpoint_value(v_lat)
+    //     })
+    //     .collect();
+    let v_medians: Vec<FpSeconds> = {
+        let mut vec = Vec::with_capacity(K);
+        if K >= 1 {
+            vec.push(median_batch_latency(f1, v_batch, v_n_batches));
+        }
+        if K == 2 {
+            vec.push(median_batch_latency(f2, v_batch, v_n_batches));
+        }
+        vec
+    };
 
     let base_target_fpsecs = FpSeconds::from_duration(base_target_latency);
 

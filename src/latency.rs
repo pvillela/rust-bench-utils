@@ -1,3 +1,4 @@
+use crate::dev_support::{midpoint_value, quickmedian};
 use log::trace;
 use std::{
     fmt::Debug,
@@ -22,6 +23,16 @@ pub fn latency_n(mut f: impl FnMut(), n: usize) -> Duration {
         f();
     }
     start.elapsed()
+}
+
+/// Returns the median of the latecies for the execution `n_batches` times of [`latency_n`]`(f, batch)`.
+pub fn median_batch_latency(mut f: impl FnMut(), batch: usize, n_batches: usize) -> FpSeconds {
+    let mut latencies: Vec<FpSeconds> = Vec::<FpSeconds>::with_capacity(n_batches);
+    for _ in 0..n_batches {
+        latencies.push(FpSeconds::from_duration(latency_n(&mut f, batch)) / batch);
+    }
+    quickmedian(&mut latencies);
+    midpoint_value(&latencies)
 }
 
 /// A floating point duration of seconds. Useful for representing duration values or fractions with
@@ -350,35 +361,69 @@ impl RunLength {
 /// In particular, this can happen if `src` is finite and its length is less than or equal to one half
 /// of the estimation budget count.
 pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: RunLength) -> f64 {
-    let (budget_count, budget_dur) = budget.exec_count_and_duration();
-    let budget_fps: FpSeconds = budget_dur.into();
-    let mut acc_latency = FpSeconds::ZERO;
-    let mut acc_execs: usize = 0;
+    let (warmup_count, warmup_fps, exec_count, exec_fps) = {
+        let (budget_count, budget_dur) = budget.exec_count_and_duration();
+        let warmup_count = budget_count / 2;
+        let exec_count = budget_count - warmup_count;
+        let warmup_fps: FpSeconds = (budget_dur / 2).into();
+        let exec_fps = FpSeconds::from_duration(budget_dur) - warmup_fps;
+        (warmup_count, warmup_fps, exec_count, exec_fps)
+    };
 
-    for i in 1.. {
-        let iter_execs = 2usize.pow(i - 1);
-        let iter_latency = (&mut src).take(iter_execs as usize).sum();
-        trace!("execs_per_sec >>> iter_execs={iter_execs}, iter_latency={iter_latency:?},",);
+    // Warm-up
+    {
+        for i in 1.. {
+            let mut acc_latency = FpSeconds::ZERO;
+            let mut acc_execs: usize = 0;
 
-        acc_latency += iter_latency;
-        acc_execs += iter_execs;
-        trace!("execs_per_sec >>> i={i}");
-        // Castings to f64 to avoid integer overflow or truncation to zero.
-        if iter_latency >= budget_fps / 3
-            || acc_latency >= budget_fps * (2.0 / 3.0)
-            || acc_execs as f64 >= budget_count as f64 * (2.0 / 3.0)
-        {
-            let iter_execs_per_sec = iter_execs as f64 / iter_latency.as_f64();
-            let acc_execs_per_sec = acc_execs as f64 / acc_latency.as_f64();
-            let execs_per_sec = iter_execs_per_sec.max(acc_execs_per_sec);
+            let iter_execs = 2usize.pow(i - 1);
+            let iter_latency = (&mut src).take(iter_execs as usize).sum();
             trace!(
-                "execs_per_sec >>> iter_execs_per_sec={iter_execs_per_sec}, acc_execs_per_sec={acc_execs_per_sec}, execs_per_sec={execs_per_sec}",
+                "execs_per_sec >>> warmup: iter_execs={iter_execs}, iter_latency={iter_latency:?},",
             );
-            return execs_per_sec;
+
+            acc_latency += iter_latency;
+            acc_execs += iter_execs;
+            trace!("execs_per_sec >>> i={i}");
+            if iter_latency >= warmup_fps / 3
+                || acc_latency >= warmup_fps * (2.0 / 3.0)
+                || acc_execs as f64 >= warmup_count as f64 * (2.0 / 3.0)
+            {
+                break;
+            }
         }
     }
 
-    unreachable!("above loop must return at some point")
+    // Execution
+    {
+        for i in 1.. {
+            let mut acc_latency = FpSeconds::ZERO;
+            let mut acc_execs: usize = 0;
+
+            let iter_execs = 2usize.pow(i - 1);
+            let iter_latency = (&mut src).take(iter_execs as usize).sum();
+            trace!("execs_per_sec >>> iter_execs={iter_execs}, iter_latency={iter_latency:?},",);
+
+            acc_latency += iter_latency;
+            acc_execs += iter_execs;
+            trace!("execs_per_sec >>> i={i}");
+            // Castings to f64 to avoid integer overflow or truncation to zero.
+            if iter_latency >= exec_fps / 3
+                || acc_latency >= exec_fps * (2.0 / 3.0)
+                || acc_execs as f64 >= exec_count as f64 * (2.0 / 3.0)
+            {
+                let iter_execs_per_sec = iter_execs as f64 / iter_latency.as_f64();
+                let acc_execs_per_sec = acc_execs as f64 / acc_latency.as_f64();
+                let execs_per_sec = iter_execs_per_sec.max(acc_execs_per_sec);
+                trace!(
+                    "execs_per_sec >>> iter_execs_per_sec={iter_execs_per_sec}, acc_execs_per_sec={acc_execs_per_sec}, execs_per_sec={execs_per_sec}",
+                );
+                return execs_per_sec;
+            }
+        }
+
+        unreachable!("above loop must return at some point")
+    }
 }
 
 #[cfg(test)]

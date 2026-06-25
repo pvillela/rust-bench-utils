@@ -51,18 +51,17 @@
 
 mod bench_cfg;
 mod bench_out;
+mod bench_run;
 mod comp;
 mod latency;
 mod summary_stats;
 
 pub use bench_cfg::*;
 pub use bench_out::*;
+pub use bench_run::*;
 pub use comp::*;
 pub use latency::*;
 pub use summary_stats::*;
-
-mod bench_run;
-pub use bench_run::*;
 
 pub mod duo;
 pub mod multi;
@@ -81,3 +80,5 @@ pub mod bench_support;
 
 #[cfg(feature = "_test_support")]
 pub mod test_support;
+
+pub(crate) mod dev_support;
