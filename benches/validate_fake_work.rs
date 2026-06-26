@@ -1,11 +1,10 @@
-use std::time::Duration;
-
 use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
-use bench_utils::{latency, load::fake_work};
+use bench_utils::latency;
+use std::{thread, time::Duration};
 
 fn main() {
     fn run(dur: Duration) -> (f64, f64) {
-        let latency_secs = latency(|| fake_work(dur)).as_secs_f64();
+        let latency_secs = latency(|| thread::sleep(dur)).as_secs_f64();
         let dur_secs = dur.as_secs_f64();
         let rel_diff = dur_secs.abs_rel_diff(latency_secs);
         println!(
