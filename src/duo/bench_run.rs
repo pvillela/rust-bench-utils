@@ -1,5 +1,5 @@
 use crate::{
-    BenchCfg, RunLength,
+    BenchCfg, RunLength, batch_run_length,
     duo::DuoOut,
     multi::{self, BenchOut, LatencySrc, LatencySrc1, LatencySrc1b, LatencySrc2, LatencySrc2b},
     status::Status,
@@ -121,6 +121,7 @@ pub fn bench_run_x_b<'a, S: Status<'a>>(
     s: S,
     batch: usize,
 ) -> DuoOut {
+    let run_length = batch_run_length(run_length, Some(batch));
     multi::bench_run_x(cfg, LatencySrc2b::new(f1, f2, batch), run_length, s).into()
 }
 
@@ -137,6 +138,7 @@ pub fn bench_run_b(
     run_length: RunLength,
     batch: usize,
 ) -> DuoOut {
+    let run_length = batch_run_length(run_length, Some(batch));
     multi::bench_run(LatencySrc2b::new(f1, f2, batch), run_length).into()
 }
 
@@ -154,6 +156,7 @@ pub fn bench_run_arg_cfg_b(
     run_length: RunLength,
     batch: usize,
 ) -> DuoOut {
+    let run_length = batch_run_length(run_length, Some(batch));
     multi::bench_run_arg_cfg(cfg, LatencySrc2b::new(f1, f2, batch), run_length).into()
 }
 
@@ -170,6 +173,7 @@ pub fn bench_run_with_status_b(
     run_length: RunLength,
     batch: usize,
 ) -> DuoOut {
+    let run_length = batch_run_length(run_length, Some(batch));
     multi::bench_run_with_status(LatencySrc2b::new(f1, f2, batch), run_length).into()
 }
 
@@ -187,6 +191,7 @@ pub fn bench_run_with_status_arg_cfg_b(
     run_length: RunLength,
     batch: usize,
 ) -> DuoOut {
+    let run_length = batch_run_length(run_length, Some(batch));
     multi::bench_run_with_status_arg_cfg(cfg, LatencySrc2b::new(f1, f2, batch), run_length).into()
 }
 
@@ -239,6 +244,7 @@ pub fn bench_run_parallel_b(
     run_length: RunLength,
     batch: usize,
 ) -> DuoOut {
+    let run_length = batch_run_length(run_length, Some(batch));
     let cfg = BenchCfg::default();
     bench_run_parallel_arg_cfg_b(&cfg, f1, f2, run_length, batch)
 }
@@ -257,6 +263,7 @@ pub fn bench_run_parallel_arg_cfg_b(
     run_length: RunLength,
     batch: usize,
 ) -> DuoOut {
+    let run_length = batch_run_length(run_length, Some(batch));
     let src1 = LatencySrc1b::new(f1, batch);
     let src2 = LatencySrc1b::new(f2, batch);
     bench_run_parallel_src_arg_cfg(cfg, src1, src2, run_length)

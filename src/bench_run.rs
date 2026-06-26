@@ -92,6 +92,19 @@ pub fn bench_run_with_status_arg_cfg(
     multi::bench_run_with_status_arg_cfg(cfg, LatencySrc1::new(f), run_length).into()
 }
 
+pub(crate) fn batch_run_length(run_length: RunLength, batch: Option<usize>) -> RunLength {
+    match batch {
+        None => run_length,
+        Some(batch) => match run_length {
+            RunLength::Count(count) => RunLength::Count(count.div_ceil(batch)),
+            RunLength::Time(_) => run_length,
+            RunLength::CountWithTimeout(count, time) => {
+                RunLength::CountWithTimeout(count.div_ceil(batch), time)
+            }
+        },
+    }
+}
+
 /// Similar to [`bench_run_x`] but batches the executions of `f` into groups of size `batch`.
 ///
 /// Batching may reduce measurement overhead.
@@ -106,6 +119,7 @@ pub fn bench_run_x_b<'a, S: Status<'a>>(
     s: S,
     batch: usize,
 ) -> BenchOut {
+    let run_length = batch_run_length(run_length, Some(batch));
     multi::bench_run_x(cfg, LatencySrc1b::new(f, batch), run_length, s).into()
 }
 
@@ -117,6 +131,7 @@ pub fn bench_run_x_b<'a, S: Status<'a>>(
 /// However, a potential consequence is that the statistical tests provided by [`BenchOut`] may be somewhat
 /// distorted as the resulting distribution may no longer be approximately logormal.
 pub fn bench_run_b(f: impl FnMut(), run_length: RunLength, batch: usize) -> BenchOut {
+    let run_length = batch_run_length(run_length, Some(batch));
     multi::bench_run(LatencySrc1b::new(f, batch), run_length).into()
 }
 
@@ -133,6 +148,7 @@ pub fn bench_run_arg_cfg_b(
     run_length: RunLength,
     batch: usize,
 ) -> BenchOut {
+    let run_length = batch_run_length(run_length, Some(batch));
     multi::bench_run_arg_cfg(cfg, LatencySrc1b::new(f, batch), run_length).into()
 }
 
@@ -144,6 +160,7 @@ pub fn bench_run_arg_cfg_b(
 /// However, a potential consequence is that the statistical tests provided by [`BenchOut`] may be somewhat
 /// distorted as the resulting distribution may no longer be approximately logormal.
 pub fn bench_run_with_status_b(f: impl FnMut(), run_length: RunLength, batch: usize) -> BenchOut {
+    let run_length = batch_run_length(run_length, Some(batch));
     multi::bench_run_with_status(LatencySrc1b::new(f, batch), run_length).into()
 }
 
@@ -160,6 +177,7 @@ pub fn bench_run_with_status_arg_cfg_b(
     run_length: RunLength,
     batch: usize,
 ) -> BenchOut {
+    let run_length = batch_run_length(run_length, Some(batch));
     multi::bench_run_with_status_arg_cfg(cfg, LatencySrc1b::new(f, batch), run_length).into()
 }
 

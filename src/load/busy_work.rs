@@ -242,7 +242,7 @@ mod validate_latency {
 /// `effort` attributes. Checking is based on the cumulative latencies over a number of `repeats`.
 mod validate_ratio {
     use super::*;
-    use crate::median_batch_latency;
+    use crate::{BenchCfg, LatencyUnit::SubSec, duo};
     use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
 
     fn run(dur1: Duration, ratio: f64, count: usize, samp_size: usize) -> f64 {
@@ -252,17 +252,21 @@ mod validate_ratio {
         let f2 = BusyWork::fun(effort2);
 
         let batch = batch_for_samp_size(samp_size, count);
-        let n_batches = count.div_ceil(batch);
+        let cfg = BenchCfg::default().with_recording_unit(SubSec(11));
 
-        let latency1 = median_batch_latency(f1, batch, n_batches);
-        let latency2 = median_batch_latency(f2, batch, n_batches);
+        let out = duo::bench_run_arg_cfg_b(&cfg, f1, f2, RunLength::Count(count), batch);
 
-        let latency_ratio = latency2.as_f64() / latency1.as_f64();
+        let latency_ratio = 1.0 / out.ratio_medians_f1_f2();
         let rel_diff = latency_ratio.abs_rel_diff(ratio);
 
         println!(
-            "dur1={:?}, latency_ratio={}, ratio={}, rel_diff={}",
-            dur1, latency_ratio, ratio, rel_diff
+            "out_f1().median()={:?}, out_f2().median()={:?}",
+            out.out_f1().median(),
+            out.out_f2().median()
+        );
+
+        println!(
+            "dur1={dur1:?}, effort1={effort1}, effort2={effort2}, target_ratio={ratio}, latency_ratio={latency_ratio}, rel_diff={rel_diff}",
         );
 
         latency_ratio
@@ -274,7 +278,7 @@ mod validate_ratio {
     #[test]
     fn test_busy_work_ratio_10_nano() {
         const EPSILON: f64 = 0.05;
-        const SAMP_SIZE: usize = 100;
+        const SAMP_SIZE: usize = 1000;
         let dur1 = Duration::from_nanos(10);
         let count = 50_000_000;
         let latency_ratio = run(dur1, RATIO, count, SAMP_SIZE);
@@ -284,10 +288,10 @@ mod validate_ratio {
     // cargo test -r --lib --all-features -- busy_work::validate_ratio::test_busy_work_ratio_100_nano --nocapture --test-threads=1
     #[test]
     fn test_busy_work_ratio_100_nano() {
-        const EPSILON: f64 = 0.35;
-        const SAMP_SIZE: usize = 100;
+        const EPSILON: f64 = 0.05;
+        const SAMP_SIZE: usize = 1000;
         let dur1 = Duration::from_nanos(100);
-        let count = 50_000_000;
+        let count = 5_000_000;
         let latency_ratio = run(dur1, RATIO, count, SAMP_SIZE);
         rel_approx_eq!(latency_ratio, RATIO, EPSILON);
     }
