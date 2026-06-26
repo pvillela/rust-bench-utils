@@ -25,7 +25,7 @@ impl BenchCfg {
     /// Default status reporting interval in milliseconds.
     pub const DEFAULT_STATUS_MILLIS: u64 = 1000;
     /// Default unit for recording latencies.
-    pub const DEFAULT_RECORDING_UNIT: LatencyUnit = LatencyUnit::Nano;
+    pub const DEFAULT_RECORDING_UNIT: LatencyUnit = LatencyUnit::NANO;
     /// Default number of significant decimal digits for the HDR histogram.
     pub const DEFAULT_SIGFIG: u8 = 3;
 
@@ -208,13 +208,13 @@ mod test {
     #[test]
     fn test_bench_cfg_builder_method_chaining() {
         let cfg = BenchCfg::default()
-            .with_recording_unit(LatencyUnit::Micro)
+            .with_recording_unit(LatencyUnit::MICRO)
             .with_warmup_millis(100)
             .with_sigfig(5)
             .with_status_millis(200);
 
         assert_eq!(cfg.warmup_millis(), 100);
-        assert_eq!(cfg.recording_unit(), LatencyUnit::Micro);
+        assert_eq!(cfg.recording_unit(), LatencyUnit::MICRO);
         assert_eq!(cfg.sigfig(), 5);
         assert_eq!(200, cfg.status_millis);
     }

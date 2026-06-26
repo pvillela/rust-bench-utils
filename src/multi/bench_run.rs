@@ -273,7 +273,7 @@ mod status {
         let cfg = BenchCfg::default()
             .with_warmup_millis(warmup_millis)
             .with_status_millis(status_millis)
-            .with_recording_unit(LatencyUnit::Nano);
+            .with_recording_unit(LatencyUnit::NANO);
 
         let mut w = StringWriter::new();
         let status = DefaultStatus::new(
@@ -680,7 +680,7 @@ mod simple_tests {
         BenchCfg::default()
             .with_warmup_millis(0)
             .with_status_millis(1)
-            .with_recording_unit(LatencyUnit::Nano)
+            .with_recording_unit(LatencyUnit::NANO)
     }
 
     #[test]

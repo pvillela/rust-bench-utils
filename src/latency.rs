@@ -194,65 +194,50 @@ impl Debug for FpSeconds {
 
 /// Unit of time used to record latencies. Used as an argument in benchmarking functions.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum LatencyUnit {
-    /// Picoseconds.
-    Pico,
-    /// Nanoseconds.
-    Nano,
-    /// Microseconds.
-    Micro,
-    /// Milliseconds.
-    Milli,
-    /// Seconds.
-    Sec,
-    /// Seconds * 1e-n, where `n` is the variant's single field.
-    SubSec(u8),
-}
+pub struct LatencyUnit(u8);
 
 impl LatencyUnit {
+    /// Seconds * 1e-n, where `n` is the variant's single field.
+    pub const fn sub_sec(n: u8) -> LatencyUnit {
+        LatencyUnit(n)
+    }
+
+    /// Picoseconds.
+    pub const PICO: LatencyUnit = Self::sub_sec(12);
+    /// Nanoseconds.
+    pub const NANO: LatencyUnit = Self::sub_sec(9);
+    /// Microseconds.
+    pub const MICRO: LatencyUnit = Self::sub_sec(6);
+    /// Milliseconds.
+    pub const MILLI: LatencyUnit = Self::sub_sec(3);
+    /// Seconds.
+    pub const SEC: LatencyUnit = Self::sub_sec(0);
+
     /// Converts a [`Duration`] to a `u64` value according to the unit `self`.
     #[inline(always)]
     pub fn value_from_duration(&self, dur: Duration) -> u64 {
-        match self {
-            Self::Pico => dur.as_nanos() as u64 * 1000,
-            Self::Nano => dur.as_nanos() as u64,
-            Self::Micro => dur.as_micros() as u64,
-            Self::Milli => dur.as_millis() as u64,
-            Self::Sec => dur.as_secs(),
-            Self::SubSec(n) => {
-                let n = *n as u32;
-                match n {
-                    0 => Duration::as_secs(&dur),
-                    _ if n <= 3 => (Duration::as_millis(&dur) / 10_u128.pow(3 - n)) as u64,
-                    _ if n <= 6 => (Duration::as_micros(&dur) / 10_u128.pow(6 - 3)) as u64,
-                    _ if n <= 9 => (Duration::as_nanos(&dur) / 10_u128.pow(9 - n)) as u64,
-                    _ if 9 < n => (Duration::as_nanos(&dur) * 10_u128.pow(n - 9)) as u64,
-                    _ => unreachable!(),
-                }
-            }
+        let n = self.0 as u32;
+        match n {
+            0 => Duration::as_secs(&dur),
+            _ if n <= 3 => (Duration::as_millis(&dur) / 10_u128.pow(3 - n)) as u64,
+            _ if n <= 6 => (Duration::as_micros(&dur) / 10_u128.pow(6 - 3)) as u64,
+            _ if n <= 9 => (Duration::as_nanos(&dur) / 10_u128.pow(9 - n)) as u64,
+            _ if 9 < n => (Duration::as_nanos(&dur) * 10_u128.pow(n - 9)) as u64,
+            _ => unreachable!(),
         }
     }
 
     /// Converts a `u64` value to a [`Duration`] according to the unit `self`.
     #[inline(always)]
     pub fn duration_from_value(&self, elapsed: u64) -> Duration {
-        match self {
-            Self::Pico => Duration::from_nanos(elapsed / 1000),
-            Self::Nano => Duration::from_nanos(elapsed),
-            Self::Micro => Duration::from_micros(elapsed),
-            Self::Milli => Duration::from_millis(elapsed),
-            Self::Sec => Duration::from_secs(elapsed),
-            Self::SubSec(n) => {
-                let n = *n as u32;
-                match n {
-                    0 => Duration::from_secs(elapsed),
-                    _ if n <= 3 => Duration::from_millis(elapsed * 10_u64.pow(3 - n)),
-                    _ if n <= 6 => Duration::from_micros(elapsed * 10_u64.pow(6 - n)),
-                    _ if n <= 9 => Duration::from_micros(elapsed * 10_u64.pow(9 - n)),
-                    _ if 9 < n => Duration::from_nanos(elapsed / 10_u64.pow(n - 9)),
-                    _ => unreachable!(),
-                }
-            }
+        let n = self.0 as u32;
+        match n {
+            0 => Duration::from_secs(elapsed),
+            _ if n <= 3 => Duration::from_millis(elapsed * 10_u64.pow(3 - n)),
+            _ if n <= 6 => Duration::from_micros(elapsed * 10_u64.pow(6 - n)),
+            _ if n <= 9 => Duration::from_micros(elapsed * 10_u64.pow(9 - n)),
+            _ if 9 < n => Duration::from_nanos(elapsed / 10_u64.pow(n - 9)),
+            _ => unreachable!(),
         }
     }
 
@@ -270,26 +255,12 @@ impl LatencyUnit {
 
     /// Multiplicative factor to convert seconds to the latency unit.
     pub fn factor_from_secs(&self) -> f64 {
-        match self {
-            Self::Pico => 1e12,
-            Self::Nano => 1e9,
-            Self::Micro => 1e6,
-            Self::Milli => 1e3,
-            Self::Sec => 1.0,
-            Self::SubSec(n) => 10.0_f64.powi(*n as i32),
-        }
+        10.0_f64.powi(self.0 as i32)
     }
 
     /// Multiplicative factor to convert the latency unit to seconds.
     pub fn factor_to_secs(&self) -> f64 {
-        match self {
-            Self::Pico => 1e-12,
-            Self::Nano => 1e-9,
-            Self::Micro => 1e-6,
-            Self::Milli => 1e-3,
-            Self::Sec => 1.0,
-            Self::SubSec(n) => 10.0_f64.powi(-(*n as i32)),
-        }
+        10.0_f64.powi(-(self.0 as i32))
     }
 }
 
@@ -487,38 +458,38 @@ mod test_latency_unit {
     #[test]
     fn latency_unit_as_u64() {
         let dur = Duration::new(1, 500_000_000); // 1.5 seconds
-        assert_eq!(1500, LatencyUnit::Milli.value_from_duration(dur));
-        assert_eq!(1_500_000, LatencyUnit::Micro.value_from_duration(dur));
-        assert_eq!(1_500_000_000, LatencyUnit::Nano.value_from_duration(dur));
+        assert_eq!(1500, LatencyUnit::MILLI.value_from_duration(dur));
+        assert_eq!(1_500_000, LatencyUnit::MICRO.value_from_duration(dur));
+        assert_eq!(1_500_000_000, LatencyUnit::NANO.value_from_duration(dur));
 
         let zero = Duration::ZERO;
-        assert_eq!(0, LatencyUnit::Milli.value_from_duration(zero));
-        assert_eq!(0, LatencyUnit::Micro.value_from_duration(zero));
-        assert_eq!(0, LatencyUnit::Nano.value_from_duration(zero));
+        assert_eq!(0, LatencyUnit::MILLI.value_from_duration(zero));
+        assert_eq!(0, LatencyUnit::MICRO.value_from_duration(zero));
+        assert_eq!(0, LatencyUnit::NANO.value_from_duration(zero));
     }
 
     #[test]
     fn latency_unit_from_u64_roundtrip() {
         // Milli round-trip
-        let dur = LatencyUnit::Milli.duration_from_value(42);
-        assert_eq!(42, LatencyUnit::Milli.value_from_duration(dur));
+        let dur = LatencyUnit::MILLI.duration_from_value(42);
+        assert_eq!(42, LatencyUnit::MILLI.value_from_duration(dur));
 
         // Micro round-trip
-        let dur = LatencyUnit::Micro.duration_from_value(42);
-        assert_eq!(42, LatencyUnit::Micro.value_from_duration(dur));
+        let dur = LatencyUnit::MICRO.duration_from_value(42);
+        assert_eq!(42, LatencyUnit::MICRO.value_from_duration(dur));
 
         // Nano round-trip
-        let dur = LatencyUnit::Nano.duration_from_value(42);
-        assert_eq!(42, LatencyUnit::Nano.value_from_duration(dur));
+        let dur = LatencyUnit::NANO.duration_from_value(42);
+        assert_eq!(42, LatencyUnit::NANO.value_from_duration(dur));
 
         // Zero
-        let dur = LatencyUnit::Micro.duration_from_value(0);
-        assert_eq!(0, LatencyUnit::Micro.value_from_duration(dur));
+        let dur = LatencyUnit::MICRO.duration_from_value(0);
+        assert_eq!(0, LatencyUnit::MICRO.value_from_duration(dur));
 
         // Large value (fits exactly in Duration)
         let val: u64 = 1_000_000_000_000_000; // 10^15 nanos = ~11.6 days
-        let dur = LatencyUnit::Nano.duration_from_value(val);
-        assert_eq!(val, LatencyUnit::Nano.value_from_duration(dur));
+        let dur = LatencyUnit::NANO.duration_from_value(val);
+        assert_eq!(val, LatencyUnit::NANO.value_from_duration(dur));
     }
 }
 

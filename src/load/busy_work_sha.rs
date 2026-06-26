@@ -117,6 +117,7 @@ impl BusyWork {
     }
 }
 
+#[allow(unused)]
 #[cfg(test)]
 fn batch_for_samp_size(samp_size: usize, total_count: usize) -> usize {
     assert!(
@@ -239,7 +240,7 @@ mod validate_latency {
 /// `effort` attributes. Checking is based on the cumulative latencies over a number of `repeats`.
 mod validate_ratio {
     use super::*;
-    use crate::{BenchCfg, LatencyUnit::SubSec, duo};
+    use crate::{BenchCfg, LatencyUnit, duo};
     use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
 
     fn run(dur1: Duration, ratio: f64, count: usize, samp_size: usize) -> f64 {
@@ -252,7 +253,7 @@ mod validate_ratio {
 
         let batch = batch_for_samp_size(samp_size, count);
         let cfg = BenchCfg::default()
-            .with_recording_unit(SubSec(11))
+            .with_recording_unit(LatencyUnit::sub_sec(11))
             .with_warmup_millis(100);
 
         let out = duo::bench_run_arg_cfg_b(&cfg, f1, f2, RunLength::Count(count), batch);

@@ -438,7 +438,7 @@ mod test {
         let lognormal_samp = lognormal_samp(mu, sigma, samp_size);
         let out = BenchOut::from_iter(&cfg, lognormal_samp);
 
-        assert_eq!(ru, LatencyUnit::Nano);
+        assert_eq!(ru, LatencyUnit::NANO);
         assert_eq!(out.n() as usize, samp_size);
 
         let normal = Normal::new(mu, sigma).unwrap();
@@ -512,7 +512,7 @@ mod test {
         let normal_samp = normal_detm_samp(mu, sigma, samp_size).unwrap();
         let moments_ln = SampleMoments::from_iterator(normal_samp);
 
-        assert_eq!(out.recording_unit(), LatencyUnit::Nano);
+        assert_eq!(out.recording_unit(), LatencyUnit::NANO);
         assert_eq!(out.n() as usize, samp_size);
 
         // The true median should lie inside the CI

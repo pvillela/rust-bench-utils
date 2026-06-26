@@ -236,7 +236,7 @@ mod simple_tests {
         BenchCfg::default()
             .with_warmup_millis(0)
             .with_status_millis(1)
-            .with_recording_unit(LatencyUnit::Nano)
+            .with_recording_unit(LatencyUnit::NANO)
     }
 
     #[test]

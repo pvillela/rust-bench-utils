@@ -367,10 +367,10 @@ mod test {
     fn test_comp_new_panics_on_recording_unit_mismatch() {
         let result = {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let cfg1 = BenchCfg::default().with_recording_unit(LatencyUnit::Nano);
+                let cfg1 = BenchCfg::default().with_recording_unit(LatencyUnit::NANO);
                 let out1 = lognormal_out(&cfg1, 8., *LO_STDEV_LN, 5);
 
-                let cfg2 = cfg1.with_recording_unit(LatencyUnit::Micro);
+                let cfg2 = cfg1.with_recording_unit(LatencyUnit::MICRO);
                 let out2 = lognormal_out(&cfg2, 8., *LO_STDEV_LN, 5);
 
                 Comp::new(&out1, &out2);

@@ -36,9 +36,9 @@ pub fn get_args() -> Args {
 
     let latency_unit_str = with_default(env::var("LATENCY_UNIT"), "micro");
     let latency_unit = match latency_unit_str.to_lowercase() {
-        s if s == "nano" => LatencyUnit::Nano,
-        s if s == "micro" => LatencyUnit::Micro,
-        s if s == "milli" => LatencyUnit::Milli,
+        s if s == "nano" => LatencyUnit::NANO,
+        s if s == "micro" => LatencyUnit::MICRO,
+        s if s == "milli" => LatencyUnit::MILLI,
         s => panic!("invalid LATENCY_UNIT environment variable value: {s}"),
     };
 
