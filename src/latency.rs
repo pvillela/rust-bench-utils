@@ -220,7 +220,7 @@ impl LatencyUnit {
         match n {
             0 => Duration::as_secs(&dur),
             _ if n <= 3 => (Duration::as_millis(&dur) / 10_u128.pow(3 - n)) as u64,
-            _ if n <= 6 => (Duration::as_micros(&dur) / 10_u128.pow(6 - 3)) as u64,
+            _ if n <= 6 => (Duration::as_micros(&dur) / 10_u128.pow(6 - n)) as u64,
             _ if n <= 9 => (Duration::as_nanos(&dur) / 10_u128.pow(9 - n)) as u64,
             _ if 9 < n => (Duration::as_nanos(&dur) * 10_u128.pow(n - 9)) as u64,
             _ => unreachable!(),
@@ -235,7 +235,7 @@ impl LatencyUnit {
             0 => Duration::from_secs(elapsed),
             _ if n <= 3 => Duration::from_millis(elapsed * 10_u64.pow(3 - n)),
             _ if n <= 6 => Duration::from_micros(elapsed * 10_u64.pow(6 - n)),
-            _ if n <= 9 => Duration::from_micros(elapsed * 10_u64.pow(9 - n)),
+            _ if n <= 9 => Duration::from_nanos(elapsed * 10_u64.pow(9 - n)),
             _ if 9 < n => Duration::from_nanos(elapsed / 10_u64.pow(n - 9)),
             _ => unreachable!(),
         }
