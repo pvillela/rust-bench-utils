@@ -529,12 +529,12 @@ mod test_execs_per_second {
     fn src_small_finite() {
         _ = env_logger::try_init();
 
-        const COUNT: usize = 1;
-        let iter_len = (COUNT as f64).sqrt() as usize;
+        const COUNT: usize = 1000;
+        let iter_len = COUNT;
         let target_latency = FpSeconds::from_secs(10);
         let mut src = LognormalLatencySrc::new_with_default_sigmas(1, [target_latency]);
-        let eps = execs_per_sec(src.aggregate().take(iter_len), RunLength::Count(1000));
-        assert!(eps.is_finite(), "should be finite: eps={eps}");
+        let eps = execs_per_sec(src.aggregate().take(iter_len), RunLength::Count(COUNT));
+        assert!(eps.is_infinite(), "should be infinite: eps={eps}");
     }
 
     // cargo test --package bench_utils --lib --all-features -- latency::test_execs_per_second::src_infinite_zero --exact --nocapture --include-ignored
