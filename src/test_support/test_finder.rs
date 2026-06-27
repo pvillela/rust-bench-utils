@@ -1,3 +1,7 @@
+//! Types and functions to support listing of test functions that are gated by the "_bench" feature.
+//!
+//! Gated by feature **"_test_support"**.
+
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::Path;
@@ -150,6 +154,9 @@ pub fn print_test_functions<P: AsRef<Path>>(path: P) -> Result<(), Box<dyn std::
     Ok(())
 }
 
+/// Lists all qualifying tests under a given directory path.
+///
+/// This function is equivalent to the one below but depends on crate `walkdir`.
 pub fn process_directory_tests<P: AsRef<Path>>(dir: P) -> Result<(), Box<dyn std::error::Error>> {
     for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
@@ -165,6 +172,9 @@ pub fn process_directory_tests<P: AsRef<Path>>(dir: P) -> Result<(), Box<dyn std
     Ok(())
 }
 
+/// Lists all qualifying tests under a given directory path.
+///
+/// This function is equivalent to the one above but depends only on the `std` crate.
 pub fn process_directory_tests_std<P: AsRef<Path>>(
     dir: P,
 ) -> Result<(), Box<dyn std::error::Error>> {

@@ -117,23 +117,14 @@ impl BusyWork {
     }
 }
 
-#[allow(unused)]
-#[cfg(test)]
-fn batch_for_samp_size(samp_size: usize, total_count: usize) -> usize {
-    assert!(
-        total_count >= samp_size,
-        "batch_for_samp_size >>> total_count={total_count} must be >= samp_size={samp_size}"
-    );
-    total_count / samp_size
-}
-
 #[cfg(test)]
 #[cfg(feature = "_bench")]
 /// cargo test -r --lib --all-features -- load::busy_work_sha::validate_latency --nocapture --test-threads=1
 mod validate_latency {
     use super::*;
     use crate::{
-        FpSeconds, median_batch_latency, rel_approx_eq_fpsecs, test_support::AbsRelDiffFpSecs,
+        FpSeconds, median_batch_latency, rel_approx_eq_fpsecs,
+        test_support::{AbsRelDiffFpSecs, batch_for_samp_size},
     };
 
     fn run(dur: Duration, count: usize, samp_size: usize) -> (FpSeconds, FpSeconds) {
@@ -240,7 +231,7 @@ mod validate_latency {
 /// `effort` attributes. Checking is based on the cumulative latencies over a number of `repeats`.
 mod validate_ratio {
     use super::*;
-    use crate::{BenchCfg, LatencyUnit, duo};
+    use crate::{BenchCfg, LatencyUnit, duo, test_support::batch_for_samp_size};
     use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
 
     fn run(dur1: Duration, ratio: f64, count: usize, samp_size: usize) -> f64 {
