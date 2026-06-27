@@ -64,6 +64,7 @@ _test_support = [
 _experimental = [
     "basic_stats/wilcoxon",
 ] # functionality developed but not intended for clients
+_ignore = [] # to mark test modules to be skipped
 
 ## Shared with friends
 _bench_diff = ["_experimental"] # for use by `bench_diff` crate

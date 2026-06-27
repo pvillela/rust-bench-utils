@@ -4,7 +4,7 @@
 
 use crate::{BenchCfg, BenchOut, FpSeconds};
 use basic_stats::{core::SampleMoments, normal::normal_detm_samp};
-use std::{io::Write, sync::LazyLock};
+use std::{io::Write, sync::LazyLock, time::Duration};
 
 /// Low log-standard-deviation value for test sample generation.
 ///
@@ -203,4 +203,10 @@ pub fn batch_for_samp_size(samp_size: usize, total_count: usize) -> usize {
         "batch_for_samp_size >>> total_count={total_count} must be >= samp_size={samp_size}"
     );
     total_count / samp_size
+}
+
+/// Returns the batch size required for the batched execution of target latency `tgt_ltncy` to equal or
+/// exceed `acc_ltncy`.
+pub fn batch_for_acc_ltncy(tgt_ltncy: Duration, acc_ltncy: Duration) -> usize {
+    acc_ltncy.as_nanos().div_ceil(tgt_ltncy.as_nanos()) as usize
 }
