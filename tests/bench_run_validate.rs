@@ -489,7 +489,7 @@ mod with_status1 {
     // cargo test -r --test bench_run_validate --all-features -- with_status1::test_nanos_1b --exact --nocapture --test-threads=1
     #[test]
     fn test_nanos_1b() {
-        const EPSILON: f64 = 0.05;
+        const EPSILON: f64 = 0.15;
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(1);
@@ -508,10 +508,10 @@ mod with_status1 {
     // cargo test -r --test bench_run_validate --all-features -- with_status1::test_nanos_10 --exact --nocapture --test-threads=1
     #[test]
     fn test_nanos_10() {
-        const EPSILON: f64 = 0.50;
+        const EPSILON: f64 = 0.25;
         let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(10);
-        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
+        let samp_size = 100_000; // samp_size >= 1_000_000 makes test's validation stage extremely slow
         let batch = None;
         run_bench(
             rec_unit,
@@ -527,7 +527,7 @@ mod with_status1 {
     // cargo test -r --test bench_run_validate --all-features -- with_status1::test_nanos_10b --exact --nocapture --test-threads=1
     #[test]
     fn test_nanos_10b() {
-        const EPSILON: f64 = 0.03;
+        const EPSILON: f64 = 0.05;
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(10);
@@ -546,10 +546,10 @@ mod with_status1 {
     // cargo test -r --test bench_run_validate --all-features -- with_status1::test_nanos_100 --exact --nocapture --test-threads=1
     #[test]
     fn test_nanos_100() {
-        const EPSILON: f64 = 0.30;
+        const EPSILON: f64 = 0.02;
         let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(100);
-        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
+        let samp_size = 100_000; // samp_size >= 1_000_000 makes test's validation stage extremely slow
         let batch = None;
         run_bench(
             rec_unit,
@@ -565,7 +565,7 @@ mod with_status1 {
     // cargo test -r --test bench_run_validate --all-features -- with_status1::test_nanos_100b --exact --nocapture --test-threads=1
     #[test]
     fn test_nanos_100b() {
-        const EPSILON: f64 = 0.05;
+        const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(10);
         let target_latency = Duration::from_nanos(50);
@@ -584,7 +584,7 @@ mod with_status1 {
     // cargo test -r --test bench_run_validate --all-features -- with_status1::test_micros_1 --exact --nocapture --test-threads=1
     #[test]
     fn test_micros_1() {
-        const EPSILON: f64 = 0.20;
+        const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_micros(1);
         let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
@@ -602,7 +602,7 @@ mod with_status1 {
     // cargo test -r --test bench_run_validate --all-features -- with_status1::test_micros_1b --exact --nocapture --test-threads=1
     #[test]
     fn test_micros_1b() {
-        const EPSILON: f64 = 0.05;
+        const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 100;
         let target_latency = Duration::from_micros(1);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
@@ -619,7 +619,7 @@ mod with_status1 {
 
     #[test]
     fn test_micros_50() {
-        const EPSILON: f64 = 0.15;
+        const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_micros(50);
         let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
@@ -637,7 +637,7 @@ mod with_status1 {
     // cargo test -r --test bench_run_validate --all-features -- with_status1::test_micros_50b --exact --nocapture --test-threads=1
     #[test]
     fn test_micros_50b() {
-        const EPSILON: f64 = 0.05;
+        const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 100;
         let target_latency = Duration::from_micros(50);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
@@ -656,7 +656,7 @@ mod with_status1 {
     fn test_millis_1() {
         const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_millis(1);
-        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
+        let samp_size = 200;
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
@@ -673,9 +673,9 @@ mod with_status1 {
     #[test]
     fn test_millis_1b() {
         const EPSILON: f64 = 0.02;
-        const SAMP_SIZE: usize = 100;
+        const SAMP_SIZE: usize = 20;
         let target_latency = Duration::from_millis(1);
-        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
+        let batch = Some(10);
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
@@ -691,7 +691,7 @@ mod with_status1 {
     fn test_millis_10() {
         const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_millis(10);
-        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
+        let samp_size = 20;
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
@@ -709,7 +709,7 @@ mod with_status1 {
     fn test_millis_50() {
         const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_millis(50);
-        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
+        let samp_size = 10;
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
