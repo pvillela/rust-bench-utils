@@ -205,8 +205,8 @@ pub fn batch_for_samp_size(samp_size: usize, total_count: usize) -> usize {
     total_count / samp_size
 }
 
-/// Returns the batch size required for the batched execution of target latency `tgt_ltncy` to equal or
+/// Returns the count required for the repeated execution of target latency `tgt_ltncy` to equal or
 /// exceed `acc_ltncy`.
-pub fn batch_for_acc_ltncy(tgt_ltncy: Duration, acc_ltncy: Duration) -> usize {
+pub fn count_for_acc_ltncy(tgt_ltncy: Duration, acc_ltncy: Duration) -> usize {
     acc_ltncy.as_nanos().div_ceil(tgt_ltncy.as_nanos()) as usize
 }

@@ -67,6 +67,9 @@ pub mod duo;
 pub mod multi;
 pub mod status;
 
+#[doc(hidden)]
+pub mod dev_support;
+
 #[cfg(feature = "load")]
 pub mod load;
 
@@ -80,5 +83,3 @@ pub mod bench_support;
 
 #[cfg(feature = "_test_support")]
 pub mod test_support;
-
-pub(crate) mod dev_support;

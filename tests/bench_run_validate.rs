@@ -4,14 +4,18 @@
 
 use bench_utils::{
     BenchCfg, FpSeconds, LatencyUnit, RunLength,
+    dev_support::{midpoint_value, quickmedian},
+    latency_n,
     load::BusyWork,
-    median_batch_latency,
     multi::BenchOut,
     rel_approx_eq_fpsecs,
-    test_support::{AbsRelDiffFpSecs, batch_for_samp_size},
+    test_support::{AbsRelDiffFpSecs, count_for_acc_ltncy},
 };
 use log::debug;
-use std::time::{Duration, Instant};
+use std::{
+    array,
+    time::{Duration, Instant},
+};
 
 trait FnsSrc<const K: usize>: Clone {
     fn f1(&self) -> impl FnMut();
@@ -25,8 +29,8 @@ fn run<const K: usize, R, Src>(
     fsrc: Src,
     base_warmup_millis: u64,
     base_status_millis: u64,
-    base_bench_time: Duration,
     base_target_latency: Duration,
+    samp_size: usize,
     batch: Option<usize>,
     epsilon: f64,
 ) where
@@ -39,59 +43,43 @@ fn run<const K: usize, R, Src>(
     let start = Instant::now();
 
     let fsrc1 = fsrc.clone();
-    let f1 = fsrc1.f1();
-    let f2 = fsrc1.f2();
+    let mut f1 = fsrc1.f1();
+    let mut f2 = fsrc1.f2();
     let base_effort = fsrc1.base_effort();
 
     let warmup_millis = base_warmup_millis * K as u64;
-    let bench_time = base_bench_time * K as u32;
     let status_millis = base_status_millis * K as u64;
+    let count = batch.unwrap_or(1) * samp_size;
 
     println!(
-        "validate_bench_run: K={K}, rec_unit={rec_unit:?}, base_target_latency={base_target_latency:?}, base_effort={base_effort}, warmup={warmup_millis}, bench_time={bench_time:?}, batch={batch:?}"
+        "validate_bench_run: K={K}, rec_unit={rec_unit:?}, base_target_latency={base_target_latency:?}, base_effort={base_effort}, warmup={warmup_millis}, batch={batch:?}, samp_size={samp_size}"
     );
 
     let cfg = BenchCfg::default()
         .with_warmup_millis(warmup_millis)
         .with_status_millis(status_millis)
         .with_recording_unit(rec_unit);
-    let out = runner(&cfg, fsrc, RunLength::Time(bench_time), batch);
+    let out = runner(&cfg, fsrc, RunLength::Count(count), batch);
 
     //=== The `v_*` variables are used to validate the bench_run output.
 
-    let v_batch = (out.n() as f64).sqrt().round() as usize;
-    let v_n_batches = v_batch;
-    // let mut v_latencies: [Vec<FpSeconds>; K] =
-    //     array::from_fn(|_| Vec::<FpSeconds>::with_capacity(v_n_batches));
-
-    // if K >= 1 {
-    //     for _ in 0..v_n_batches {
-    //         v_latencies[0].push(FpSeconds::from_duration(latency_n(&mut f1, v_batch)) / v_batch);
-    //     }
-    // }
-    // if K == 2 {
-    //     for _ in 0..v_n_batches {
-    //         v_latencies[1].push(FpSeconds::from_duration(latency_n(&mut f2, v_batch)) / v_batch);
-    //     }
-    // }
-
-    // let v_medians: Vec<_> = v_latencies
-    //     .iter_mut()
-    //     .map(|v_lat| {
-    //         quickmedian(v_lat);
-    //         midpoint_value(v_lat)
-    //     })
-    //     .collect();
-    let v_medians: Vec<FpSeconds> = {
-        let mut vec = Vec::with_capacity(K);
+    let v_batch = count / samp_size;
+    let mut v_latencies: [Vec<FpSeconds>; K] = array::from_fn(|_| Vec::with_capacity(samp_size));
+    for _ in 0..samp_size {
         if K >= 1 {
-            vec.push(median_batch_latency(f1, v_batch, v_n_batches));
+            v_latencies[0].push(FpSeconds::from_duration(latency_n(&mut f1, v_batch)) / v_batch);
         }
         if K == 2 {
-            vec.push(median_batch_latency(f2, v_batch, v_n_batches));
+            v_latencies[1].push(FpSeconds::from_duration(latency_n(&mut f2, v_batch)) / v_batch);
         }
-        vec
-    };
+    }
+    let v_medians: Vec<FpSeconds> = v_latencies
+        .iter_mut()
+        .map(|v| {
+            quickmedian(v);
+            midpoint_value(v)
+        })
+        .collect();
 
     let base_target_fpsecs = FpSeconds::from_duration(base_target_latency);
 
@@ -132,8 +120,9 @@ fn run<const K: usize, R, Src>(
 
 const BASE_WARMUP_MILLIS: u64 = 100;
 const BASE_STATUS_MILLIS: u64 = 10;
-const BASE_BENCH_TIME: Duration = Duration::from_millis(100);
 const DEFAULT_REC_UNIT: LatencyUnit = LatencyUnit::NANO;
+const DEFAULT_ACC_LTNCY: Duration = Duration::from_millis(1);
+const DEFAULT_RUN_TIME: Duration = Duration::from_millis(100);
 
 #[derive(Clone)]
 struct Fns1 {
@@ -198,13 +187,8 @@ impl FnsSrc<2> for Fns2 {
     }
 }
 
-fn batch_opt_for_samp_size(
-    samp_size: usize,
-    target_latency: Duration,
-    bench_time: Duration,
-) -> Option<usize> {
-    let est_count = (bench_time.as_secs_f64() / target_latency.as_secs_f64()).round() as usize;
-    Some(batch_for_samp_size(samp_size, est_count))
+fn batch_opt_for_acc_ltncy(tgt_ltncy: Duration, acc_ltncy: Duration) -> Option<usize> {
+    Some(count_for_acc_ltncy(tgt_ltncy, acc_ltncy))
 }
 
 // cargo test -r --test bench_run_validate --all-features -- no_status1 --nocapture --test-threads=1
@@ -224,8 +208,8 @@ mod no_status1 {
     fn run_bench(
         rec_unit: LatencyUnit,
         base_warmup_millis: u64,
-        base_bench_time: Duration,
         base_target_latency: Duration,
+        samp_size: usize,
         batch: Option<usize>,
         epsilon: f64,
     ) {
@@ -235,8 +219,8 @@ mod no_status1 {
             Fns1::new(base_target_latency),
             base_warmup_millis,
             0,
-            base_bench_time,
             base_target_latency,
+            samp_size,
             batch,
             epsilon,
         );
@@ -245,16 +229,16 @@ mod no_status1 {
     // cargo test -r --test bench_run_validate --all-features -- no_status1::test_nanos_1b --exact --nocapture --test-threads=1
     #[test]
     fn test_nanos_1b() {
-        const EPSILON: f64 = 0.05;
+        const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(1);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -263,15 +247,16 @@ mod no_status1 {
     // cargo test -r --test bench_run_validate --all-features -- no_status1::test_nanos_10 --exact --nocapture --test-threads=1
     #[test]
     fn test_nanos_10() {
-        const EPSILON: f64 = 0.50;
+        const EPSILON: f64 = 0.10;
         let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(10);
+        let samp_size = 100_000; // samp_size >= 1_000_000 makes test's validation stage extremely slow
         let batch = None;
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -280,16 +265,16 @@ mod no_status1 {
     // cargo test -r --test bench_run_validate --all-features -- no_status1::test_nanos_10b --exact --nocapture --test-threads=1
     #[test]
     fn test_nanos_10b() {
-        const EPSILON: f64 = 0.03;
+        const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(10);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -298,15 +283,16 @@ mod no_status1 {
     // cargo test -r --test bench_run_validate --all-features -- no_status1::test_nanos_100 --exact --nocapture --test-threads=1
     #[test]
     fn test_nanos_100() {
-        const EPSILON: f64 = 0.30;
+        const EPSILON: f64 = 0.02;
         let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(100);
+        let samp_size = 100_000; // samp_size >= 1_000_000 makes test's validation stage extremely slow
         let batch = None;
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -315,16 +301,16 @@ mod no_status1 {
     // cargo test -r --test bench_run_validate --all-features -- no_status1::test_nanos_100b --exact --nocapture --test-threads=1
     #[test]
     fn test_nanos_100b() {
-        const EPSILON: f64 = 0.05;
+        const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(10);
         let target_latency = Duration::from_nanos(50);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -333,14 +319,15 @@ mod no_status1 {
     // cargo test -r --test bench_run_validate --all-features -- no_status1::test_micros_1 --exact --nocapture --test-threads=1
     #[test]
     fn test_micros_1() {
-        const EPSILON: f64 = 0.20;
+        const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_micros(1);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -349,15 +336,15 @@ mod no_status1 {
     // cargo test -r --test bench_run_validate --all-features -- no_status1::test_micros_1b --exact --nocapture --test-threads=1
     #[test]
     fn test_micros_1b() {
-        const EPSILON: f64 = 0.05;
+        const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 100;
         let target_latency = Duration::from_micros(1);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -365,14 +352,15 @@ mod no_status1 {
 
     #[test]
     fn test_micros_50() {
-        const EPSILON: f64 = 0.15;
+        const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_micros(50);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -381,15 +369,15 @@ mod no_status1 {
     // cargo test -r --test bench_run_validate --all-features -- no_status1::test_micros_50b --exact --nocapture --test-threads=1
     #[test]
     fn test_micros_50b() {
-        const EPSILON: f64 = 0.05;
+        const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 20;
         let target_latency = Duration::from_micros(50);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -399,12 +387,13 @@ mod no_status1 {
     fn test_millis_1() {
         const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_millis(1);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -415,16 +404,13 @@ mod no_status1 {
     fn test_millis_1b() {
         const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 20;
-        // const BASE_WARMUP_MILLIS: u64 = 500;
-        // const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
-
         let target_latency = Duration::from_millis(1);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -434,32 +420,13 @@ mod no_status1 {
     fn test_millis_10() {
         const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_millis(10);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
-            batch,
-            EPSILON,
-        );
-    }
-
-    // cargo test -r --test bench_run_validate --all-features -- no_status1::test_millis_10b --exact --nocapture --test-threads=1
-    #[test]
-    fn test_millis_10b() {
-        const EPSILON: f64 = 0.02;
-        const SAMP_SIZE: usize = 10;
-        const BASE_WARMUP_MILLIS: u64 = 500;
-        const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
-
-        let target_latency = Duration::from_millis(10);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
-        run_bench(
-            DEFAULT_REC_UNIT,
-            BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
-            target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -469,16 +436,14 @@ mod no_status1 {
     #[test]
     fn test_millis_50() {
         const EPSILON: f64 = 0.02;
-        const BASE_WARMUP_MILLIS: u64 = 500;
-        const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
-
         let target_latency = Duration::from_millis(50);
+        let samp_size = 10;
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -503,8 +468,8 @@ mod with_status1 {
         rec_unit: LatencyUnit,
         base_warmup_millis: u64,
         base_status_millis: u64,
-        base_bench_time: Duration,
         base_target_latency: Duration,
+        samp_size: usize,
         batch: Option<usize>,
         epsilon: f64,
     ) {
@@ -514,8 +479,8 @@ mod with_status1 {
             Fns1::new(base_target_latency),
             base_warmup_millis,
             base_status_millis,
-            base_bench_time,
             base_target_latency,
+            samp_size,
             batch,
             epsilon,
         );
@@ -528,13 +493,13 @@ mod with_status1 {
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(1);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -546,13 +511,14 @@ mod with_status1 {
         const EPSILON: f64 = 0.50;
         let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(10);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -565,13 +531,13 @@ mod with_status1 {
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(10);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -583,13 +549,14 @@ mod with_status1 {
         const EPSILON: f64 = 0.30;
         let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(100);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -602,13 +569,13 @@ mod with_status1 {
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(10);
         let target_latency = Duration::from_nanos(50);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -619,13 +586,14 @@ mod with_status1 {
     fn test_micros_1() {
         const EPSILON: f64 = 0.20;
         let target_latency = Duration::from_micros(1);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -637,13 +605,13 @@ mod with_status1 {
         const EPSILON: f64 = 0.05;
         const SAMP_SIZE: usize = 100;
         let target_latency = Duration::from_micros(1);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -653,13 +621,14 @@ mod with_status1 {
     fn test_micros_50() {
         const EPSILON: f64 = 0.15;
         let target_latency = Duration::from_micros(50);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -669,15 +638,15 @@ mod with_status1 {
     #[test]
     fn test_micros_50b() {
         const EPSILON: f64 = 0.05;
-        const SAMP_SIZE: usize = 20;
+        const SAMP_SIZE: usize = 100;
         let target_latency = Duration::from_micros(50);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -687,13 +656,14 @@ mod with_status1 {
     fn test_millis_1() {
         const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_millis(1);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -703,18 +673,15 @@ mod with_status1 {
     #[test]
     fn test_millis_1b() {
         const EPSILON: f64 = 0.02;
-        const SAMP_SIZE: usize = 20;
-        // const BASE_WARMUP_MILLIS, BASE_STATUS_MILLIS: u64 = 500;
-        // const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
-
+        const SAMP_SIZE: usize = 100;
         let target_latency = Duration::from_millis(1);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -724,34 +691,14 @@ mod with_status1 {
     fn test_millis_10() {
         const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_millis(10);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
-            batch,
-            EPSILON,
-        );
-    }
-
-    // cargo test -r --test bench_run_validate --all-features -- with_status1::test_millis_10b --exact --nocapture --test-threads=1
-    #[test]
-    fn test_millis_10b() {
-        const EPSILON: f64 = 0.02;
-        const SAMP_SIZE: usize = 10;
-        const BASE_WARMUP_MILLIS: u64 = 500;
-        const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
-
-        let target_latency = Duration::from_millis(10);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
-        run_bench(
-            DEFAULT_REC_UNIT,
-            BASE_WARMUP_MILLIS,
-            BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
-            target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -761,17 +708,15 @@ mod with_status1 {
     #[test]
     fn test_millis_50() {
         const EPSILON: f64 = 0.02;
-        const BASE_WARMUP_MILLIS: u64 = 500;
-        const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
-
         let target_latency = Duration::from_millis(50);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -795,8 +740,8 @@ mod no_status2 {
     fn run_bench(
         rec_unit: LatencyUnit,
         base_warmup_millis: u64,
-        base_bench_time: Duration,
         base_target_latency: Duration,
+        samp_size: usize,
         batch: Option<usize>,
         epsilon: f64,
     ) {
@@ -806,8 +751,8 @@ mod no_status2 {
             Fns2::new(base_target_latency),
             base_warmup_millis,
             0,
-            base_bench_time,
             base_target_latency,
+            samp_size,
             batch,
             epsilon,
         );
@@ -820,12 +765,12 @@ mod no_status2 {
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(1);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -837,12 +782,13 @@ mod no_status2 {
         const EPSILON: f64 = 0.50;
         let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(10);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -855,12 +801,12 @@ mod no_status2 {
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(10);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -872,12 +818,13 @@ mod no_status2 {
         const EPSILON: f64 = 0.30;
         let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(100);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -890,12 +837,12 @@ mod no_status2 {
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(10);
         let target_latency = Duration::from_nanos(50);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -906,12 +853,13 @@ mod no_status2 {
     fn test_micros_1() {
         const EPSILON: f64 = 0.20;
         let target_latency = Duration::from_micros(1);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -923,12 +871,12 @@ mod no_status2 {
         const EPSILON: f64 = 0.05;
         const SAMP_SIZE: usize = 100;
         let target_latency = Duration::from_micros(1);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -938,12 +886,13 @@ mod no_status2 {
     fn test_micros_50() {
         const EPSILON: f64 = 0.15;
         let target_latency = Duration::from_micros(50);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -955,12 +904,12 @@ mod no_status2 {
         const EPSILON: f64 = 0.05;
         const SAMP_SIZE: usize = 20;
         let target_latency = Duration::from_micros(50);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -970,12 +919,13 @@ mod no_status2 {
     fn test_millis_1() {
         const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_millis(1);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -985,17 +935,14 @@ mod no_status2 {
     #[test]
     fn test_millis_1b() {
         const EPSILON: f64 = 0.02;
-        const SAMP_SIZE: usize = 20;
-        // const BASE_WARMUP_MILLIS: u64 = 500;
-        // const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
-
+        const SAMP_SIZE: usize = 100;
         let target_latency = Duration::from_millis(1);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -1005,32 +952,13 @@ mod no_status2 {
     fn test_millis_10() {
         const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_millis(10);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
-            batch,
-            EPSILON,
-        );
-    }
-
-    // cargo test -r --test bench_run_validate --all-features -- no_status2::test_millis_10b --exact --nocapture --test-threads=1
-    #[test]
-    fn test_millis_10b() {
-        const EPSILON: f64 = 0.02;
-        const SAMP_SIZE: usize = 10;
-        const BASE_WARMUP_MILLIS: u64 = 500;
-        const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
-
-        let target_latency = Duration::from_millis(10);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
-        run_bench(
-            DEFAULT_REC_UNIT,
-            BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
-            target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -1040,16 +968,14 @@ mod no_status2 {
     #[test]
     fn test_millis_50() {
         const EPSILON: f64 = 0.02;
-        const BASE_WARMUP_MILLIS: u64 = 500;
-        const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
-
         let target_latency = Duration::from_millis(50);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -1074,8 +1000,8 @@ mod with_status2 {
         rec_unit: LatencyUnit,
         base_warmup_millis: u64,
         base_status_millis: u64,
-        base_bench_time: Duration,
         base_target_latency: Duration,
+        samp_size: usize,
         batch: Option<usize>,
         epsilon: f64,
     ) {
@@ -1085,8 +1011,8 @@ mod with_status2 {
             Fns2::new(base_target_latency),
             base_warmup_millis,
             base_status_millis,
-            base_bench_time,
             base_target_latency,
+            samp_size,
             batch,
             epsilon,
         );
@@ -1099,13 +1025,13 @@ mod with_status2 {
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(1);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -1117,13 +1043,14 @@ mod with_status2 {
         const EPSILON: f64 = 0.50;
         let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(10);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -1136,13 +1063,13 @@ mod with_status2 {
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(10);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -1154,13 +1081,14 @@ mod with_status2 {
         const EPSILON: f64 = 0.30;
         let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(100);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -1173,13 +1101,13 @@ mod with_status2 {
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(10);
         let target_latency = Duration::from_nanos(50);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             rec_unit,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -1190,13 +1118,14 @@ mod with_status2 {
     fn test_micros_1() {
         const EPSILON: f64 = 0.20;
         let target_latency = Duration::from_micros(1);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -1208,13 +1137,13 @@ mod with_status2 {
         const EPSILON: f64 = 0.05;
         const SAMP_SIZE: usize = 100;
         let target_latency = Duration::from_micros(1);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -1224,13 +1153,14 @@ mod with_status2 {
     fn test_micros_50() {
         const EPSILON: f64 = 0.15;
         let target_latency = Duration::from_micros(50);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -1240,15 +1170,15 @@ mod with_status2 {
     #[test]
     fn test_micros_50b() {
         const EPSILON: f64 = 0.05;
-        const SAMP_SIZE: usize = 20;
+        const SAMP_SIZE: usize = 100;
         let target_latency = Duration::from_micros(50);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -1258,13 +1188,14 @@ mod with_status2 {
     fn test_millis_1() {
         const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_millis(1);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -1274,18 +1205,15 @@ mod with_status2 {
     #[test]
     fn test_millis_1b() {
         const EPSILON: f64 = 0.02;
-        const SAMP_SIZE: usize = 20;
-        // const BASE_WARMUP_MILLIS, BASE_STATUS_MILLIS: u64 = 500;
-        // const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
-
+        const SAMP_SIZE: usize = 100;
         let target_latency = Duration::from_millis(1);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
+        let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            SAMP_SIZE,
             batch,
             EPSILON,
         );
@@ -1295,34 +1223,14 @@ mod with_status2 {
     fn test_millis_10() {
         const EPSILON: f64 = 0.02;
         let target_latency = Duration::from_millis(10);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
-            batch,
-            EPSILON,
-        );
-    }
-
-    // cargo test -r --test bench_run_validate --all-features -- with_status2::test_millis_10b --exact --nocapture --test-threads=1
-    #[test]
-    fn test_millis_10b() {
-        const EPSILON: f64 = 0.02;
-        const SAMP_SIZE: usize = 10;
-        const BASE_WARMUP_MILLIS: u64 = 500;
-        const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
-
-        let target_latency = Duration::from_millis(10);
-        let batch = batch_opt_for_samp_size(SAMP_SIZE, target_latency, BASE_BENCH_TIME);
-        run_bench(
-            DEFAULT_REC_UNIT,
-            BASE_WARMUP_MILLIS,
-            BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
-            target_latency,
+            samp_size,
             batch,
             EPSILON,
         );
@@ -1332,17 +1240,15 @@ mod with_status2 {
     #[test]
     fn test_millis_50() {
         const EPSILON: f64 = 0.02;
-        const BASE_WARMUP_MILLIS: u64 = 500;
-        const BASE_BENCH_TIME: Duration = Duration::from_millis(500);
-
         let target_latency = Duration::from_millis(50);
+        let samp_size = count_for_acc_ltncy(target_latency, DEFAULT_RUN_TIME);
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
-            BASE_BENCH_TIME,
             target_latency,
+            samp_size,
             batch,
             EPSILON,
         );

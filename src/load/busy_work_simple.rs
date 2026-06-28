@@ -141,7 +141,7 @@ mod validate_latency {
     }
 
     #[test]
-    fn test_busy_work_new_zero() {
+    fn test_busy_work_ltncy_zero() {
         let tgt = Duration::ZERO;
         const SAMP_SIZE: usize = 100;
         const BATCH: usize = 1_000_000;
@@ -155,7 +155,7 @@ mod validate_latency {
     //=== below 100 nano: too small for proper calibration
 
     #[test]
-    fn test_busy_work_new_100_nano() {
+    fn test_busy_work_ltncy_100_nano() {
         const EPSILON: f64 = 0.05;
         const SAMP_SIZE: usize = 50;
         const BATCH: usize = 100_000;
@@ -165,7 +165,7 @@ mod validate_latency {
     }
 
     #[test]
-    fn test_busy_work_new_1_micro() {
+    fn test_busy_work_ltncy_1_micro() {
         const EPSILON: f64 = 0.05;
         const SAMP_SIZE: usize = 20;
         const BATCH: usize = 10_000;
@@ -174,9 +174,9 @@ mod validate_latency {
         rel_approx_eq_fpsecs!(tgt_secs, latency_secs, EPSILON);
     }
 
-    // cargo test -r --lib --all-features -- load::busy_work_sha::validate_latency::test_busy_work_new_1_milli --nocapture --test-threads=1
+    // cargo test -r --lib --all-features -- load::busy_work_sha::validate_latency::test_busy_work_ltncy_1_milli --nocapture --test-threads=1
     #[test]
-    fn test_busy_work_new_1_milli() {
+    fn test_busy_work_ltncy_1_milli() {
         const EPSILON: f64 = 0.05;
         const SAMP_SIZE: usize = 20;
         const BATCH: usize = 10;
@@ -185,9 +185,9 @@ mod validate_latency {
         rel_approx_eq_fpsecs!(tgt_secs, latency_secs, EPSILON);
     }
 
-    // cargo test -r --lib --all-features -- load::busy_work_sha::validate_latency::test_busy_work_new_10_milli --nocapture --test-threads=1
+    // cargo test -r --lib --all-features -- load::busy_work_sha::validate_latency::test_busy_work_ltncy_10_milli --nocapture --test-threads=1
     #[test]
-    fn test_busy_work_new_10_milli() {
+    fn test_busy_work_ltncy_10_milli() {
         const EPSILON: f64 = 0.05;
         const SAMP_SIZE: usize = 10;
         const BATCH: usize = 5;
@@ -196,9 +196,9 @@ mod validate_latency {
         rel_approx_eq_fpsecs!(tgt_secs, latency_secs, EPSILON);
     }
 
-    // cargo test -r --lib --all-features -- load::busy_work_sha::validate_latency::test_busy_work_new_50_milli --nocapture --test-threads=1
+    // cargo test -r --lib --all-features -- load::busy_work_sha::validate_latency::test_busy_work_ltncy_50_milli --nocapture --test-threads=1
     #[test]
-    fn test_busy_work_new_50_milli() {
+    fn test_busy_work_ltncy_50_milli() {
         const EPSILON: f64 = 0.05;
         const SAMP_SIZE: usize = 10;
         const BATCH: usize = 1;
