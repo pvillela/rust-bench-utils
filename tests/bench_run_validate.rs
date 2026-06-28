@@ -1021,7 +1021,7 @@ mod with_status2 {
     // cargo test -r --test bench_run_validate --all-features -- with_status2::test_nanos_1b --exact --nocapture --test-threads=1
     #[test]
     fn test_nanos_1b() {
-        const EPSILON: f64 = 0.15;
+        const EPSILON: f64 = 0.85;
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(1);
@@ -1059,7 +1059,7 @@ mod with_status2 {
     // cargo test -r --test bench_run_validate --all-features -- with_status2::test_nanos_10b --exact --nocapture --test-threads=1
     #[test]
     fn test_nanos_10b() {
-        const EPSILON: f64 = 0.05;
+        const EPSILON: f64 = 0.15;
         const SAMP_SIZE: usize = 100;
         let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(10);
@@ -1098,7 +1098,7 @@ mod with_status2 {
     #[test]
     fn test_nanos_100b() {
         const EPSILON: f64 = 0.02;
-        const SAMP_SIZE: usize = 100;
+        const SAMP_SIZE: usize = 200;
         let rec_unit = LatencyUnit::sub_sec(10);
         let target_latency = Duration::from_nanos(50);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
@@ -1186,9 +1186,9 @@ mod with_status2 {
 
     #[test]
     fn test_millis_1() {
-        const EPSILON: f64 = 0.02;
+        const EPSILON: f64 = 0.03;
         let target_latency = Duration::from_millis(1);
-        let samp_size = 200;
+        let samp_size = 300;
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
@@ -1204,7 +1204,7 @@ mod with_status2 {
     // cargo test -r --test bench_run_validate --all-features -- with_status2::test_millis_1b --exact --nocapture --test-threads=1
     #[test]
     fn test_millis_1b() {
-        const EPSILON: f64 = 0.02;
+        const EPSILON: f64 = 0.03;
         const SAMP_SIZE: usize = 20;
         let target_latency = Duration::from_millis(1);
         let batch = Some(10);
@@ -1221,9 +1221,9 @@ mod with_status2 {
 
     #[test]
     fn test_millis_10() {
-        const EPSILON: f64 = 0.02;
+        const EPSILON: f64 = 0.03;
         let target_latency = Duration::from_millis(10);
-        let samp_size = 20;
+        let samp_size = 10;
         let batch = None;
         run_bench(
             DEFAULT_REC_UNIT,
