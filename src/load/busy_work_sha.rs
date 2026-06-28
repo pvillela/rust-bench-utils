@@ -55,8 +55,7 @@ impl BusyWork {
     }
 
     #[inline(always)]
-    /// Does the set-up for [`Self::work`] (using the 'sha2' crate) so that the latter's latency is
-    /// directly proportional to `effort`.
+    /// Does the set-up for [`Self::work`].
     fn pre_work() -> ([u8; 8], Sha256) {
         let seed = 0_u64;
         let buf = seed.to_be_bytes();
@@ -64,8 +63,7 @@ impl BusyWork {
         (buf, hasher)
     }
 
-    /// Does the warm-up for [`Self::work`] (using the 'sha2' crate) so that the latter's latency is
-    /// directly proportional to `effort`.
+    /// Does the warm-up for [`Self::calibrate_with_budget`].
     fn warmup(buf: &[u8; 8], hasher: &mut Sha256, target_latency: Duration, budget: RunLength) {
         Self::calibrate_internal(&buf, hasher, target_latency, budget);
     }

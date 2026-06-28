@@ -57,14 +57,12 @@ impl BusyWork {
     }
 
     #[inline(always)]
-    /// Does the set-up for [`Self::work`] (using the 'sha2' crate) so that the latter's latency is
-    /// directly proportional to `effort`.
+    /// Does the set-up for [`Self::work`].
     fn pre_work() -> u64 {
         0
     }
 
-    /// Does the warm-up for [`Self::work`] (using the 'sha2' crate) so that the latter's latency is
-    /// directly proportional to `effort`.
+    /// Does the warm-up for [`Self::calibrate_with_budget`].
     fn warmup(state: &mut u64, target_latency: Duration, budget: RunLength) {
         Self::calibrate_internal(state, target_latency, budget);
     }
