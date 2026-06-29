@@ -51,11 +51,9 @@ impl BenchOut {
         }
     }
 
-    #[doc(hidden)]
     /// Creates a [`BenchOut`] from a **finite** iterator of [`FpSeconds`] values.
     ///
-    /// Each item in the iterator is recorded as a single latency observation.
-    /// The HDR histogram, running sums, and log-latency sums are updated accordingly.
+    /// Each item from the iterator is recorded as a single latency observation.
     ///
     /// # Arguments
     ///
@@ -65,9 +63,28 @@ impl BenchOut {
     /// ## May hang
     /// Hangs if th iterator is not finite.
     pub fn from_iter(cfg: &BenchCfg, src: impl Iterator<Item = FpSeconds>) -> Self {
+        Self::from_iter_with_counts(cfg, src.map(|item| (item, 1)))
+    }
+
+    /// Creates a [`BenchOut`] from a **finite** iterator of ([`FpSeconds`], [`usize`]) pairs.
+    ///
+    /// Each item from the iterator is recorded as `count` latency observations, where `count` is the
+    /// second component of the pair.
+    ///
+    /// # Arguments
+    ///
+    /// - `cfg` - benchmark configuration (recording unit, significant figures, etc.).
+    /// - `src` - source of elapsed-time measurements to ingest.
+    ///
+    /// ## May hang
+    /// Hangs if th iterator is not finite.
+    pub fn from_iter_with_counts(
+        cfg: &BenchCfg,
+        src: impl Iterator<Item = (FpSeconds, usize)>,
+    ) -> Self {
         let mut out = Self::new(cfg);
         for item in src {
-            out.capture_data((item, 1));
+            out.capture_data(item);
         }
         out
     }
@@ -119,7 +136,7 @@ impl BenchOut {
     /// Returns all the latency data collected as an iterator of durations.
     ///
     /// The iterator yields values in monotonically non-decreasing order.
-    pub fn iter_flat(&self) -> impl Iterator<Item = FpSeconds> {
+    pub fn iter(&self) -> impl Iterator<Item = FpSeconds> {
         self.iter_with_counts()
             .map(|(value, count)| iter::repeat_n(value, count))
             .flatten()
@@ -422,7 +439,91 @@ mod test {
     const ALPHA: f64 = 0.05;
 
     #[test]
-    fn test_bench_out_descriptive_stats() {
+    fn test_from_iter_to_iter() {
+        const EPSILON: f64 = 0.001;
+        let cfg = BenchCfg::default();
+        let out = BenchOut::from_iter(
+            &cfg,
+            [
+                FpSeconds::from_millis(1),
+                FpSeconds::from_millis(1),
+                FpSeconds::from_millis(2),
+            ]
+            .into_iter(),
+        );
+        let items: Vec<_> = out.iter().collect();
+        assert_eq!(items.len(), 3);
+        // HDR histogram has slight quantization; compare approximately
+        rel_approx_eq_fpsecs!(items[0], FpSeconds::from_millis(1), EPSILON);
+        rel_approx_eq_fpsecs!(items[1], FpSeconds::from_millis(1), EPSILON);
+        rel_approx_eq_fpsecs!(items[2], FpSeconds::from_millis(2), EPSILON);
+    }
+
+    #[test]
+    fn test_from_iter_to_iter_with_counts() {
+        const EPSILON: f64 = 0.001;
+        let cfg = BenchCfg::default();
+        let out = BenchOut::from_iter(
+            &cfg,
+            [
+                FpSeconds::from_millis(1),
+                FpSeconds::from_millis(1),
+                FpSeconds::from_millis(2),
+            ]
+            .into_iter(),
+        );
+        let pairs: Vec<_> = out.iter_with_counts().collect();
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0].1, 2);
+        assert_eq!(pairs[1].1, 1);
+        // HDR histogram has slight quantization; compare approximately
+        rel_approx_eq_fpsecs!(pairs[0].0, FpSeconds::from_millis(1), EPSILON);
+        rel_approx_eq_fpsecs!(pairs[1].0, FpSeconds::from_millis(2), EPSILON);
+    }
+
+    #[test]
+    fn test_from_iter_with_counts_to_iter() {
+        const EPSILON: f64 = 0.001;
+        let cfg = BenchCfg::default();
+        let out = BenchOut::from_iter_with_counts(
+            &cfg,
+            [
+                (FpSeconds::from_millis(1), 2),
+                (FpSeconds::from_millis(2), 1),
+            ]
+            .into_iter(),
+        );
+        let items: Vec<_> = out.iter().collect();
+        assert_eq!(items.len(), 3);
+        // HDR histogram has slight quantization; compare approximately
+        rel_approx_eq_fpsecs!(items[0], FpSeconds::from_millis(1), EPSILON);
+        rel_approx_eq_fpsecs!(items[1], FpSeconds::from_millis(1), EPSILON);
+        rel_approx_eq_fpsecs!(items[2], FpSeconds::from_millis(2), EPSILON);
+    }
+
+    #[test]
+    fn test_from_iter_with_counts_to_iter_with_counts() {
+        const EPSILON: f64 = 0.001;
+        let cfg = BenchCfg::default();
+        let out = BenchOut::from_iter_with_counts(
+            &cfg,
+            [
+                (FpSeconds::from_millis(1), 2),
+                (FpSeconds::from_millis(2), 1),
+            ]
+            .into_iter(),
+        );
+        let pairs: Vec<_> = out.iter_with_counts().collect();
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0].1, 2);
+        assert_eq!(pairs[1].1, 1);
+        // HDR histogram has slight quantization; compare approximately
+        rel_approx_eq_fpsecs!(pairs[0].0, FpSeconds::from_millis(1), EPSILON);
+        rel_approx_eq_fpsecs!(pairs[1].0, FpSeconds::from_millis(2), EPSILON);
+    }
+
+    #[test]
+    fn test_descriptive_stats() {
         const EPSILON: f64 = 0.001;
 
         // in ln of microseconds
@@ -494,7 +595,7 @@ mod test {
     }
 
     #[test]
-    fn test_bench_out_student() {
+    fn test_student() {
         const EPSILON: f64 = 0.001;
 
         // in ln of microseconds
@@ -584,7 +685,7 @@ mod test {
     }
 
     #[test]
-    fn test_bench_out_mean_panics_on_empty() {
+    fn test_mean_panics_on_empty() {
         let cfg = BenchCfg::default();
         let out = BenchOut::from_iter(&cfg, std::iter::empty());
         let result = std::panic::catch_unwind(|| out.mean());
@@ -592,7 +693,7 @@ mod test {
     }
 
     #[test]
-    fn test_bench_out_stdev_panics_on_empty() {
+    fn test_stdev_panics_on_empty() {
         let cfg = BenchCfg::default();
         let out = BenchOut::from_iter(&cfg, std::iter::empty());
         let result = std::panic::catch_unwind(|| out.stdev());
@@ -600,7 +701,7 @@ mod test {
     }
 
     #[test]
-    fn test_bench_out_median_panics_on_empty() {
+    fn test_median_panics_on_empty() {
         let cfg = BenchCfg::default();
         let out = BenchOut::from_iter(&cfg, std::iter::empty());
         let result = std::panic::catch_unwind(|| out.median());
@@ -608,7 +709,7 @@ mod test {
     }
 
     #[test]
-    fn test_bench_out_mean_ln_panics_on_empty() {
+    fn test_mean_ln_panics_on_empty() {
         let cfg = BenchCfg::default();
         let out = BenchOut::from_iter(&cfg, std::iter::empty());
         let result = std::panic::catch_unwind(|| out.mean_ln());
@@ -616,7 +717,7 @@ mod test {
     }
 
     #[test]
-    fn test_bench_out_stdev_ln_panics_on_empty() {
+    fn test_stdev_ln_panics_on_empty() {
         let cfg = BenchCfg::default();
         let out = BenchOut::from_iter(&cfg, std::iter::empty());
         let result = std::panic::catch_unwind(|| out.stdev_ln());
@@ -624,7 +725,7 @@ mod test {
     }
 
     #[test]
-    fn test_bench_out_student_ln_t_panics_on_single() {
+    fn test_student_ln_t_panics_on_single() {
         let cfg = BenchCfg::default();
         let out = BenchOut::from_iter(&cfg, [FpSeconds::from_millis(1)].into_iter());
         let result = std::panic::catch_unwind(|| out.student_ln_t(0.0));
@@ -632,44 +733,7 @@ mod test {
     }
 
     #[test]
-    fn test_bench_out_iter_with_counts() {
-        const EPSILON: f64 = 0.001;
-        let cfg = BenchCfg::default();
-        let out = BenchOut::from_iter(
-            &cfg,
-            [
-                FpSeconds::from_millis(1),
-                FpSeconds::from_millis(1),
-                FpSeconds::from_millis(2),
-            ]
-            .into_iter(),
-        );
-        let pairs: Vec<_> = out.iter_with_counts().collect();
-        assert_eq!(pairs.len(), 2);
-        assert_eq!(pairs[0].1, 2);
-        assert_eq!(pairs[1].1, 1);
-        // HDR histogram has slight quantization; compare approximately
-        rel_approx_eq_fpsecs!(pairs[0].0, FpSeconds::from_millis(1), EPSILON);
-        rel_approx_eq_fpsecs!(pairs[1].0, FpSeconds::from_millis(2), EPSILON);
-    }
-
-    #[test]
-    fn test_bench_out_iter_flat() {
-        let cfg = BenchCfg::default();
-        let out = BenchOut::from_iter(
-            &cfg,
-            [
-                FpSeconds::from_millis(1),
-                FpSeconds::from_millis(1),
-                FpSeconds::from_millis(2),
-            ]
-            .into_iter(),
-        );
-        assert_eq!(out.iter_flat().count(), 3);
-    }
-
-    #[test]
-    fn test_bench_out_reset() {
+    fn test_reset() {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::from_iter(
             &cfg,
