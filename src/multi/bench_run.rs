@@ -214,9 +214,6 @@ pub fn bench_run_with_status_arg_cfg<const K: usize>(
     run_length: RunLength,
 ) -> BenchOut<K> {
     let mut w = stderr();
-
-    // The `\n` below is to separate warmup status from exec status. Otherwise, they get mixed up due to
-    // the `eprint!("{}", "\u{8}".repeat(status_len))` line in the `status` closure.
     let s = DefaultStatus::new(
         &mut w,
         "Warming up".to_owned(),
