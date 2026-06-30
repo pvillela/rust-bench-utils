@@ -1,6 +1,6 @@
 use crate::{LatencyUnit, RunLength, latency, multi::LatencySrc};
-use log::debug;
-use std::time::Duration;
+use log::{Level, debug, log_enabled};
+use std::time::{Duration, Instant};
 
 /// Benchmark configuration, excluding the benchmark run length.
 ///
@@ -102,12 +102,8 @@ impl BenchCfg {
             }
         };
 
-        let run_lengths = [
-            adj_warmup_run_length,
-            // adj_exit_check_run_length,
-            adj_exec_run_length,
-        ];
-        debug!("execs_per_sec_budget >>> run_lengths[warmup, exit_check, exec]={run_lengths:?}");
+        let run_lengths = [adj_warmup_run_length, adj_exec_run_length];
+        debug!("execs_per_sec_budget >>> run_lengths[warmup, exec]={run_lengths:?}");
 
         let counts = run_lengths
             .iter()
@@ -160,10 +156,20 @@ impl BenchCfg {
         src: &mut impl LatencySrc<K>,
         exec_run_length: RunLength,
     ) -> f64 {
+        let start = if log_enabled!(Level::Debug) {
+            Some(Instant::now())
+        } else {
+            None
+        };
+
         let budget = self.execs_per_sec_budget(exec_run_length);
-        debug!("execs_per_sec >>> execs_per_sec_budget={budget:?}");
         let eps = latency::execs_per_sec(src.aggregate(), budget);
-        debug!("execs_per_sec >>> execs_per_sec={eps:?}");
+
+        debug!(
+            "execs_per_sec >>> execs_per_sec={eps:?}, elapsed={:?}",
+            start.map(|start| start.elapsed())
+        );
+
         eps
     }
 

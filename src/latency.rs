@@ -343,10 +343,11 @@ pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: Ru
 
     // Warm-up
     {
-        for i in 1.. {
-            let mut acc_latency = FpSeconds::ZERO;
-            let mut acc_execs: usize = 0;
+        let mut acc_execs: usize = 0;
+        let mut acc_latency = FpSeconds::ZERO;
+        let start = Instant::now();
 
+        for i in 1.. {
             let iter_execs = 2usize.pow(i - 1);
             let iter_latency = (&mut src).take(iter_execs as usize).sum();
             trace!(
@@ -359,6 +360,7 @@ pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: Ru
             if iter_latency >= warmup_fps / 3
                 || acc_latency >= warmup_fps * (2.0 / 3.0)
                 || acc_execs as f64 >= warmup_count as f64 * (2.0 / 3.0)
+                || FpSeconds::from_duration(start.elapsed()) >= warmup_fps * (2.0 / 3.0)
             {
                 break;
             }
@@ -367,10 +369,11 @@ pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: Ru
 
     // Execution
     {
-        for i in 1.. {
-            let mut acc_latency = FpSeconds::ZERO;
-            let mut acc_execs: usize = 0;
+        let mut acc_latency = FpSeconds::ZERO;
+        let mut acc_execs: usize = 0;
+        let start = Instant::now();
 
+        for i in 1.. {
             let iter_execs = 2usize.pow(i - 1);
             let iter_latency = (&mut src).take(iter_execs as usize).sum();
             trace!("execs_per_sec >>> iter_execs={iter_execs}, iter_latency={iter_latency:?},",);
@@ -378,10 +381,10 @@ pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: Ru
             acc_latency += iter_latency;
             acc_execs += iter_execs;
             trace!("execs_per_sec >>> i={i}");
-            // Castings to f64 to avoid integer overflow or truncation to zero.
             if iter_latency >= exec_fps / 3
                 || acc_latency >= exec_fps * (2.0 / 3.0)
                 || acc_execs as f64 >= exec_count as f64 * (2.0 / 3.0)
+                || FpSeconds::from_duration(start.elapsed()) >= exec_fps * (2.0 / 3.0)
             {
                 let iter_execs_per_sec = iter_execs as f64 / iter_latency.as_f64();
                 let acc_execs_per_sec = acc_execs as f64 / acc_latency.as_f64();
