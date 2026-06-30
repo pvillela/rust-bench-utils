@@ -1,7 +1,6 @@
-//! Measures the latency of [`bench_utils::bench_run`] per target function execution count, excluding the target
-//! function's latency.
+//! Demonstrates the measurement overhead per [`bench_utils::bench_run`] execution iteration.
 //!
-//! The results show that, on my current computer, the result is ~13ns.
+//! On my current computer, the overhead is ~13ns.
 //!
 //! ```
 //! cargo run -r --example bench_run_overhead --features _test_support
