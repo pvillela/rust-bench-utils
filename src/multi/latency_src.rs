@@ -141,6 +141,8 @@ impl<F1: FnMut(), F2: FnMut()> LatencySrc<2> for LatencySrc2b<F1, F2> {}
 
 #[cfg(feature = "_test_support")]
 pub mod test_support {
+    use std::time::Instant;
+
     use super::*;
     use basic_stats::normal::lognormal_rand_gen;
 
@@ -178,6 +180,20 @@ pub mod test_support {
     }
 
     impl<const K: usize> LatencySrc<K> for ConstLatencySrc<K> {}
+
+    /// A [`LatencySrc`] that yields `Instant::now().elapsed()` on each call to `next()`.
+    pub struct LatencySrc0;
+
+    impl Iterator for LatencySrc0 {
+        type Item = ([FpSeconds; 1], usize);
+
+        #[inline(always)]
+        fn next(&mut self) -> Option<Self::Item> {
+            Some(([(Instant::now().elapsed()).into()], 1))
+        }
+    }
+
+    impl LatencySrc<1> for LatencySrc0 {}
 
     /// An infinite iterator that encapsulates `K` iterators, each of which emits [`FpSeconds`] values according to
     /// a lognormal distribution.
