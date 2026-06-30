@@ -1,6 +1,6 @@
 # bench_utils
 
-This library contains simple utilities to measure latency and synthesise functions with predictable latency.
+This library supports the programmatic measurement of function latencies, including descriptive and inferential statistics.
 
 
 ## Documentation
