@@ -86,7 +86,9 @@ pub fn lognormal_out_jittered(
     jitter_epsilon: f64,
 ) -> BenchOut {
     let lognormal_samp = lognormal_samp_jittered(mu, sigma, samp_size, n_jitter, jitter_epsilon);
-    BenchOut::from_iter(cfg, lognormal_samp)
+    let mut out = BenchOut::new(cfg, None);
+    out.record_from_iter(lognormal_samp);
+    out
 }
 
 /// Creates a [`BenchOut`] populated with a non-jittered lognormal sample.

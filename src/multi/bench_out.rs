@@ -64,33 +64,38 @@ impl BenchOut<1> {
 
 impl<const K: usize> BenchOut<K> {
     #[doc(hidden)]
-    pub fn new(cfg: &BenchCfg) -> Self {
+    pub fn new(cfg: &BenchCfg, batch: Option<usize>) -> Self {
         Self {
-            arr: array::from_fn(|_| crate::BenchOut::new(cfg)),
+            arr: array::from_fn(|_| crate::BenchOut::new(cfg, batch)),
         }
     }
 
-    /// Creates a [`BenchOut<K>`] from a **finite** iterator of `[FpSeconds; K]` arrays.
+    /// Updates `self` from a **finite** iterator of `[FpSeconds; K]` arrays.
     ///
-    /// Each item in the iterator must be an array of `K` [`FpSeconds`] values — one per closure.
-    /// The durations are recorded into the corresponding inner [`BenchOut`](crate::BenchOut).
-    ///
-    /// # Arguments
-    ///
-    /// - `cfg` - benchmark configuration.
-    /// - `src` - source of per-closure elapsed-time measurements.
+    /// Each item from the iterator is recorded as a latency value for each of the array components.
     ///
     /// # May hang
     /// Hangs if the iterator is not finite.
-    pub fn from_iter(cfg: &BenchCfg, src: impl Iterator<Item = [FpSeconds; K]>) -> Self {
-        let mut out = Self::new(cfg);
+    pub fn record_from_iter(&mut self, src: impl Iterator<Item = [FpSeconds; K]>) {
+        self.record_from_iter_with_counts(src.map(|x| (x, 1)));
+    }
 
-        for lat_arr in src {
-            for (b, fps) in out.arr.iter_mut().zip(lat_arr.iter()) {
-                b.capture_data((*fps, 1));
+    /// Updates `self` from a **finite** iterator of `([FpSeconds; K], usize)`` pairs.
+    ///
+    /// Each item from the iterator is recorded as `count` latency values for each of the array components,
+    /// where `count` is the second component of the pair.
+    ///
+    /// ## May hang
+    /// Hangs if the iterator is not finite.
+    pub fn record_from_iter_with_counts(
+        &mut self,
+        src: impl Iterator<Item = ([FpSeconds; K], usize)>,
+    ) {
+        for (ltncy_arr, count) in src {
+            for (b, fps) in self.arr.iter_mut().zip(ltncy_arr.iter()) {
+                b.capture_data_with_counts((*fps, count));
             }
         }
-        out
     }
 
     /// Prints the debug representation of `self` to stdout.
@@ -121,11 +126,10 @@ impl<const K: usize> BenchOut<K> {
     }
 
     #[doc(hidden)]
-    // TODO: remove
     /// Updates `self` with an elapsed time observation for the functions.
-    pub fn capture_data(&mut self, batch_latencies: ([FpSeconds; K], usize)) {
+    pub fn capture_data(&mut self, batch_latencies: [FpSeconds; K]) {
         for (i, b) in &mut self.arr.iter_mut().enumerate() {
-            b.capture_data((batch_latencies.0[i], batch_latencies.1));
+            b.capture_data(batch_latencies[i]);
         }
     }
 
@@ -134,10 +138,31 @@ impl<const K: usize> BenchOut<K> {
         self.first().recording_unit()
     }
 
+    /// Batching used in data collection.
+    ///
+    /// - `None` means no batching;
+    /// - `Some(b)` means batches of size `b`.
+    pub fn batch(&self) -> Option<usize> {
+        self.first().batch()
+    }
+
+    /// Batch size used in data collection. Returns `1` for `batch` values of `None`, `Some(0)`, and `Some(1)`.
+    #[allow(unused)]
+    #[inline(always)]
+    pub(crate) fn batch_size(&self) -> usize {
+        self.first().batch_size()
+    }
+
     /// Number of observations (sample size) for a function, as an integer.
     #[inline(always)]
     pub fn n(&self) -> u64 {
         self.first().n()
+    }
+
+    /// Total number of function executions taking into account batching.
+    #[inline(always)]
+    pub fn executions(&self) -> u64 {
+        self.first().executions()
     }
 
     /// Summary descriptive statistics.
@@ -355,7 +380,8 @@ mod test {
         let cfg = BenchCfg::default();
         let ru = cfg.recording_unit();
 
-        let out = BenchOut::<2>::from_iter(&cfg, lognormal_samp2(mu, sigma, samp_size));
+        let mut out = BenchOut::<2>::new(&cfg, None);
+        out.record_from_iter(lognormal_samp2(mu, sigma, samp_size));
 
         assert_eq!(ru, LatencyUnit::NANO);
         assert_eq!(out.n() as usize, samp_size);
@@ -463,7 +489,8 @@ mod test {
         let samp_size = 20_000;
 
         let cfg = BenchCfg::default();
-        let out = BenchOut::<2>::from_iter(&cfg, lognormal_samp2(mu, sigma, samp_size));
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter(lognormal_samp2(mu, sigma, samp_size));
 
         let normal_samp = normal_detm_samp(mu, sigma, samp_size).unwrap();
         let moments_ln = SampleMoments::from_iterator(normal_samp);
@@ -546,8 +573,8 @@ mod test {
     #[test]
     fn test_deref() {
         let cfg = &BenchCfg::default().with_recording_unit(LatencyUnit::NANO);
-        let out1 = BenchOut::<1>::from_iter(
-            cfg,
+        let mut out1 = BenchOut::<1>::new(&cfg, None);
+        out1.record_from_iter(
             [[FpSeconds::from_millis(5)], [FpSeconds::from_millis(7)]].into_iter(),
         );
 
@@ -561,7 +588,8 @@ mod test {
         let samp_size = 200;
 
         let cfg = BenchCfg::default();
-        let out = BenchOut::<2>::from_iter(&cfg, lognormal_samp2(mu, sigma, samp_size));
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter(lognormal_samp2(mu, sigma, samp_size));
 
         let comp = out.comp();
         // Both outputs are fed the same data (`[y, y]`), so medians are equal
@@ -574,8 +602,8 @@ mod test {
     #[test]
     fn test_bench_out_1_flatten() {
         let cfg = BenchCfg::default();
-        let out = BenchOut::<1>::from_iter(
-            &cfg,
+        let mut out = BenchOut::<1>::new(&cfg, None);
+        out.record_from_iter(
             [[FpSeconds::from_millis(5)], [FpSeconds::from_millis(7)]].into_iter(),
         );
 
@@ -586,8 +614,8 @@ mod test {
     #[test]
     fn test_bench_out_reset() {
         let cfg = BenchCfg::default();
-        let mut out = BenchOut::<2>::from_iter(
-            &cfg,
+        let mut out = BenchOut::<2>::new(&cfg, None);
+        out.record_from_iter(
             [
                 [FpSeconds::from_millis(1), FpSeconds::from_millis(2)],
                 [FpSeconds::from_millis(3), FpSeconds::from_millis(4)],
@@ -602,7 +630,8 @@ mod test {
     #[test]
     fn test_bench_out_2_panics_on_empty() {
         let cfg = BenchCfg::default();
-        let out = BenchOut::<2>::from_iter(&cfg, std::iter::empty::<[FpSeconds; 2]>());
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter(std::iter::empty::<[FpSeconds; 2]>());
 
         assert_eq!(out.n(), 0);
         assert_eq!(out[0].n(), 0);

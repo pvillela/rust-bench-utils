@@ -561,9 +561,11 @@ mod test {
     #[test]
     fn test_comp_panics_on_empty_sample() {
         let cfg = BenchCfg::default();
-        let out1 = BenchOut::from_iter(&cfg, std::iter::empty::<FpSeconds>());
-        let mut src2 = ConstLatencySrc::new(1, [FpSeconds::from_millis(3)]);
-        let out2 = BenchOut::from_iter(&cfg, src2.aggregate().take(10));
+        let mut out1 = BenchOut::new(&cfg, None);
+        out1.record_from_iter(std::iter::empty::<FpSeconds>());
+        let mut src2 = ConstLatencySrc::new([FpSeconds::from_millis(3)], 1);
+        let mut out2 = BenchOut::new(&cfg, None);
+        out2.record_from_iter(src2.aggregate().take(10));
         let comp = Comp::new(&out1, &out2);
 
         assert!(
@@ -594,9 +596,11 @@ mod test {
     #[test]
     fn test_comp_panics_on_singleton_sample() {
         let cfg = BenchCfg::default();
-        let mut src1 = ConstLatencySrc::new(1, [FpSeconds::from_millis(3)]);
-        let out1 = BenchOut::from_iter(&cfg, src1.aggregate().take(10));
-        let out2 = BenchOut::from_iter(&cfg, [FpSeconds::from_millis(1)].into_iter());
+        let mut src1 = ConstLatencySrc::new([FpSeconds::from_millis(3)], 1);
+        let mut out1 = BenchOut::new(&cfg, None);
+        out1.record_from_iter(src1.aggregate().take(10));
+        let mut out2 = BenchOut::new(&cfg, None);
+        out2.record_from_iter([FpSeconds::from_millis(1)].into_iter());
         let comp = Comp::new(&out1, &out2);
 
         assert!(
@@ -627,14 +631,10 @@ mod test {
     #[test]
     fn test_comp_panics_on_both_stdev_zero() {
         let cfg = BenchCfg::default();
-        let out1 = BenchOut::from_iter(
-            &cfg,
-            [FpSeconds::from_millis(5), FpSeconds::from_millis(5)].into_iter(),
-        );
-        let out2 = BenchOut::from_iter(
-            &cfg,
-            [FpSeconds::from_millis(5), FpSeconds::from_millis(5)].into_iter(),
-        );
+        let mut out1 = BenchOut::new(&cfg, None);
+        out1.record_from_iter([FpSeconds::from_millis(5), FpSeconds::from_millis(5)].into_iter());
+        let mut out2 = BenchOut::new(&cfg, None);
+        out2.record_from_iter([FpSeconds::from_millis(5), FpSeconds::from_millis(5)].into_iter());
         let comp = Comp::new(&out1, &out2);
 
         assert!(
@@ -715,9 +715,11 @@ mod wilcoxon_tests {
     #[test]
     fn test_wilcoxon_empty_sample_panic() {
         let cfg = BenchCfg::default();
-        let out1 = BenchOut::from_iter(&cfg, std::iter::empty::<FpSeconds>());
-        let mut src2 = ConstLatencySrc::new(1, [FpSeconds::from_millis(3)]);
-        let out2 = BenchOut::from_iter(&cfg, src2.aggregate().take(10));
+        let mut out1 = BenchOut::new(&cfg, None);
+        out1.record_from_iter(std::iter::empty::<FpSeconds>());
+        let mut src2 = ConstLatencySrc::new([FpSeconds::from_millis(3)], 1);
+        let mut out2 = BenchOut::new(&cfg, None);
+        out2.record_from_iter(src2.aggregate().take(10));
         let comp = Comp::new(&out1, &out2);
 
         assert!(
@@ -735,8 +737,10 @@ mod wilcoxon_tests {
         let sigma = *LO_STDEV_LN;
         let samp_size = 500;
         let latencies: Vec<FpSeconds> = lognormal_samp(mu, sigma, samp_size).collect();
-        let out1 = BenchOut::from_iter(&cfg, latencies.iter().cloned());
-        let out2 = BenchOut::from_iter(&cfg, latencies.iter().cloned());
+        let mut out1 = BenchOut::new(&cfg, None);
+        out1.record_from_iter(latencies.iter().cloned());
+        let mut out2 = BenchOut::new(&cfg, None);
+        out2.record_from_iter(latencies.iter().cloned());
         let comp = Comp::new(&out1, &out2);
 
         let p = comp.wilcoxon_rank_sum_p(AltHyp::Ne);

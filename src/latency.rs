@@ -514,7 +514,7 @@ mod test_execs_per_second {
 
         let target_latency = FpSeconds::from_millis(10);
         let exp_eps = 100.0;
-        let mut src = LognormalLatencySrc::new_with_default_sigmas(1, [target_latency]);
+        let mut src = LognormalLatencySrc::new_with_default_sigmas([target_latency], 1);
         let eps = execs_per_sec(src.aggregate(), RunLength::Count(1000));
 
         rel_approx_eq!(exp_eps, eps, EPSILON);
@@ -532,18 +532,28 @@ mod test_execs_per_second {
     fn src_small_finite() {
         _ = env_logger::try_init();
 
-        const COUNT: usize = 1000;
-        let iter_len = COUNT;
+        const COUNT: usize = 128;
         let target_latency = FpSeconds::from_secs(10);
-        let mut src = LognormalLatencySrc::new_with_default_sigmas(1, [target_latency]);
-        let eps = execs_per_sec(src.aggregate().take(iter_len), RunLength::Count(COUNT));
-        assert!(eps.is_infinite(), "should be infinite: eps={eps}");
+        let mut src = LognormalLatencySrc::new_with_default_sigmas([target_latency], 1);
+
+        {
+            let iter_len = COUNT / 2 - 1;
+            let mut src = LognormalLatencySrc::new_with_default_sigmas([target_latency], 1);
+            let eps = execs_per_sec(src.aggregate().take(iter_len), RunLength::Count(COUNT));
+            assert!(eps.is_infinite(), "should be infinite: eps={eps}");
+        }
+
+        {
+            let iter_len = COUNT;
+            let eps = execs_per_sec(src.aggregate().take(iter_len), RunLength::Count(COUNT));
+            assert!(eps.is_finite(), "should be infinite: eps={eps}");
+        }
     }
 
     // cargo test --package bench_utils --lib --all-features -- latency::test_execs_per_second::src_infinite_zero --exact --nocapture --include-ignored
     #[test]
     fn src_infinite_zero() {
-        let mut src = ConstLatencySrc::new(1, [FpSeconds::ZERO]);
+        let mut src = ConstLatencySrc::new([FpSeconds::ZERO], 1);
         let eps = execs_per_sec(src.aggregate(), RunLength::Count(1000));
         assert!(eps.is_infinite(), "should be infinite: eps={eps}");
     }

@@ -359,7 +359,7 @@ mod test {
     fn test_src_execs_per_sec_estimation() {
         let cfg = BenchCfg::default();
         let mut src =
-            LognormalLatencySrc::<1>::new_with_default_sigmas(1, [FpSeconds::from_millis(10)]);
+            LognormalLatencySrc::<1>::new_with_default_sigmas([FpSeconds::from_millis(10)], 1);
         let eps = cfg.execs_per_sec(&mut src, RunLength::Count(500));
         // Expected: 1000ms / 10ms = 100.0
         rel_approx_eq!(100.0, eps, 0.05);
@@ -369,7 +369,7 @@ mod test {
     fn test_src_execs_per_sec_time_run_length() {
         let cfg = BenchCfg::default();
         let mut src =
-            LognormalLatencySrc::<1>::new_with_default_sigmas(1, [FpSeconds::from_millis(1)]);
+            LognormalLatencySrc::<1>::new_with_default_sigmas([FpSeconds::from_millis(1)], 1);
         let eps = cfg.execs_per_sec(&mut src, RunLength::Time(Duration::from_millis(5)));
         assert!(eps.is_finite() && eps > 0.0);
         // Rough check: should be close to 1000 (1000ms / 1ms)
@@ -380,7 +380,7 @@ mod test {
     fn test_src_execs_per_sec_count_with_timeout() {
         let cfg = BenchCfg::default();
         let mut src =
-            LognormalLatencySrc::<1>::new_with_default_sigmas(1, [FpSeconds::from_millis(5)]);
+            LognormalLatencySrc::<1>::new_with_default_sigmas([FpSeconds::from_millis(5)], 1);
         let eps = cfg.execs_per_sec(
             &mut src,
             RunLength::CountWithTimeout(200, Duration::from_millis(5)),

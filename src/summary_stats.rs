@@ -89,7 +89,8 @@ mod test {
     #[test]
     fn test_summary_stats_panics_on_empty() {
         let cfg = BenchCfg::default();
-        let out = crate::BenchOut::from_iter(&cfg, std::iter::empty::<FpSeconds>());
+        let mut out = crate::BenchOut::new(&cfg, None);
+        out.record_from_iter(std::iter::empty::<FpSeconds>());
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| summary_stats(&out)));
         assert!(result.is_err(), "expected panic on empty sample");
     }
@@ -103,9 +104,10 @@ mod test {
         let sigma = 1.15_f64.ln() / 2.0;
         let mu = target.as_f64().ln();
 
-        let mut src = LognormalLatencySrc::<1>::new(1, [(target, sigma)]);
+        let mut src = LognormalLatencySrc::<1>::new([(target, sigma)], 1);
         let cfg = BenchCfg::default();
-        let out = BenchOut::from_iter(&cfg, src.aggregate().take(SAMPLE_SIZE));
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter(src.aggregate().take(SAMPLE_SIZE));
         let summary = summary_stats(&out);
 
         let normal = Normal::new(mu, sigma).unwrap();

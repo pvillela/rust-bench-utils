@@ -45,7 +45,8 @@ fn run_no_status(cfg: &BenchCfg, run_length: RunLength, samp_size: usize) {
     let start = Instant::now();
     let target_fn = || no_status(cfg, run_length);
     let src = iter::from_fn(target_fn).take(samp_size);
-    let out = BenchOut::from_iter_with_counts(&cfg, src);
+    let mut out = BenchOut::new(&cfg, None);
+    out.record_from_iter_with_counts(src);
     println!("elapsed={:?}, {:?}", start.elapsed(), out.summary());
 }
 
@@ -54,7 +55,8 @@ fn run_with_status(cfg: &BenchCfg, run_length: RunLength, samp_size: usize) {
     let start = Instant::now();
     let target_fn = || with_status(cfg, run_length);
     let src = iter::from_fn(target_fn).take(samp_size);
-    let out = BenchOut::from_iter_with_counts(&cfg, src);
+    let mut out = BenchOut::new(&cfg, None);
+    out.record_from_iter_with_counts(src);
     println!("elapsed={:?}, {:?}", start.elapsed(), out.summary());
 }
 

@@ -32,10 +32,11 @@ impl<const K: usize> BenchState<K> {
         let mut acc_latency = FpSeconds::ZERO; // enables testing with synthetic latency sources
         let start = Instant::now();
 
+        let batch = src.batch().unwrap_or(1).max(1);
+
         for i in 1..=exec_count {
             let src_finished = if let Some(batch_latencies) = src.next() {
-                acc_latency +=
-                    batch_latencies.0.iter().cloned().sum::<FpSeconds>() * batch_latencies.1;
+                acc_latency += batch_latencies.iter().cloned().sum::<FpSeconds>() * batch;
                 trace!(
                     "execute >>> i={i}, batch_latencies={batch_latencies:?}, acc_latency={acc_latency:?}"
                 );
@@ -95,7 +96,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     mut s: S,
 ) -> BenchOut<K> {
     debug!("bench_run_x >>> run_length={run_length:?}");
-    let mut state = BenchOut::new(cfg);
+    let mut state = BenchOut::new(cfg, None);
     let execs_per_second = cfg.execs_per_sec(&mut src, run_length);
     debug!("bench_run_x >>> execs_per_second={execs_per_second}");
 
@@ -332,17 +333,17 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
     // Use `ConstLatencySrc` to allow accurate checking of status output.
 
     fn src1(base_target_latency: Duration) -> impl LatencySrc<1> {
-        ConstLatencySrc::new(1, [base_target_latency.into()])
+        ConstLatencySrc::new([base_target_latency.into()], 1)
     }
 
     fn src2(base_target_latency: Duration) -> impl LatencySrc<2> {
         let delta = base_target_latency / 10;
         ConstLatencySrc::new(
-            1,
             [
                 (base_target_latency + delta).into(),
                 (base_target_latency - delta).into(),
             ],
+            1,
         )
     }
 
@@ -719,7 +720,7 @@ mod simple_tests {
     #[test]
     fn test_bench_run_time_with_synthetic_source() {
         let src =
-            LognormalLatencySrc::<1>::new_with_default_sigmas(1, [FpSeconds::from_millis(10)]);
+            LognormalLatencySrc::<1>::new_with_default_sigmas([FpSeconds::from_millis(10)], 1);
         let out = bench_run_arg_cfg(
             &quick_cfg(),
             src,
@@ -731,7 +732,7 @@ mod simple_tests {
 
     #[test]
     fn test_bench_run_count_with_timeout_synthetic() {
-        let src = LognormalLatencySrc::<1>::new_with_default_sigmas(1, [FpSeconds::from_millis(5)]);
+        let src = LognormalLatencySrc::<1>::new_with_default_sigmas([FpSeconds::from_millis(5)], 1);
         let out = bench_run_arg_cfg(
             &quick_cfg(),
             src,

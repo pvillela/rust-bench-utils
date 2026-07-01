@@ -27,18 +27,20 @@ pub struct BenchOut {
     pub(crate) n_nz: u64,
     pub(crate) sum_ln: f64,
     pub(crate) sum2_ln: f64,
+    pub(crate) batch: Option<usize>,
 }
 
 impl BenchOut {
     #[doc(hidden)]
     /// Creates a new empty instance based on `cfg`.
-    pub fn new(cfg: &BenchCfg) -> Self {
+    pub fn new(cfg: &BenchCfg, batch: Option<usize>) -> Self {
         let hist = new_timing(20 * 1000 * 1000, cfg.sigfig());
         let sum = 0.;
         let sum2 = 0.;
         let n_nz = 0;
         let sum_ln = 0.;
         let sum2_ln = 0.;
+        let batch = batch.map(|n| n.max(1));
 
         Self {
             recording_unit: cfg.recording_unit(),
@@ -48,45 +50,31 @@ impl BenchOut {
             n_nz,
             sum_ln,
             sum2_ln,
+            batch,
         }
     }
 
-    /// Creates a [`BenchOut`] from a **finite** iterator of [`FpSeconds`] values.
+    /// Updates `self` from a **finite** iterator of [`FpSeconds`] values.
     ///
-    /// Each item from the iterator is recorded as a single latency observation.
-    ///
-    /// # Arguments
-    ///
-    /// - `cfg` - benchmark configuration (recording unit, significant figures, etc.).
-    /// - `src` - source of elapsed-time measurements to ingest.
+    /// Each item from the iterator is recorded as a single latency value.
     ///
     /// ## May hang
-    /// Hangs if th iterator is not finite.
-    pub fn from_iter(cfg: &BenchCfg, src: impl Iterator<Item = FpSeconds>) -> Self {
-        Self::from_iter_with_counts(cfg, src.map(|item| (item, 1)))
+    /// Hangs if the iterator is not finite.
+    pub fn record_from_iter(&mut self, src: impl Iterator<Item = FpSeconds>) {
+        self.record_from_iter_with_counts(src.map(|item| (item, 1)))
     }
 
-    /// Creates a [`BenchOut`] from a **finite** iterator of ([`FpSeconds`], [`usize`]) pairs.
+    /// Updates `self` from a **finite** iterator of ([`FpSeconds`], [`usize`]) pairs.
     ///
     /// Each item from the iterator is recorded as `count` latency observations, where `count` is the
     /// second component of the pair.
     ///
-    /// # Arguments
-    ///
-    /// - `cfg` - benchmark configuration (recording unit, significant figures, etc.).
-    /// - `src` - source of elapsed-time measurements to ingest.
-    ///
     /// ## May hang
-    /// Hangs if th iterator is not finite.
-    pub fn from_iter_with_counts(
-        cfg: &BenchCfg,
-        src: impl Iterator<Item = (FpSeconds, usize)>,
-    ) -> Self {
-        let mut out = Self::new(cfg);
+    /// Hangs if the iterator is not finite.
+    pub fn record_from_iter_with_counts(&mut self, src: impl Iterator<Item = (FpSeconds, usize)>) {
         for item in src {
-            out.capture_data(item);
+            self.capture_data_with_counts(item);
         }
-        out
     }
 
     #[doc(hidden)]
@@ -102,23 +90,29 @@ impl BenchOut {
 
     #[inline(always)]
     /// Updates `self` with an elapsed time observation for the target function.
-    pub(crate) fn capture_data(&mut self, batch_latency: (FpSeconds, usize)) {
-        let (mean_latency, batch) = batch_latency;
+    pub(crate) fn capture_data_with_counts(&mut self, latency_with_count: (FpSeconds, usize)) {
+        let (mean_latency, count) = latency_with_count;
         let mean_elapsed_u64 = self.recording_unit.value_from_fpsecs(mean_latency);
         self.hist
-            .record_n(mean_elapsed_u64, batch as u64)
+            .record_n(mean_elapsed_u64, count as u64)
             .expect("can't happen: histogram is auto-resizable");
 
-        let total_elapsed_f64 = (mean_latency * batch).as_f64();
+        let total_elapsed_f64 = (mean_latency * count).as_f64();
         self.sum += total_elapsed_f64;
         self.sum2 += total_elapsed_f64.powi(2);
 
-        if batch_latency.0 > FpSeconds::ZERO {
+        if latency_with_count.0 > FpSeconds::ZERO {
             let ln = total_elapsed_f64.ln();
             self.n_nz += 1;
             self.sum_ln += ln;
             self.sum2_ln += ln.powi(2);
         }
+    }
+
+    #[inline(always)]
+    /// Updates `self` with an elapsed time observation for the target function.
+    pub(crate) fn capture_data(&mut self, mean_latency: FpSeconds) {
+        self.capture_data_with_counts((mean_latency, 1));
     }
 
     /// Returns all the latency data collected as an iterator of value-count pairs, where each value is a latency
@@ -147,10 +141,31 @@ impl BenchOut {
         self.recording_unit
     }
 
-    /// Number of observations (sample size) for a function, as an integer.
+    /// Batching used in data collection.
+    ///
+    /// - `None` means no batching;
+    /// - `Some(b)` means batches of size `b`.
+    #[inline(always)]
+    pub fn batch(&self) -> Option<usize> {
+        self.batch
+    }
+
+    /// Batch size used in data collection. Returns `1` for `batch` values of `None`, `Some(0)`, and `Some(1)`.
+    #[inline(always)]
+    pub(crate) fn batch_size(&self) -> usize {
+        self.batch.unwrap_or(1).max(1)
+    }
+
+    /// Number of (batched) latency data items recorded.
     #[inline(always)]
     pub fn n(&self) -> u64 {
         self.hist.len()
+    }
+
+    /// Total number of function executions taking into account batching.
+    #[inline(always)]
+    pub fn executions(&self) -> u64 {
+        self.n() * self.batch_size() as u64
     }
 
     /// Summary descriptive statistics.
@@ -442,8 +457,8 @@ mod test {
     fn test_from_iter_to_iter() {
         const EPSILON: f64 = 0.001;
         let cfg = BenchCfg::default();
-        let out = BenchOut::from_iter(
-            &cfg,
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter(
             [
                 FpSeconds::from_millis(1),
                 FpSeconds::from_millis(1),
@@ -463,8 +478,8 @@ mod test {
     fn test_from_iter_to_iter_with_counts() {
         const EPSILON: f64 = 0.001;
         let cfg = BenchCfg::default();
-        let out = BenchOut::from_iter(
-            &cfg,
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter(
             [
                 FpSeconds::from_millis(1),
                 FpSeconds::from_millis(1),
@@ -485,8 +500,8 @@ mod test {
     fn test_from_iter_with_counts_to_iter() {
         const EPSILON: f64 = 0.001;
         let cfg = BenchCfg::default();
-        let out = BenchOut::from_iter_with_counts(
-            &cfg,
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter_with_counts(
             [
                 (FpSeconds::from_millis(1), 2),
                 (FpSeconds::from_millis(2), 1),
@@ -505,8 +520,8 @@ mod test {
     fn test_from_iter_with_counts_to_iter_with_counts() {
         const EPSILON: f64 = 0.001;
         let cfg = BenchCfg::default();
-        let out = BenchOut::from_iter_with_counts(
-            &cfg,
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter_with_counts(
             [
                 (FpSeconds::from_millis(1), 2),
                 (FpSeconds::from_millis(2), 1),
@@ -537,7 +552,8 @@ mod test {
         let ru = cfg.recording_unit();
 
         let lognormal_samp = lognormal_samp(mu, sigma, samp_size);
-        let out = BenchOut::from_iter(&cfg, lognormal_samp);
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter(lognormal_samp);
 
         assert_eq!(ru, LatencyUnit::NANO);
         assert_eq!(out.n() as usize, samp_size);
@@ -608,7 +624,8 @@ mod test {
         let cfg = BenchCfg::default();
 
         let lognormal_samp = lognormal_samp(mu, sigma, samp_size);
-        let out = BenchOut::from_iter(&cfg, lognormal_samp);
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter(lognormal_samp);
 
         let normal_samp = normal_detm_samp(mu, sigma, samp_size).unwrap();
         let moments_ln = SampleMoments::from_iterator(normal_samp);
@@ -687,7 +704,8 @@ mod test {
     #[test]
     fn test_mean_panics_on_empty() {
         let cfg = BenchCfg::default();
-        let out = BenchOut::from_iter(&cfg, std::iter::empty());
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter(std::iter::empty());
         let result = std::panic::catch_unwind(|| out.mean());
         assert!(result.is_err());
     }
@@ -695,7 +713,8 @@ mod test {
     #[test]
     fn test_stdev_panics_on_empty() {
         let cfg = BenchCfg::default();
-        let out = BenchOut::from_iter(&cfg, std::iter::empty());
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter(std::iter::empty());
         let result = std::panic::catch_unwind(|| out.stdev());
         assert!(result.is_err());
     }
@@ -703,7 +722,8 @@ mod test {
     #[test]
     fn test_median_panics_on_empty() {
         let cfg = BenchCfg::default();
-        let out = BenchOut::from_iter(&cfg, std::iter::empty());
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter(std::iter::empty());
         let result = std::panic::catch_unwind(|| out.median());
         assert!(result.is_err());
     }
@@ -711,7 +731,8 @@ mod test {
     #[test]
     fn test_mean_ln_panics_on_empty() {
         let cfg = BenchCfg::default();
-        let out = BenchOut::from_iter(&cfg, std::iter::empty());
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter(std::iter::empty());
         let result = std::panic::catch_unwind(|| out.mean_ln());
         assert!(result.is_err());
     }
@@ -719,7 +740,8 @@ mod test {
     #[test]
     fn test_stdev_ln_panics_on_empty() {
         let cfg = BenchCfg::default();
-        let out = BenchOut::from_iter(&cfg, std::iter::empty());
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter(std::iter::empty());
         let result = std::panic::catch_unwind(|| out.stdev_ln());
         assert!(result.is_err());
     }
@@ -727,7 +749,8 @@ mod test {
     #[test]
     fn test_student_ln_t_panics_on_single() {
         let cfg = BenchCfg::default();
-        let out = BenchOut::from_iter(&cfg, [FpSeconds::from_millis(1)].into_iter());
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter([FpSeconds::from_millis(1)].into_iter());
         let result = std::panic::catch_unwind(|| out.student_ln_t(0.0));
         assert!(result.is_err());
     }
@@ -735,10 +758,8 @@ mod test {
     #[test]
     fn test_reset() {
         let cfg = BenchCfg::default();
-        let mut out = BenchOut::from_iter(
-            &cfg,
-            [FpSeconds::from_millis(1), FpSeconds::from_millis(2)].into_iter(),
-        );
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter([FpSeconds::from_millis(1), FpSeconds::from_millis(2)].into_iter());
         assert_eq!(out.n(), 2);
         out.reset();
         assert_eq!(out.n(), 0);

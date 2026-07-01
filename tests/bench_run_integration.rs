@@ -36,8 +36,8 @@ fn test_bench_run_to_comp_accept_null_hyp() {
 
     // Two independent LognormalLatencySrc instances with the same target median —
     // each draws from its own RNG, so their samples differ.
-    let src1 = LognormalLatencySrc::<1>::new_with_default_sigmas(1, [target]);
-    let src2 = LognormalLatencySrc::<1>::new_with_default_sigmas(1, [target]);
+    let src1 = LognormalLatencySrc::<1>::new_with_default_sigmas([target], 1);
+    let src2 = LognormalLatencySrc::<1>::new_with_default_sigmas([target], 1);
 
     // Sample sizes different to show `Comp` works with different sample sizes.
     let out1 = bench_run_arg_cfg(&cfg, src1, RunLength::Count(1000));
@@ -83,8 +83,8 @@ fn test_bench_run_to_comp_reject_null_hyp() {
 
     // Two independent LognormalLatencySrc instances with the same target median —
     // each draws from its own RNG, so their samples differ.
-    let src1 = LognormalLatencySrc::<1>::new_with_default_sigmas(1, [target1]);
-    let src2 = LognormalLatencySrc::<1>::new_with_default_sigmas(1, [target2]);
+    let src1 = LognormalLatencySrc::<1>::new_with_default_sigmas([target1], 1);
+    let src2 = LognormalLatencySrc::<1>::new_with_default_sigmas([target2], 1);
 
     let out1 = bench_run_arg_cfg(&cfg, src1, RunLength::Count(1000));
     let out2 = bench_run_arg_cfg(&cfg, src2, RunLength::Count(1000));
