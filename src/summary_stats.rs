@@ -19,33 +19,37 @@ pub fn new_timing(hist_high: u64, hist_sigfig: u8) -> Timing {
 /// Includes sample size, mean, standard deviation, median, several percentiles, min, and max.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SummaryStats {
-    /// Sample size (number of observations).
+    /// Number of recorded values.
     pub count: u64,
-    /// Arithmetic mean of the latencies observations.
+    /// Batching used to record values.
+    pub batch: Option<usize>,
+    /// Total number of function executions taking into account batching.
+    pub executions: u64,
+    /// Arithmetic mean of the recorded values.
     pub mean: FpSeconds,
-    /// Sample standard deviation of the latencies observations.
+    /// Sample standard deviation of the recorded values.
     pub stdev: FpSeconds,
-    /// Minimum observed latency.
+    /// Minimum recorded value.
     pub min: FpSeconds,
-    /// 1st percentile latency.
+    /// 1st percentile value.
     pub p1: FpSeconds,
-    /// 5th percentile latency.
+    /// 5th percentile value.
     pub p5: FpSeconds,
-    /// 10th percentile latency.
+    /// 10th percentile value.
     pub p10: FpSeconds,
-    /// 25th percentile latency.
+    /// 25th percentile value.
     pub p25: FpSeconds,
-    /// 50th percentile (median) latency.
+    /// 50th percentile (median) value.
     pub median: FpSeconds,
-    /// 75th percentile latency.
+    /// 75th percentile value.
     pub p75: FpSeconds,
-    /// 90th percentile latency.
+    /// 90th percentile value.
     pub p90: FpSeconds,
-    /// 95th percentile latency.
+    /// 95th percentile value.
     pub p95: FpSeconds,
-    /// 99th percentile latency.
+    /// 99th percentile value.
     pub p99: FpSeconds,
-    /// Maximum observed latency.
+    /// Maximum recorded value.
     pub max: FpSeconds,
 }
 
@@ -54,13 +58,15 @@ pub struct SummaryStats {
 ///
 /// # Panics
 ///
-/// Panics if the number of observations is zero.
+/// Panics if the number of recorded values is zero.
 pub fn summary_stats(out: &BenchOut) -> SummaryStats {
     let hist = &out.hist;
     let ru = out.recording_unit();
 
     SummaryStats {
         count: hist.len(),
+        batch: out.batch(),
+        executions: out.executions(),
         mean: out.mean(),
         stdev: out.stdev(),
         min: ru.fpsecs_from_value(hist.min()),
