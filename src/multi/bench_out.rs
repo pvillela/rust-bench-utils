@@ -147,9 +147,8 @@ impl<const K: usize> BenchOut<K> {
     }
 
     /// Batch size used in data collection. Returns `1` for `batch` values of `None`, `Some(0)`, and `Some(1)`.
-    #[allow(unused)]
     #[inline(always)]
-    pub(crate) fn batch_size(&self) -> usize {
+    pub fn batch_size(&self) -> usize {
         self.first().batch_size()
     }
 
@@ -186,6 +185,28 @@ impl<const K: usize> BenchOut<K> {
     /// Panics if the number of observations is zero.
     pub fn stdevs(&self) -> [FpSeconds; K] {
         array::from_fn(|k| self.arr[k].stdev())
+    }
+
+    /// Estimates of the underlying lognormal `mu` parameters in ln(seconds),
+    /// under the assumption that `latency(f)` is approximately log-normal for each target function.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
+    ///
+    /// # Panics
+    /// Panics if there is no batching or batch size <=1, and the number of recorded non-zero values is
+    /// zero for any of the target functions.
+    pub fn mus(&self) -> [f64; K] {
+        array::from_fn(|k| self.arr[k].mu())
+    }
+
+    /// Estimate of the underlying lognormal `sigma` parameters,
+    /// under the assumption that `latency(f)` is approximately log-normal for each target function.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
+    ///
+    /// # Panics
+    /// Panics if there is no batching or batch size <=1, and the number of recorded non-zero values is
+    /// zero for any of the target functions.
+    pub fn sigmas(&self) -> [f64; K] {
+        array::from_fn(|k| self.arr[k].sigma())
     }
 
     /// Sample medians of latencies.

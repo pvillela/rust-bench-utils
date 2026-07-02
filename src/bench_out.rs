@@ -152,7 +152,7 @@ impl BenchOut {
 
     /// Batch size used in data collection. Returns `1` for `batch` values of `None`, `Some(0)`, and `Some(1)`.
     #[inline(always)]
-    pub(crate) fn batch_size(&self) -> usize {
+    pub fn batch_size(&self) -> usize {
         self.batch.unwrap_or(1).max(1)
     }
 
@@ -170,42 +170,74 @@ impl BenchOut {
 
     /// Summary descriptive statistics.
     ///
-    /// Includes sample size, mean, standard deviation, median, several percentiles, min, and max.
+    /// Includes the number of recorded values and their mean, standard deviation, median, several percentiles,
+    /// min, and max.
     ///
     /// # Panics
-    /// Panics if the number of observations is zero.
+    /// Panics if the number of recorded values is zero.
     pub fn summary(&self) -> SummaryStats {
         summary_stats(self)
     }
 
-    /// Sample mean of latencies.
+    /// Sample mean of recorded values.
     ///
     /// # Panics
-    /// Panics if the number of observations is zero.
+    /// Panics if the number of recorded values is zero.
     pub fn mean(&self) -> FpSeconds {
-        let mean_rec = sample_mean(self.n(), self.sum).expect("number of observations is zero");
+        let mean_rec = sample_mean(self.n(), self.sum).expect("number of recorded values is zero");
         mean_rec.into()
     }
 
-    /// Sample standard deviation of latencies.
+    /// Sample standard deviation of recorded values.
     ///
     /// # Panics
-    /// Panics if the number of observations is zero.
+    /// Panics if the number of recorded values is zero.
     pub fn stdev(&self) -> FpSeconds {
         let stdev_rec =
-            sample_stdev(self.n(), self.sum, self.sum2).expect("number of observations is zero");
+            sample_stdev(self.n(), self.sum, self.sum2).expect("number of recorded values is zero");
         stdev_rec.into()
     }
 
-    /// Sample median of latencies.
+    /// Estimate of the underlying lognormal `mu` parameter in ln(seconds),
+    /// under the assumption that `latency(f)` is approximately log-normal.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
     ///
     /// # Panics
-    /// Panics if the number of observations is zero.
+    /// Panics if there is no batching or batch size <=1, and the number of recorded non-zero values is zero.
+    pub fn mu(&self) -> f64 {
+        match self.batch {
+            None | Some(0) | Some(1) => self.mean_ln(),
+            Some(_) => self.mean().ln() - self.sigma().powi(2) / 2.0,
+        }
+    }
+
+    /// Estimate of the underlying lognormal `sigma` parameter,
+    /// under the assumption that `latency(f)` is approximately log-normal.
+    /// This assumption is widely supported by performance analysis theory and empirical data.
+    ///
+    /// # Panics
+    /// Panics if there is no batching or batch size <=1, and the number of recorded non-zero values is zero.
+    pub fn sigma(&self) -> f64 {
+        match self.batch {
+            None | Some(0) | Some(1) => self.stdev_ln(),
+            Some(_) => {
+                let var_x = self.batch_size() as f64 * self.stdev().powi(2);
+                let sigma2 = (1.0 + var_x / self.mean().powi(2)).ln();
+                let sigma2 = self.mean().ln() - sigma2 / 2.0;
+                sigma2.sqrt()
+            }
+        }
+    }
+
+    /// Sample median of recorded values.
+    ///
+    /// # Panics
+    /// Panics if the number of recorded values is zero.
     pub fn median(&self) -> FpSeconds {
         self.summary().median
     }
 
-    /// Sample mean of the natural logarithms of latency [`FpSeconds`].
+    /// Sample mean of the natural logarithms of recorded [`FpSeconds`] values.
     ///
     /// # Panics
     /// Panics if the number of non-zero observations is zero.
@@ -213,10 +245,10 @@ impl BenchOut {
         sample_mean(self.n_nz, self.sum_ln).expect("number of non-zero observations is zero")
     }
 
-    /// Sample standard deviation of the natural logarithms of latency [`FpSeconds`].
+    /// Sample standard deviation of the natural logarithms of recorded [`FpSeconds`] values.
     ///
     /// # Panics
-    /// Panics if the number of non-zero observations is zero.
+    /// Panics if the number of non-zero recorded values is zero.
     pub fn stdev_ln(&self) -> f64 {
         sample_stdev(self.n_nz, self.sum_ln, self.sum2_ln)
             .expect("number of non-zero observations is zero")
@@ -236,7 +268,7 @@ impl BenchOut {
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `number of non-zero observations <= 1`.
+    /// - `number of non-zero recorded values <= 1`.
     /// - `self.stdev_ln() == 0`.
     pub fn student_ln_t(&self, ln_mu0: f64) -> f64 {
         let moments = SampleMoments::new(self.n_nz, self.sum_ln, self.sum2_ln);

@@ -16,7 +16,8 @@ pub fn new_timing(hist_high: u64, hist_sigfig: u8) -> Timing {
 
 /// Common summary statistics useful in latency testing/benchmarking.
 ///
-/// Includes sample size, mean, standard deviation, median, several percentiles, min, and max.
+/// Includes the number of recorded values and their mean, standard deviation, median, several percentiles,
+/// min, and max.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SummaryStats {
     /// Number of recorded values.
@@ -29,6 +30,10 @@ pub struct SummaryStats {
     pub mean: FpSeconds,
     /// Sample standard deviation of the recorded values.
     pub stdev: FpSeconds,
+    /// Estimate of the underlying lognormal `mu` parameter in ln(seconds).
+    pub mu: f64,
+    /// Estimate of the underlying lognormal `sigma` parameter,
+    pub sigma: f64,
     /// Minimum recorded value.
     pub min: FpSeconds,
     /// 1st percentile value.
@@ -69,6 +74,8 @@ pub fn summary_stats(out: &BenchOut) -> SummaryStats {
         executions: out.executions(),
         mean: out.mean(),
         stdev: out.stdev(),
+        mu: out.mu(),
+        sigma: out.sigma(),
         min: ru.fpsecs_from_value(hist.min()),
         p1: ru.fpsecs_from_value(hist.value_at_quantile(0.01)),
         p5: ru.fpsecs_from_value(hist.value_at_quantile(0.05)),
