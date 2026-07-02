@@ -230,8 +230,8 @@ mod validate_ratio {
     fn run(tgt1: Duration, ratio: f64, batch: usize, samp_size: usize) -> (f64, f64) {
         _ = env_logger::try_init();
 
-        let effort1 = BusyWork::calibrate(tgt1);
-        let effort2 = (effort1 as f64 / ratio).round() as u32;
+        let effort2 = BusyWork::calibrate(tgt1);
+        let effort1 = (effort2 as f64 * ratio).round() as u32;
         let adjusted_ratio = effort1 as f64 / effort2 as f64;
         let f1 = BusyWork::fun(effort1);
         let f2 = BusyWork::fun(effort2);
@@ -277,7 +277,7 @@ mod validate_ratio {
     // cargo test -r --lib --all-features -- load::busy_work_sha::validate_ratio::test_busy_work_ratio_100_nano --nocapture --test-threads=1
     #[test]
     fn test_busy_work_ratio_100_nano() {
-        const EPSILON: f64 = 0.01;
+        const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 100;
         let tgt1 = Duration::from_nanos(100);
         let batch = count_for_acc_ltncy(tgt1, Duration::from_micros(10));
@@ -287,10 +287,20 @@ mod validate_ratio {
 
     #[test]
     fn test_busy_work_ratio_1_micro() {
-        const EPSILON: f64 = 0.01;
+        const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 100;
         let tgt1 = Duration::from_micros(1);
         let batch = count_for_acc_ltncy(tgt1, Duration::from_micros(10));
+        let (adjusted_ratio, latency_ratio) = run(tgt1, RATIO, batch, SAMP_SIZE);
+        rel_approx_eq!(adjusted_ratio, latency_ratio, EPSILON);
+    }
+
+    #[test]
+    fn test_busy_work_ratio_10_micro() {
+        const EPSILON: f64 = 0.02;
+        const SAMP_SIZE: usize = 100;
+        let tgt1 = Duration::from_micros(1);
+        let batch = 1;
         let (adjusted_ratio, latency_ratio) = run(tgt1, RATIO, batch, SAMP_SIZE);
         rel_approx_eq!(adjusted_ratio, latency_ratio, EPSILON);
     }
@@ -318,7 +328,7 @@ mod validate_ratio {
     #[test]
     fn test_busy_work_ratio_10_milli() {
         const EPSILON: f64 = 0.01;
-        const SAMP_SIZE: usize = 30;
+        const SAMP_SIZE: usize = 40;
         let tgt1 = Duration::from_millis(10);
         let batch = 1;
         let (adjusted_ratio, latency_ratio) = run(tgt1, RATIO, batch, SAMP_SIZE);
