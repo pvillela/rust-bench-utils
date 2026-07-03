@@ -12,7 +12,8 @@
       "Bash(cargo test *)",
       "Bash(cargo clippy *)",
       "Bash(echo \"=== exit: $?\")",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(npx markdownlint *)"
     ]
   }
 }
