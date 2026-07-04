@@ -295,8 +295,9 @@ extreme $\ln Y_j$ before averaging; a *winsorized* mean instead clamps them to a
 Bounded influence against extreme
 $\ln Y_j$ (both tails) while retaining more efficiency than the median; the trim/winsor fraction tunes
 the robustness–efficiency trade-off. At $k=1$, $\ln Y_j$ is exactly normal so trimming costs little
-bias. For $k>1$ it still does **not** remove the $\mathbb{E}[\ln Y]\neq\mu$ drift, so pair it with the
-same $e^{-\hat\sigma^2/2}$ / Fenton–Wilkinson correction if an unbiased median is required. A useful
+bias. For $k>1$ it still does **not** remove the $\mathbb{E}[\ln Y]\neq\mu$ drift, so — if an unbiased
+median is required — pair it with a bias correction: either the $e^{-\hat\sigma^2/2}$ factor (as in
+estimators A and B) **or** the Fenton–Wilkinson correction. A useful
 robust member of the $k=1$ log-scale family and a robust input to the correction at small $k$.
 
 **Excluded (insufficient robustness for this use case):**
@@ -314,17 +315,17 @@ robust member of the $k=1$ log-scale family and a robust input to the correction
 ### 6.1 Pros / cons by regime
 
 Columns describe the $g$–$k$ balance; recall **bias depends on $k,\sigma^2$; variance depends on
-$g=n/k$**. Cell symbols: ✓ favorable, ✗ unfavorable, ◐ mixed; **BP** = breakdown point.
+$g=n/k$**. Cell symbols: ✓ favorable, ✗ unfavorable, ◐ mixed, *italic* = neutral note; **BP** = breakdown point.
 
 | Estimator | $k=1$ | $1<k\ll\sqrt n$ | $k\sim\sqrt n$ | $\sqrt n\ll k<n$ | $k=n$ |
 |-----------|-------|-----------------|----------------|------------------|-------|
-| **1. $\exp(\text{ml}_y)$** | ✓ MLE, efficient (CRLB), ≈unbiased ✗ tiny-$X$ sensitive | ✓ variance nearly flat (saturates) ✗ upward bias appears, grows | ✗ substantial upward bias; lognormal fit for $Y$ failing | ✗ targets $\mathbb{E}[X]$, off by $e^{\sigma^2/2}$ | ✗ $=\bar X_n$; estimates mean |
+| **1. $\exp(\text{ml}_y)$** | ✓ MLE, efficient (CRLB), ≈unbiased ✗ tiny-$X$ sensitive *(targets median only if $\ln X$ symmetric — weaker than full lognormality)* | ✓ variance nearly flat (saturates) ✗ upward bias appears, grows | ✗ substantial upward bias; lognormal fit for $Y$ failing | ✗ targets $\mathbb{E}[X]$, off by $e^{\sigma^2/2}$ | ✗ $=\bar X_n$; estimates mean |
 | **2. $\text{median}(Y)$** | ✓ robust (≈50% BP), model-free, consistent ✗ ARE 0.64 vs MLE | ✓ still robust ✗ upward bias grows | ✗ moderate upward bias; fewer $Y_j$ | ✗ large bias ($\to\mathbb{E}[X]$); high variance | ✗ $=\bar X_n$ |
 | **3. $m_y e^{-\hat\sigma^2/2}$** | ✓ correct target, consistent ✗ < MLE efficiency; **not robust** | ✓ **≈unbiased** (uses $k$); good precision ✗ non-robust (mean+var) | ✓ ≈unbiased ✗ $k\,s_y^2$ noise appears; non-robust | ✓ bias low ✗ $\hat\sigma^2$ very noisy; non-robust | ✗ $s_y^2$ undefined → $\bar X_n$ |
 | **4. $e^{-\hat\sigma^2/2}\text{median}(Y)$** | ✗ over-corrected, bias $e^{-\sigma^2/2}$ | ✗ still biased low (approaching 0 from below) | ◐ bias small (one-sided); robust location | ✓ ≈unbiased **and** robust location ✗ scale $\hat\sigma^2$ noisy/fragile → use robust scale | ✗ $\hat\sigma^2$ undefined → $\bar X_n$ |
 | **A. robustified #4** ($Q_n$ scale) | ✗ over-corrected at $k=1$ | ◐ biased low but robust both axes | ✓ ≈unbiased, robust both axes | ✓ **best Track-B here**: ≈unbiased + robust | ✗ degenerate |
 | **B. $Q_n$/MAD-scale MoM** | ✓ correct target, robust scale ✗ < MLE eff. | ✓ ≈unbiased, robust scale ✗ mean location non-robust | ✓ ≈unbiased; robust scale | ✓ bias low; robust scale ✗ few $Y_j$ | ✗ degenerate |
-| **C. trimmed/winsor. log-mean** | ✓ robust, near-MLE eff. | ✓ robust ✗ needs FW/$\hat\sigma$ correction for bias | ◐ correction accuracy drops | ✗ log-scale mismatch grows | ✗ degenerate |
+| **C. trimmed/winsor. log-mean** | ✓ robust, near-MLE eff. *(targets median only if $\ln X$ symmetric — weaker than full lognormality)* | ✓ robust ✗ correction reintroduces lognormal/$\hat\sigma$ dependence | ◐ correction accuracy drops | ✗ log-scale mismatch grows | ✗ degenerate |
 
 ### 6.2 Asymptotic variance scaling (up to the common factor $e^{2\mu}$)
 
