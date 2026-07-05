@@ -10,6 +10,20 @@ echo "=== Running postCreate Setup ==="
 export LOCAL_BIN="$HOME/.local/bin"
 mkdir -p ${LOCAL_BIN}
 
+# echo "Installing Rust ..."
+# curl --proto '=https' --tlsv1.2 -sSfL https://sh.rustup.rs | bash
+
+echo "Installing nvm ..."
+export NVM_DIR="$HOME/.nvm"
+mkdir -p ${NVM_DIR}
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.5/install.sh | bash
+
+echo "Installing nodejs and npm ..."
+(source ${NVM_DIR}/nvm.sh && nvm install --lts --latest-npm)
+
+# echo "Installing Claude Code ..."
+# curl -fsS https://claude.ai/install.sh | bash
+
 # echo "Installing Bun ..."
 # curl -fsSL https://bun.com/install | bash
 # export BUN_INSTALL="$HOME/.bun"
@@ -18,6 +32,9 @@ mkdir -p ${LOCAL_BIN}
 echo "Installing oh-my-pi ..."
 # bun install -g @oh-my-pi/pi-coding-agent
 curl -fsSL https://omp.sh/install | sh
+
+echo "Installing Gemini CLI ..."
+(source ${NVM_DIR}/nvm.sh && npm install -g @google/gemini-cli)
 
 echo "Installing herdr ..."
 curl curl -fsSL https://herdr.dev/install.sh | sh
