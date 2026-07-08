@@ -1,13 +1,20 @@
 //! Module defining the key data structure produced by [`crate::bench_run`].
 
-use crate::{
-    BenchCfg, FpSeconds, LatencyUnit, SummaryStats, Timing, multi, new_timing, summary_stats,
-};
+use crate::{BenchCfg, FpSeconds, LatencyUnit, SummaryStats, multi, summary_stats};
 use basic_stats::{
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean, sample_stdev},
     normal::{student_1samp_ci, student_1samp_p, student_1samp_t, student_1samp_test},
 };
+use hdrhistogram::Histogram;
 use std::{fmt::Debug, iter};
+
+/// Constructs a [`Histogram<u64>`]. The arguments correspond to [Histogram::high] and [Histogram::sigfig].
+pub(crate) fn new_hdrhist(hist_high: u64, hist_sigfig: u8) -> Histogram<u64> {
+    let mut hist = Histogram::<u64>::new_with_max(hist_high, hist_sigfig)
+        .expect("should not happen given histogram construction");
+    hist.auto(true);
+    hist
+}
 
 /// Contains the latency observations resulting from benchmarking a closure.
 ///
@@ -15,32 +22,44 @@ use std::{fmt::Debug, iter};
 /// Its methods provide access to the raw data sample collected for the benchmarked closure, as well as descriptive and
 /// inferential statistics.
 ///
+/// In general, the quality of the statistics depends on batch size and the number of recorded values.
+/// Some functions work best with no batching or smaller batch sizes, while others provide better results with higher
+/// batch sizes.
+/// The higher the number of recorded values, the better.
+/// Some statistical functions need at least 5 recorded values to return reasonable values.
+///
 /// The `*_ln_*` methods provide statistics for `mean(ln(latency(f)))`, where `ln` is the natural logarithm.
 /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
 /// This assumption is widely supported by performance analysis theory and empirical data.
 /// Thus, the `*_ln_*` methods are useful for the analysis of median latencies.
+/// However, batching changes the statistical distribution of the recorded values -- the higher the batch size, the
+/// more the recorded values deviate from log-normal and approach a normal distribution.
 pub struct BenchOut {
     pub(crate) recording_unit: LatencyUnit,
-    pub(crate) hist: Timing,
+    pub(crate) hist: Histogram<u64>,
     pub(crate) sum: f64,
     pub(crate) sum2: f64,
     pub(crate) n_nz: u64,
     pub(crate) sum_ln: f64,
     pub(crate) sum2_ln: f64,
     pub(crate) batch: Option<usize>,
+    rousseeuw_croux_q: f64,
+    rousseeuw_croux_q_ln: f64,
 }
 
 impl BenchOut {
     #[doc(hidden)]
     /// Creates a new empty instance based on `cfg`.
     pub fn new(cfg: &BenchCfg, batch: Option<usize>) -> Self {
-        let hist = new_timing(20 * 1000 * 1000, cfg.sigfig());
+        let hist = new_hdrhist(20 * 1000 * 1000, cfg.sigfig());
         let sum = 0.;
         let sum2 = 0.;
         let n_nz = 0;
         let sum_ln = 0.;
         let sum2_ln = 0.;
         let batch = batch.map(|n| n.max(1));
+        let rousseeuw_croux_q = f64::NAN;
+        let rousseeuw_croux_q_ln = f64::NAN;
 
         Self {
             recording_unit: cfg.recording_unit(),
@@ -51,6 +70,8 @@ impl BenchOut {
             sum_ln,
             sum2_ln,
             batch,
+            rousseeuw_croux_q,
+            rousseeuw_croux_q_ln,
         }
     }
 
@@ -85,7 +106,8 @@ impl BenchOut {
         self.sum2 = 0.;
         self.n_nz = 0;
         self.sum_ln = 0.;
-        self.sum2_ln = 0.
+        self.sum2_ln = 0.;
+        self.rousseeuw_croux_q = f64::NAN;
     }
 
     #[inline(always)]
@@ -152,96 +174,192 @@ impl BenchOut {
 
     /// Batch size used in data collection. Returns `1` for `batch` values of `None`, `Some(0)`, and `Some(1)`.
     #[inline(always)]
-    pub fn batch_size(&self) -> usize {
+    pub fn bsz(&self) -> usize {
         self.batch.unwrap_or(1).max(1)
     }
 
-    /// Number of (batched) latency data items recorded.
+    /// Number of recorded values. In case of batching, each group (batch) contributes one recorded value.
     #[inline(always)]
-    pub fn n(&self) -> u64 {
+    pub fn groups(&self) -> u64 {
         self.hist.len()
     }
 
-    /// Total number of function executions taking into account batching.
+    /// Total number of function executions accounting for batching (`= self.groups() * self.bsz()`).
     #[inline(always)]
-    pub fn executions(&self) -> u64 {
-        self.n() * self.batch_size() as u64
+    pub fn n(&self) -> u64 {
+        self.groups() * self.bsz() as u64
     }
 
-    /// Summary descriptive statistics.
-    ///
-    /// Includes the number of recorded values and their mean, standard deviation, median, several percentiles,
-    /// min, and max.
+    /// Summary descriptive statistics for recorded values.
     ///
     /// # Panics
     /// Panics if the number of recorded values is zero.
-    pub fn summary(&self) -> SummaryStats {
+    pub fn summary_r(&self) -> SummaryStats {
         summary_stats(self)
     }
 
-    /// Sample mean of recorded values.
+    /// Sample mean. Doesn't depend on batching.
     ///
     /// # Panics
     /// Panics if the number of recorded values is zero.
     pub fn mean(&self) -> FpSeconds {
-        let mean_rec = sample_mean(self.n(), self.sum).expect("number of recorded values is zero");
-        mean_rec.into()
+        let mean = sample_mean(self.groups(), self.sum).expect("number of recorded values is zero");
+        mean.into()
     }
 
     /// Sample standard deviation of recorded values.
     ///
     /// # Panics
     /// Panics if the number of recorded values is zero.
+    pub fn stdev_r(&self) -> FpSeconds {
+        let stdev_r = sample_stdev(self.groups(), self.sum, self.sum2)
+            .expect("number of recorded values is zero");
+        stdev_r.into()
+    }
+
+    /// Sample standard deviation accounting for batching.
+    ///
+    /// # Panics
+    /// Panics if the number of recorded values is zero.
     pub fn stdev(&self) -> FpSeconds {
-        let stdev_rec =
-            sample_stdev(self.n(), self.sum, self.sum2).expect("number of recorded values is zero");
-        stdev_rec.into()
-    }
-
-    /// Estimate of the underlying lognormal `mu` parameter in ln(seconds),
-    /// under the assumption that `latency(f)` is approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// # Panics
-    /// Panics if there is no batching or batch size <=1, and the number of recorded non-zero values is zero.
-    pub fn mu(&self) -> f64 {
-        match self.batch {
-            None | Some(0) | Some(1) => self.mean_ln(),
-            Some(_) => self.mean().ln() - self.sigma().powi(2) / 2.0,
-        }
-    }
-
-    /// Estimate of the underlying lognormal `sigma` parameter,
-    /// under the assumption that `latency(f)` is approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// # Panics
-    /// Panics if there is no batching or batch size <=1, and the number of recorded non-zero values is zero.
-    pub fn sigma(&self) -> f64 {
-        match self.batch {
-            None | Some(0) | Some(1) => self.stdev_ln(),
-            Some(_) => {
-                let var_x = self.batch_size() as f64 * self.stdev().powi(2);
-                let sigma2 = (1.0 + var_x / self.mean().powi(2)).ln();
-                let sigma2 = self.mean().ln() - sigma2 / 2.0;
-                sigma2.sqrt()
-            }
-        }
+        self.stdev_r() * (self.bsz() as f64).sqrt()
     }
 
     /// Sample median of recorded values.
     ///
     /// # Panics
     /// Panics if the number of recorded values is zero.
-    pub fn median(&self) -> FpSeconds {
-        self.summary().median
+    pub fn median_r(&self) -> FpSeconds {
+        self.summary_r().median
+    }
+
+    //=== Helper functions for estimators ===
+
+    fn cv(&self) -> f64 {
+        todo!()
+    }
+
+    fn cv_rob(&self) -> f64 {
+        todo!()
+    }
+
+    fn priv_rousseeuw_croux_q_general(
+        &mut self,
+        inflate: impl Fn(u64) -> u64,
+        deflate: impl Fn(u64) -> f64,
+    ) -> f64 {
+        if !self.rousseeuw_croux_q.is_nan() {
+            return self.rousseeuw_croux_q;
+        }
+
+        const C_Q: f64 = 2.2219;
+
+        let mut rc_hist = Histogram::new_from(self.hist());
+        for (i, iv_i) in self.hist.iter_recorded().enumerate() {
+            let v = iv_i.value_iterated_to();
+            if v == 0 {
+                continue;
+            }
+            let mid_i = inflate(self.hist.median_equivalent(v));
+            let count_i: u64 = iv_i.count_at_value();
+            if count_i > 1 {
+                rc_hist
+                    .record_n(0, count_i - 1)
+                    .expect("shouldn't happen as histogram is sized properly");
+            }
+            for iv_j in self.hist.iter_recorded().skip(i + 1) {
+                let v = iv_j.value_iterated_to();
+                let mid_j = inflate(self.hist.median_equivalent(v));
+                let count_j = iv_j.count_at_value();
+                let abs_diff = mid_i.abs_diff(mid_j);
+                let count = count_i * count_j;
+                rc_hist.record_n(abs_diff, count);
+            }
+        }
+        let quartile = rc_hist.value_at_quantile(0.25);
+        deflate(quartile) * C_Q
+    }
+
+    fn priv_rousseeuw_croux_q(&mut self) -> f64 {
+        if !self.rousseeuw_croux_q_ln.is_nan() {
+            return self.rousseeuw_croux_q_ln;
+        }
+
+        let inflate = |value: u64| -> u64 { value };
+        let deflate = |value: u64| -> f64 { value as f64 };
+
+        let rsq = self.priv_rousseeuw_croux_q_general(inflate, deflate);
+        self.rousseeuw_croux_q = rsq;
+        rsq
+    }
+
+    fn priv_rousseeuw_croux_q_ln(&mut self) -> f64 {
+        if !self.rousseeuw_croux_q_ln.is_nan() {
+            return self.rousseeuw_croux_q_ln;
+        }
+
+        let max = self.hist.max() as f64;
+        let multiplyer = max / max.ln();
+        let inflate = |value: u64| -> u64 { ((value as f64).ln() * multiplyer).round() as u64 };
+        let deflate = |value: u64| -> f64 { ((value as f64) / multiplyer).exp() };
+
+        let rsq_ln = self.priv_rousseeuw_croux_q_general(inflate, deflate);
+        self.rousseeuw_croux_q_ln = rsq_ln;
+        rsq_ln
+    }
+
+    fn sigma2_rousseeuw_croux(&self) -> f64 {
+        let sigma_y = self.rousseeuw_croux_q;
+        (1.0 + self.bsz() as f64 * sigma_y.powi(2) / self.mean().powi(2)).ln()
+    }
+
+    //=== Estimators of population mean ===
+
+    /// Robust estimator of mean latency for moderate to large batch sizes (Y near-symmetric).
+    fn mean_a_rousseeuw_croux(&self) -> FpSeconds {
+        self.mean() * (-self.sigma2_rousseeuw_croux() / 2.0).exp()
+    }
+
+    /// Robust estimator of mean latency for small batch size (Y still skewed, n_r large).
+    fn mean_b_rousseeuw_croux(&self) -> FpSeconds {
+        self.mean() * (-self.sigma2_rousseeuw_croux() / 2.0).exp()
+    }
+
+    /// Robust estimator of mean latency across batch sizes.
+    pub fn mean_rob(&self) -> FpSeconds {
+        if self.cv_rob() >= 0.2 {
+            self.mean_b_rousseeuw_croux()
+        } else {
+            self.mean_a_rousseeuw_croux()
+        }
+    }
+
+    //=== Estimators of population median ===
+
+    /// Robust estimator of median latency for moderate to large batch sizes (Y near-symmetric).
+    fn median_a_rousseeuw_croux(&self) -> FpSeconds {
+        self.median_r() * (-self.sigma2_rousseeuw_croux() / 2.0).exp()
+    }
+
+    /// Robust estimator of median latency for small batch size (Y still skewed, n_r large).
+    fn median_b_rousseeuw_croux(&self) -> FpSeconds {
+        self.mean() * (-self.sigma2_rousseeuw_croux() / 2.0).exp()
+    }
+
+    /// Robust estimator of median latency across batch sizes.
+    pub fn median_rob(&self) -> FpSeconds {
+        if self.cv_rob() >= 0.2 {
+            self.median_b_rousseeuw_croux()
+        } else {
+            self.median_a_rousseeuw_croux()
+        }
     }
 
     /// Sample mean of the natural logarithms of recorded [`FpSeconds`] values.
     ///
     /// # Panics
     /// Panics if the number of non-zero observations is zero.
-    pub fn mean_ln(&self) -> f64 {
+    pub fn mean_ln_r(&self) -> f64 {
         sample_mean(self.n_nz, self.sum_ln).expect("number of non-zero observations is zero")
     }
 
@@ -249,7 +367,7 @@ impl BenchOut {
     ///
     /// # Panics
     /// Panics if the number of non-zero recorded values is zero.
-    pub fn stdev_ln(&self) -> f64 {
+    pub fn stdev_ln_r(&self) -> f64 {
         sample_stdev(self.n_nz, self.sum_ln, self.sum2_ln)
             .expect("number of non-zero observations is zero")
     }
@@ -258,31 +376,61 @@ impl BenchOut {
     /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm in [`FpSeconds`]),
     /// or equivalently, the equality of `median(latency(f))` and `exp(ln_mu0)`.
     ///
-    /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
+    /// Without batching, it can be assumed that
+    /// `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
     ///
     /// Arguments:
     /// - `ln_mu0`: hypothesized `mean(ln(latency(f)))`, or equivalently, `ln(median(latency(f)))`,
-    ///   where the latency is expressed in the recording unit.
+    ///   where the latency is expressed in [`FpSeconds`].
     ///
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
     /// - `number of non-zero recorded values <= 1`.
     /// - `self.stdev_ln() == 0`.
-    pub fn student_ln_t(&self, ln_mu0: f64) -> f64 {
+    fn student_ln_t(&self, ln_mu0: f64) -> f64 {
         let moments = SampleMoments::new(self.n_nz, self.sum_ln, self.sum2_ln);
         student_1samp_t(&moments, ln_mu0)
-            .expect("`number of non-zero observations <= 1` or `self.stdev_ln() == 0`")
+            .expect("`number of non-zero recorded values <= 1` or `self.stdev_ln() == 0`")
+    }
+
+    /// Student's one-sample t statistic for
+    /// the equality of `mean(latency(f))` and `mu0` in [`FpSeconds`]),
+    ///
+    /// For sufficiently high batch sizes, the recorded values can be assumed to be approximately normal.
+    ///
+    /// Arguments:
+    /// - `mu0`: hypothesized `mean(latency(f))`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any of the following conditions is true:
+    /// - `number of recorded values <= 1`.
+    /// - `self.stdev() == 0`.
+    fn student_t(&self, mu0: FpSeconds) -> f64 {
+        let moments = SampleMoments::new(self.groups(), self.sum, self.sum2);
+        student_1samp_t(&moments, mu0.into())
+            .expect("`number of recorded values <= 1` or `self.stdev_ln() == 0`")
     }
 
     /// Degrees of freedom for Student's t statistic for `mean(ln(latency(f)))` (where `ln` is the natural logarithm,
     /// in [`FpSeconds`]).
     ///
-    /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
+    /// Without batching, it can be assumed that
+    /// `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// This assumption is widely supported by performance analysis theory and empirical data.
+    ///
+    /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
     /// Thus, this statistics equivalently pertains to `ln(median(latency(f)))`.
-    pub fn student_ln_df(&self) -> f64 {
+    fn student_ln_df(&self) -> f64 {
+        self.n_nz as f64 - 1.
+    }
+
+    /// Degrees of freedom for Student's t statistic for `mean(latency(f))` with latency expressed in [`FpSeconds`]).
+    ///
+    /// For sufficiently high batch sizes, the recorded values can be assumed to be approximately normal.
+    fn student_df(&self) -> f64 {
         self.n_nz as f64 - 1.
     }
 
@@ -404,7 +552,7 @@ impl BenchOut {
     #[cfg(feature = "_test_support")]
     #[inline(always)]
     /// Reference to the raw HDR histogram. Gated by feature **"_test_support"**.
-    pub fn hist(&self) -> &Timing {
+    pub fn hist(&self) -> &Histogram<u64> {
         &self.hist
     }
 
@@ -448,13 +596,13 @@ impl Debug for BenchOut {
         f.write_str(&format!("BenchOut {{ recording_unit={:?}, sigfig={}, n={}, sum={}, sum2={}, n_nz={}, sum_ln={}, sum2_ln={}, summary={:?} }}",
             self.recording_unit,
             self.hist.sigfig(),
-            self.n(),
+            self.groups(),
             self.sum,
             self.sum2,
             self.n_nz,
             self.sum_ln,
             self.sum2_ln,
-            self.summary()))
+            self.summary_r()))
     }
 }
 
@@ -588,7 +736,7 @@ mod test {
         out.record_from_iter(lognormal_samp);
 
         assert_eq!(ru, LatencyUnit::NANO);
-        assert_eq!(out.n() as usize, samp_size);
+        assert_eq!(out.groups() as usize, samp_size);
 
         let normal = Normal::new(mu, sigma).unwrap();
 
@@ -606,7 +754,7 @@ mod test {
         let exp_p95 = normal.inverse_cdf(0.95).exp();
         let exp_p99 = normal.inverse_cdf(0.99).exp();
 
-        let summary = out.summary();
+        let summary = out.summary_r();
 
         println!("exp_mean={:?}, out.mean={:?}", exp_mean, out.mean());
         println!("exp_stdev={:?}, out.stdev={:?}", exp_stdev, out.stdev());
@@ -625,9 +773,9 @@ mod test {
 
         rel_approx_eq!(exp_mean, out.mean().0, EPSILON);
         rel_approx_eq!(exp_stdev, out.stdev().0, EPSILON);
-        rel_approx_eq!(exp_median, out.median().as_f64(), EPSILON);
-        approx_eq!(exp_mean_ln, out.mean_ln(), EPSILON);
-        approx_eq!(exp_stdev_ln, out.stdev_ln(), EPSILON);
+        rel_approx_eq!(exp_median, out.median_r().as_f64(), EPSILON);
+        approx_eq!(exp_mean_ln, out.mean_ln_r(), EPSILON);
+        approx_eq!(exp_stdev_ln, out.stdev_ln_r(), EPSILON);
 
         rel_approx_eq!(exp_mean, summary.mean.0, EPSILON);
         rel_approx_eq!(exp_stdev, summary.stdev.0, EPSILON);
@@ -663,7 +811,7 @@ mod test {
         let moments_ln = SampleMoments::from_iterator(normal_samp);
 
         assert_eq!(out.recording_unit(), LatencyUnit::NANO);
-        assert_eq!(out.n() as usize, samp_size);
+        assert_eq!(out.groups() as usize, samp_size);
 
         // The true median should lie inside the CI
         let true_median = FpSeconds(mu.exp());
@@ -756,7 +904,7 @@ mod test {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::new(&cfg, None);
         out.record_from_iter(std::iter::empty());
-        let result = std::panic::catch_unwind(|| out.median());
+        let result = std::panic::catch_unwind(|| out.median_r());
         assert!(result.is_err());
     }
 
@@ -765,7 +913,7 @@ mod test {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::new(&cfg, None);
         out.record_from_iter(std::iter::empty());
-        let result = std::panic::catch_unwind(|| out.mean_ln());
+        let result = std::panic::catch_unwind(|| out.mean_ln_r());
         assert!(result.is_err());
     }
 
@@ -774,7 +922,7 @@ mod test {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::new(&cfg, None);
         out.record_from_iter(std::iter::empty());
-        let result = std::panic::catch_unwind(|| out.stdev_ln());
+        let result = std::panic::catch_unwind(|| out.stdev_ln_r());
         assert!(result.is_err());
     }
 
@@ -792,8 +940,8 @@ mod test {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::new(&cfg, None);
         out.record_from_iter([FpSeconds::from_millis(1), FpSeconds::from_millis(2)].into_iter());
-        assert_eq!(out.n(), 2);
+        assert_eq!(out.groups(), 2);
         out.reset();
-        assert_eq!(out.n(), 0);
+        assert_eq!(out.groups(), 0);
     }
 }

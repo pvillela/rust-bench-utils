@@ -244,7 +244,7 @@ mod simple_tests {
         let cfg = quick_cfg();
         let out = bench_run_arg_cfg(&cfg, || (), RunLength::Count(5));
         // With 5 count and no timeout, we should have exactly 5 iterations
-        assert_eq!(out.n(), 5);
+        assert_eq!(out.groups(), 5);
     }
 
     #[test]
@@ -258,7 +258,7 @@ mod simple_tests {
             RunLength::Time(Duration::from_nanos(1)),
         );
         // At least some executions should have been captured
-        assert!(out.n() > 0);
+        assert!(out.groups() > 0);
     }
 
     #[test]
@@ -272,21 +272,21 @@ mod simple_tests {
             RunLength::CountWithTimeout(20, Duration::from_nanos(1)),
         );
         // At least some executions should have been captured
-        assert!(out.n() > 0 && out.n() < 20);
+        assert!(out.groups() > 0 && out.groups() < 20);
     }
 
     #[test]
     /// Takes  3 seconds to run due to default warmup_millis.
     fn test_bench_run_default() {
         let out = bench_run(|| (), RunLength::Count(5));
-        assert_eq!(out.n(), 5);
+        assert_eq!(out.groups(), 5);
     }
 
     #[test]
     /// Takes  3 seconds to run due to default warmup_millis.
     fn test_bench_run_with_status() {
         let out = bench_run_with_status(|| (), RunLength::Count(5));
-        assert_eq!(out.n(), 5);
+        assert_eq!(out.groups(), 5);
     }
 
     #[test]
@@ -295,6 +295,6 @@ mod simple_tests {
         let mut buf = StringWriter::new();
         let status = DefaultStatus::new(&mut buf, "Warming up".to_string(), "Running".to_string());
         let out = bench_run_x(&cfg, || (), RunLength::Count(5), status);
-        assert_eq!(out.n(), 5);
+        assert_eq!(out.groups(), 5);
     }
 }

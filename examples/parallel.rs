@@ -33,11 +33,11 @@ fn main() {
     let out1 = out.out_f1();
     let out2 = out.out_f2();
 
-    let median_ratio = out1.median().as_f64() / out2.median().as_f64();
+    let median_ratio = out1.median_r().as_f64() / out2.median_r().as_f64();
 
     println!("median_ratio={median_ratio}");
-    println!("out1.summary={:?}", out1.summary());
-    println!("out2.summary={:?}", out2.summary());
+    println!("out1.summary={:?}", out1.summary_r());
+    println!("out2.summary={:?}", out2.summary_r());
 
     let elapsed_total = start_total.elapsed();
     println!("*** elapsed_in_threads={elapsed:?}, elapsed_total={elapsed_total:?}");

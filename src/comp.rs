@@ -51,7 +51,7 @@ impl<'a> Comp<'a> {
     /// Difference between the median of `f1`'s latencies and the median of `f2`'s latencies,
     /// in [`FpSeconds`].
     pub fn diff_medians_f1_f2(&self) -> FpSeconds {
-        self.0.median() - self.1.median()
+        self.0.median_r() - self.1.median_r()
     }
 
     /// Ratio of the median of `f1`'s latencies to the median of `f2`'s latencies.
@@ -63,7 +63,7 @@ impl<'a> Comp<'a> {
     ///
     /// Panics if `self.out_f1().n() == 0` or `self.out_f2().n() == 0`, since
     pub fn ratio_medians_f1_f2(&self) -> f64 {
-        self.0.median().as_f64() / self.1.median().as_f64()
+        self.0.median_r().as_f64() / self.1.median_r().as_f64()
     }
 
     /// The difference between the mean of `f1`'s latencies and the mean of `f2`'s latencies,
@@ -83,7 +83,7 @@ impl<'a> Comp<'a> {
     ///
     /// Panics if `self.out_f1().n_nz == 0` or `self.out_f2().n_nz == 0`.
     pub fn mean_diff_ln_f1_f2(&self) -> f64 {
-        self.0.mean_ln() - self.1.mean_ln()
+        self.0.mean_ln_r() - self.1.mean_ln_r()
     }
 
     /// Estimated ratio of the median `f1` latency to the median `f2` latency,
@@ -276,7 +276,7 @@ impl<'a> Comp<'a> {
         });
 
         RankSum::from_iters_with_counts(iter_f1, iter_f2).expect(
-            // samples not in increasing order is impossible due to use of HdrHistogram
+            // samples not in increasing order is impossible due to use of Histogram
             "either sample is empty",
         )
     }
@@ -355,7 +355,7 @@ mod test {
 
     fn are_eq_bench_out(out1: &BenchOut, out2: &BenchOut) -> bool {
         out1.recording_unit == out2.recording_unit
-            && out1.summary() == out2.summary()
+            && out1.summary_r() == out2.summary_r()
             && out1.sum == out2.sum
             && out1.sum2 == out2.sum2
             && out1.n_nz == out2.n_nz
@@ -444,11 +444,14 @@ mod test {
             assert!(are_eq_bench_out(o1, f1_out));
             assert!(are_eq_bench_out(o2, f2_out));
 
-            assert_eq!(f1_out.median() - f2_out.median(), comp.diff_medians_f1_f2());
+            assert_eq!(
+                f1_out.median_r() - f2_out.median_r(),
+                comp.diff_medians_f1_f2()
+            );
             approx_eq!(ratio_medians, comp.ratio_medians_f1_f2(), EPSILON);
             assert_eq!(f1_out.mean() - f2_out.mean(), comp.mean_diff_f1_f2());
             assert_eq!(
-                f1_out.mean_ln() - f2_out.mean_ln(),
+                f1_out.mean_ln_r() - f2_out.mean_ln_r(),
                 comp.mean_diff_ln_f1_f2()
             );
             approx_eq!(ratio_medians, comp.ratio_medians_f1_f2_from_lns(), EPSILON);

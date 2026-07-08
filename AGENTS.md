@@ -58,7 +58,7 @@ The library supports benchmarking multiple functions simultaneously via const-ge
 | `multi` | Directory module with `bench_out` (const-generic `BenchOut<K>` wrapping `[BenchOut; K]`, derefs to `BenchOut` when K=1), `bench_run` (const-generic `bench_run_x` etc.), and `latency_src` (`LatencySrc<K>` trait yielding `[Duration; K]`, concrete types `LatencySrc1`/`LatencySrc1b`/`LatencySrc2`/`LatencySrc2b`, plus test-only sources). |
 | `comp` | `Comp` compares two `BenchOut`s via `&BenchOut` references. Welch's t-test/CIs on difference of ln-means (i.e., ratio of medians). Wilcoxon rank sum behind `_experimental` feature. |
 | `status` | `Status<'a>` trait for benchmarking progress callbacks (warm-up and execution phases). `NoStatus` (no-op) and `DefaultStatus<W: Write>` (prints warmup/exec progress with backspace-overwriting). |
-| `summary_stats` | `SummaryStats` struct (mean, stdev, percentiles p1 through p99, min, max). Type alias `Timing = Histogram<u64>`. |
+| `summary_stats` | `SummaryStats` struct (mean, stdev, percentiles p1 through p99, min, max). |
 | `load` | Feature-gated behind `load`. Directory module with `fake_work(Duration)` (thread sleep) and `BusyWork` struct with `work(u32)` / `fun(effort)` (SHA-256 hashing loop) plus calibration functions. |
 | `duo` | Directory module with `bench_run` (K=2 convenience functions including `bench_run_parallel*` for non-interleaved execution) and `DuoOut` alias for `multi::BenchOut<2>` with `comp()`, `out_f1()`, `out_f2()` helpers and Welch/Wilcoxon methods. |
 | `test_support` | Lognormal sample generators and `StringWriter`. Gated behind `_test_support` feature. Used by this crate's tests and friend crates. |

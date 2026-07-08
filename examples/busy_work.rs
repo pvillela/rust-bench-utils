@@ -27,9 +27,9 @@ fn run(target_latency: Duration, warmup_millis: u64, run_length: RunLength, batc
     println!("elaped time={elapsed:?}");
     println!(
         "target_latency/median_latency={}",
-        target_latency.as_secs_f64() / out.median().as_f64()
+        target_latency.as_secs_f64() / out.median_r().as_f64()
     );
-    println!("{:?}", out.summary());
+    println!("{:?}", out.summary_r());
 }
 
 fn main() {

@@ -1,18 +1,4 @@
 use crate::{BenchOut, FpSeconds};
-use hdrhistogram::Histogram;
-
-#[doc(hidden)]
-/// Alias of [`Histogram<u64>`].
-pub type Timing = Histogram<u64>;
-
-#[doc(hidden)]
-/// Constructs a [`Timing`]. The arguments correspond to [Histogram::high] and [Histogram::sigfig].
-pub fn new_timing(hist_high: u64, hist_sigfig: u8) -> Timing {
-    let mut hist = Histogram::<u64>::new_with_max(hist_high, hist_sigfig)
-        .expect("should not happen given histogram construction");
-    hist.auto(true);
-    hist
-}
 
 /// Common summary statistics useful in latency testing/benchmarking.
 ///
@@ -71,7 +57,7 @@ pub fn summary_stats(out: &BenchOut) -> SummaryStats {
     SummaryStats {
         count: hist.len(),
         batch: out.batch(),
-        executions: out.executions(),
+        executions: out.n(),
         mean: out.mean(),
         stdev: out.stdev(),
         mu: out.mu(),
@@ -149,7 +135,7 @@ mod test {
         rel_approx_eq!(exp_p95, summary.p95.0, EPSILON);
         rel_approx_eq!(exp_p99, summary.p99.0, EPSILON);
 
-        assert_eq!(out.n(), SAMPLE_SIZE as u64);
+        assert_eq!(out.groups(), SAMPLE_SIZE as u64);
         assert_eq!(summary.count, SAMPLE_SIZE as u64);
         assert!(summary.min > FpSeconds::ZERO);
         assert!(summary.max > summary.p99);

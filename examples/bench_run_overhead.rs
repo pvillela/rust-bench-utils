@@ -37,7 +37,7 @@ fn no_status(cfg: &BenchCfg, run_length: RunLength) -> Option<(FpSeconds, usize)
 #[inline(always)]
 fn with_status(cfg: &BenchCfg, run_length: RunLength) -> Option<(FpSeconds, usize)> {
     let out = my_bench_run_with_status_arg_cfg(&cfg, LatencySrc0, run_length);
-    Some((out.mean(), out.n() as usize))
+    Some((out.mean(), out.groups() as usize))
 }
 
 fn run_no_status(cfg: &BenchCfg, run_length: RunLength, samp_size: usize) {
@@ -47,7 +47,7 @@ fn run_no_status(cfg: &BenchCfg, run_length: RunLength, samp_size: usize) {
     let src = iter::from_fn(target_fn).take(samp_size);
     let mut out = BenchOut::new(&cfg, None);
     out.record_from_iter_with_counts(src);
-    println!("elapsed={:?}, {:?}", start.elapsed(), out.summary());
+    println!("elapsed={:?}, {:?}", start.elapsed(), out.summary_r());
 }
 
 fn run_with_status(cfg: &BenchCfg, run_length: RunLength, samp_size: usize) {
@@ -57,7 +57,7 @@ fn run_with_status(cfg: &BenchCfg, run_length: RunLength, samp_size: usize) {
     let src = iter::from_fn(target_fn).take(samp_size);
     let mut out = BenchOut::new(&cfg, None);
     out.record_from_iter_with_counts(src);
-    println!("elapsed={:?}, {:?}", start.elapsed(), out.summary());
+    println!("elapsed={:?}, {:?}", start.elapsed(), out.summary_r());
 }
 
 fn main() {

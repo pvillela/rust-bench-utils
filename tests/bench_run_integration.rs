@@ -10,8 +10,8 @@ fn test_bench_run_to_comp_roundtrip_with_fn() {
     let out1 = bench_run_arg_cfg(&cfg, || {}, RunLength::Count(10));
     let out2 = bench_run_arg_cfg(&cfg, || {}, RunLength::Count(10));
 
-    assert_eq!(out1.n(), 10);
-    assert_eq!(out2.n(), 10);
+    assert_eq!(out1.groups(), 10);
+    assert_eq!(out2.groups(), 10);
 
     // Compare them via Comp
     let comp = Comp::new(&out1, &out2);

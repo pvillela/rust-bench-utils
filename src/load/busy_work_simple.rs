@@ -240,8 +240,8 @@ mod validate_ratio {
 
         println!(
             "out_f1().median()={:?}, out_f2().median()={:?}",
-            out.out_f1().median(),
-            out.out_f2().median()
+            out.out_f1().median_r(),
+            out.out_f2().median_r()
         );
 
         println!(

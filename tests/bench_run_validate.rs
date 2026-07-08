@@ -84,7 +84,7 @@ fn run<const K: usize, R, Src>(
     let base_target_fpsecs = FpSeconds::from_duration(base_target_latency);
 
     for i in 0..K {
-        let out_median = out[i].median();
+        let out_median = out[i].median_r();
         let v_median = v_medians[i];
 
         println!(
@@ -107,14 +107,14 @@ fn run<const K: usize, R, Src>(
             out[i].hist().value_at_quantile(0.5)
         );
 
-        println!("out[{i}].summary()={:?}", out[i].summary());
+        println!("out[{i}].summary()={:?}", out[i].summary_r());
     }
 
     println!("test total elapsed time = {:?}", start.elapsed());
 
     // Assertions
     for i in 0..K {
-        rel_approx_eq_fpsecs!(v_medians[i], out[i].median(), epsilon);
+        rel_approx_eq_fpsecs!(v_medians[i], out[i].median_r(), epsilon);
     }
 }
 

@@ -149,19 +149,19 @@ impl<const K: usize> BenchOut<K> {
     /// Batch size used in data collection. Returns `1` for `batch` values of `None`, `Some(0)`, and `Some(1)`.
     #[inline(always)]
     pub fn batch_size(&self) -> usize {
-        self.first().batch_size()
+        self.first().bsz()
     }
 
     /// Number of observations (sample size) for a function, as an integer.
     #[inline(always)]
     pub fn n(&self) -> u64 {
-        self.first().n()
+        self.first().groups()
     }
 
     /// Total number of function executions taking into account batching.
     #[inline(always)]
     pub fn executions(&self) -> u64 {
-        self.first().executions()
+        self.first().n()
     }
 
     /// Summary descriptive statistics.
@@ -211,7 +211,7 @@ impl<const K: usize> BenchOut<K> {
 
     /// Sample medians of latencies.
     pub fn medians(&self) -> [FpSeconds; K] {
-        array::from_fn(|k| self.arr[k].median())
+        array::from_fn(|k| self.arr[k].median_r())
     }
 
     /// Sample means of the natural logarithms of latencies.
@@ -219,7 +219,7 @@ impl<const K: usize> BenchOut<K> {
     /// # Panics
     /// Panics if the number of non-zero observations is zero.
     pub fn mean_lns(&self) -> [f64; K] {
-        array::from_fn(|k| self.arr[k].mean_ln())
+        array::from_fn(|k| self.arr[k].mean_ln_r())
     }
 
     /// Sample standard deviations of the natural logarithms of latencies.
@@ -227,7 +227,7 @@ impl<const K: usize> BenchOut<K> {
     /// # Panics
     /// Panics if the number of non-zero observations is zero.
     pub fn stdev_lns(&self) -> [f64; K] {
-        array::from_fn(|k| self.arr[k].stdev_ln())
+        array::from_fn(|k| self.arr[k].stdev_ln_r())
     }
 
     /// Student's one-sample t statistics for
@@ -480,9 +480,9 @@ mod test {
         for k in 0..out.arity() {
             rel_approx_eq_fpsecs!(FpSeconds(exp_mean), out[k].mean(), EPSILON);
             rel_approx_eq_fpsecs!(FpSeconds(exp_stdev), out[k].stdev(), EPSILON);
-            rel_approx_eq_fpsecs!(FpSeconds(exp_median), out[k].median(), EPSILON);
-            approx_eq!(exp_mean_ln, out[k].mean_ln(), EPSILON);
-            approx_eq!(exp_stdev_ln, out[k].stdev_ln(), EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_median), out[k].median_r(), EPSILON);
+            approx_eq!(exp_mean_ln, out[k].mean_ln_r(), EPSILON);
+            approx_eq!(exp_stdev_ln, out[k].stdev_ln_r(), EPSILON);
 
             rel_approx_eq_fpsecs!(FpSeconds(exp_mean), summaries[k].mean, EPSILON);
             rel_approx_eq_fpsecs!(FpSeconds(exp_stdev), summaries[k].stdev, EPSILON);
@@ -614,10 +614,10 @@ mod test {
 
         let comp = out.comp();
         // Both outputs are fed the same data (`[y, y]`), so medians are equal
-        assert_eq!(comp.out_f1().median(), comp.out_f2().median());
+        assert_eq!(comp.out_f1().median_r(), comp.out_f2().median_r());
         // Verify both outputs have the expected sample size: 2*k*k - 1
-        assert_eq!(comp.out_f1().n() as usize, samp_size);
-        assert_eq!(comp.out_f2().n() as usize, samp_size);
+        assert_eq!(comp.out_f1().groups() as usize, samp_size);
+        assert_eq!(comp.out_f2().groups() as usize, samp_size);
     }
 
     #[test]
@@ -629,7 +629,7 @@ mod test {
         );
 
         let flat: crate::BenchOut = out.flatten();
-        assert_eq!(flat.n(), 2);
+        assert_eq!(flat.groups(), 2);
     }
 
     #[test]
@@ -655,13 +655,13 @@ mod test {
         out.record_from_iter(std::iter::empty::<[FpSeconds; 2]>());
 
         assert_eq!(out.n(), 0);
-        assert_eq!(out[0].n(), 0);
+        assert_eq!(out[0].groups(), 0);
 
         assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].mean())).is_err());
         assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].stdev())).is_err());
-        assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].median())).is_err());
-        assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].mean_ln())).is_err());
-        assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].stdev_ln())).is_err());
+        assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].median_r())).is_err());
+        assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].mean_ln_r())).is_err());
+        assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].stdev_ln_r())).is_err());
         assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].student_ln_t(0.0))).is_err());
     }
 }
