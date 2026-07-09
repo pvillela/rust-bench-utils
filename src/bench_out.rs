@@ -98,9 +98,8 @@ impl BenchOut {
         }
     }
 
-    #[doc(hidden)]
-    /// Creates a new empty instance.
-    pub fn reset(&mut self) {
+    /// Resets `self` to an empty instance.
+    pub(crate) fn reset(&mut self) {
         self.hist.reset();
         self.sum = 0.;
         self.sum2 = 0.;

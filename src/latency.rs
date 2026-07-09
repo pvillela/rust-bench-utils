@@ -282,7 +282,7 @@ impl RunLength {
     ///
     /// The benchmark ends when the specified number of iterations is reached (or exceeded)
     /// or when the time duration is reached (or exceeded), whichever comes first.
-    pub fn exec_count_and_duration(&self) -> (usize, Duration) {
+    pub fn count_and_time(&self) -> (usize, Duration) {
         match self {
             Self::Count(count) => (*count, Duration::MAX),
             Self::Time(duration) => (usize::MAX, *duration),
@@ -291,26 +291,26 @@ impl RunLength {
     }
 
     /// Estimated number of iterations.
-    pub(crate) fn estimated_count(&self, execs_per_second: f64) -> usize {
-        assert!(execs_per_second > 0.0, "execs_per_second must be positive");
+    pub(crate) fn estimated_count(&self, iters_per_second: f64) -> usize {
+        assert!(iters_per_second > 0.0, "iters_per_second must be positive");
         match self {
             Self::Count(count) => *count,
-            Self::Time(duration) => (duration.as_secs_f64() * execs_per_second).round() as usize,
+            Self::Time(duration) => (duration.as_secs_f64() * iters_per_second).round() as usize,
             Self::CountWithTimeout(count, duration) => {
                 let count_from_duration =
-                    (duration.as_secs_f64() * execs_per_second).round() as usize;
+                    (duration.as_secs_f64() * iters_per_second).round() as usize;
                 *count.min(&count_from_duration)
             }
         }
     }
 
     /// Estimated run duration.
-    pub(crate) fn estimated_time(&self, execs_per_second: f64) -> Duration {
+    pub(crate) fn estimated_time(&self, iters_per_second: f64) -> Duration {
         match self {
-            Self::Count(count) => Duration::from_secs_f64(*count as f64 / execs_per_second),
+            Self::Count(count) => Duration::from_secs_f64(*count as f64 / iters_per_second),
             Self::Time(duration) => *duration,
             Self::CountWithTimeout(count, duration) => {
-                let duration_from_count = Duration::from_secs_f64(*count as f64 / execs_per_second);
+                let duration_from_count = Duration::from_secs_f64(*count as f64 / iters_per_second);
                 *duration.min(&duration_from_count)
             }
         }
@@ -331,9 +331,9 @@ impl RunLength {
 /// Returns `f64::INFINITY` if the aggregate latency for any iteration is zero.
 /// In particular, this can happen if `src` is finite and its length is less than or equal to one half
 /// of the estimation budget count.
-pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: RunLength) -> f64 {
+pub(crate) fn iters_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: RunLength) -> f64 {
     let (warmup_count, warmup_fps, exec_count, exec_fps) = {
-        let (budget_count, budget_dur) = budget.exec_count_and_duration();
+        let (budget_count, budget_dur) = budget.count_and_time();
         let warmup_count = budget_count / 2;
         let exec_count = budget_count - warmup_count;
         let warmup_fps: FpSeconds = (budget_dur / 2).into();
@@ -376,7 +376,7 @@ pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: Ru
         for i in 1.. {
             let iter_execs = 2usize.pow(i - 1);
             let iter_latency = (&mut src).take(iter_execs as usize).sum();
-            trace!("execs_per_sec >>> iter_execs={iter_execs}, iter_latency={iter_latency:?},",);
+            trace!("iters_per_sec >>> iter_execs={iter_execs}, iter_latency={iter_latency:?},",);
 
             acc_latency += iter_latency;
             acc_execs += iter_execs;
@@ -388,11 +388,11 @@ pub(crate) fn execs_per_sec(mut src: impl Iterator<Item = FpSeconds>, budget: Ru
             {
                 let iter_execs_per_sec = iter_execs as f64 / iter_latency.as_f64();
                 let acc_execs_per_sec = acc_execs as f64 / acc_latency.as_f64();
-                let execs_per_sec = iter_execs_per_sec.max(acc_execs_per_sec);
+                let iters_per_sec = iter_execs_per_sec.max(acc_execs_per_sec);
                 trace!(
-                    "execs_per_sec >>> iter_execs_per_sec={iter_execs_per_sec}, acc_execs_per_sec={acc_execs_per_sec}, execs_per_sec={execs_per_sec}",
+                    "iters_per_sec >>> iter_execs_per_sec={iter_execs_per_sec}, acc_execs_per_sec={acc_execs_per_sec}, iters_per_sec={iters_per_sec}",
                 );
-                return execs_per_sec;
+                return iters_per_sec;
             }
         }
 
@@ -515,7 +515,7 @@ mod test_execs_per_second {
         let target_latency = FpSeconds::from_millis(10);
         let exp_eps = 100.0;
         let mut src = LognormalLatencySrc::new_with_default_sigmas([target_latency], 1);
-        let eps = execs_per_sec(src.aggregate(), RunLength::Count(1000));
+        let eps = iters_per_sec(src.aggregate(), RunLength::Count(1000));
 
         rel_approx_eq!(exp_eps, eps, EPSILON);
     }
@@ -523,7 +523,7 @@ mod test_execs_per_second {
     #[test]
     fn src_empty() {
         let mut src = EmptyLatencySrc::<1>;
-        let eps = execs_per_sec(src.aggregate(), RunLength::Count(1000));
+        let eps = iters_per_sec(src.aggregate(), RunLength::Count(1000));
         assert!(eps.is_infinite(), "eps={eps}");
     }
 
@@ -539,13 +539,13 @@ mod test_execs_per_second {
         {
             let iter_len = COUNT / 2 - 1;
             let mut src = LognormalLatencySrc::new_with_default_sigmas([target_latency], 1);
-            let eps = execs_per_sec(src.aggregate().take(iter_len), RunLength::Count(COUNT));
+            let eps = iters_per_sec(src.aggregate().take(iter_len), RunLength::Count(COUNT));
             assert!(eps.is_infinite(), "should be infinite: eps={eps}");
         }
 
         {
             let iter_len = COUNT;
-            let eps = execs_per_sec(src.aggregate().take(iter_len), RunLength::Count(COUNT));
+            let eps = iters_per_sec(src.aggregate().take(iter_len), RunLength::Count(COUNT));
             assert!(eps.is_finite(), "should be infinite: eps={eps}");
         }
     }
@@ -554,14 +554,14 @@ mod test_execs_per_second {
     #[test]
     fn src_infinite_zero() {
         let mut src = ConstLatencySrc::new([FpSeconds::ZERO], 1);
-        let eps = execs_per_sec(src.aggregate(), RunLength::Count(1000));
+        let eps = iters_per_sec(src.aggregate(), RunLength::Count(1000));
         assert!(eps.is_infinite(), "should be infinite: eps={eps}");
     }
 
     #[test]
     fn no_op_yields_positive_finite_estimate() {
         let src = iter::from_fn(|| Some(latency(|| ()).into()));
-        let e = execs_per_sec(src, RunLength::Count(1000));
+        let e = iters_per_sec(src, RunLength::Count(1000));
         assert!(e > 0.0, "src no-op should yield positive: {}", e);
         assert!(e.is_finite(), "src no-op estimate should be finite: {}", e);
     }

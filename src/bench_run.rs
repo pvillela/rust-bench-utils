@@ -92,19 +92,6 @@ pub fn bench_run_with_status_arg_cfg(
     multi::bench_run_with_status_arg_cfg(cfg, LatencySrc1::new(f), run_length).into()
 }
 
-pub(crate) fn batch_run_length(run_length: RunLength, batch: Option<usize>) -> RunLength {
-    match batch {
-        None => run_length,
-        Some(batch) => match run_length {
-            RunLength::Count(count) => RunLength::Count(count.div_ceil(batch)),
-            RunLength::Time(_) => run_length,
-            RunLength::CountWithTimeout(count, time) => {
-                RunLength::CountWithTimeout(count.div_ceil(batch), time)
-            }
-        },
-    }
-}
-
 /// Similar to [`bench_run_x`] but batches the executions of `f` into groups of size `batch`.
 ///
 /// Batching may reduce measurement overhead.

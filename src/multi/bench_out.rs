@@ -98,9 +98,19 @@ impl<const K: usize> BenchOut<K> {
         }
     }
 
-    /// Prints the debug representation of `self` to stdout.
-    pub fn print(&self) {
-        println!("{self:?}");
+    /// Resets `self` to an empty instance.
+    pub(crate) fn reset(&mut self) {
+        for b in &mut self.arr {
+            b.reset();
+        }
+    }
+
+    #[inline(always)]
+    /// Updates `self` with an elapsed time observation for the functions.
+    pub(crate) fn capture_data(&mut self, batch_avgs: [FpSeconds; K]) {
+        for (i, out) in &mut self.arr.iter_mut().enumerate() {
+            out.capture_data(batch_avgs[i]);
+        }
     }
 
     /// Returns the number of benchmarked closures (`K`).
@@ -109,28 +119,9 @@ impl<const K: usize> BenchOut<K> {
         K
     }
 
-    pub fn first(&self) -> &crate::BenchOut {
+    #[inline(always)]
+    fn first(&self) -> &crate::BenchOut {
         &self.arr[0]
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &crate::BenchOut> {
-        self.arr.iter()
-    }
-
-    #[doc(hidden)]
-    /// Creates a new empty instance.
-    pub fn reset(&mut self) {
-        for b in &mut self.arr {
-            b.reset();
-        }
-    }
-
-    #[doc(hidden)]
-    /// Updates `self` with an elapsed time observation for the functions.
-    pub fn capture_data(&mut self, batch_latencies: [FpSeconds; K]) {
-        for (i, b) in &mut self.arr.iter_mut().enumerate() {
-            b.capture_data(batch_latencies[i]);
-        }
     }
 
     /// Latency unit used in data collection.
@@ -142,218 +133,32 @@ impl<const K: usize> BenchOut<K> {
     ///
     /// - `None` means no batching;
     /// - `Some(b)` means batches of size `b`.
+    #[inline(always)]
     pub fn batch(&self) -> Option<usize> {
         self.first().batch()
     }
 
     /// Batch size used in data collection. Returns `1` for `batch` values of `None`, `Some(0)`, and `Some(1)`.
     #[inline(always)]
-    pub fn batch_size(&self) -> usize {
+    pub fn bsz(&self) -> usize {
         self.first().bsz()
     }
 
-    /// Number of observations (sample size) for a function, as an integer.
+    /// Number of recorded values. In case of batching, each group (batch) contributes one recorded value.
     #[inline(always)]
-    pub fn n(&self) -> u64 {
+    pub fn groups(&self) -> u64 {
         self.first().groups()
     }
 
-    /// Total number of function executions taking into account batching.
+    /// Total number of function executions accounting for batching (`= self.groups() * self.bsz()`).
     #[inline(always)]
-    pub fn executions(&self) -> u64 {
+    pub fn n(&self) -> u64 {
         self.first().n()
     }
 
-    /// Summary descriptive statistics.
-    ///
-    /// Includes sample size, mean, standard deviation, median, several percentiles, min, and max.
-    pub fn summaries(&self) -> [SummaryStats; K] {
-        array::from_fn(|k| summary_stats(&self.arr[k]))
-    }
-
-    /// Sample means of latencies.
-    ///
-    /// # Panics
-    /// Panics if the number of observations is zero.
-    pub fn means(&self) -> [FpSeconds; K] {
-        array::from_fn(|k| self.arr[k].mean())
-    }
-
-    /// Sample standard deviations of latencies.
-    ///
-    /// # Panics
-    /// Panics if the number of observations is zero.
-    pub fn stdevs(&self) -> [FpSeconds; K] {
-        array::from_fn(|k| self.arr[k].stdev())
-    }
-
-    /// Estimates of the underlying lognormal `mu` parameters in ln(seconds),
-    /// under the assumption that `latency(f)` is approximately log-normal for each target function.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// # Panics
-    /// Panics if there is no batching or batch size <=1, and the number of recorded non-zero values is
-    /// zero for any of the target functions.
-    pub fn mus(&self) -> [f64; K] {
-        array::from_fn(|k| self.arr[k].mu())
-    }
-
-    /// Estimate of the underlying lognormal `sigma` parameters,
-    /// under the assumption that `latency(f)` is approximately log-normal for each target function.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// # Panics
-    /// Panics if there is no batching or batch size <=1, and the number of recorded non-zero values is
-    /// zero for any of the target functions.
-    pub fn sigmas(&self) -> [f64; K] {
-        array::from_fn(|k| self.arr[k].sigma())
-    }
-
-    /// Sample medians of latencies.
-    pub fn medians(&self) -> [FpSeconds; K] {
-        array::from_fn(|k| self.arr[k].median_r())
-    }
-
-    /// Sample means of the natural logarithms of latencies.
-    ///
-    /// # Panics
-    /// Panics if the number of non-zero observations is zero.
-    pub fn mean_lns(&self) -> [f64; K] {
-        array::from_fn(|k| self.arr[k].mean_ln_r())
-    }
-
-    /// Sample standard deviations of the natural logarithms of latencies.
-    ///
-    /// # Panics
-    /// Panics if the number of non-zero observations is zero.
-    pub fn stdev_lns(&self) -> [f64; K] {
-        array::from_fn(|k| self.arr[k].stdev_ln_r())
-    }
-
-    /// Student's one-sample t statistics for
-    /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm, in the recording unit),
-    /// or equivalently, the equality of `median(latency(f))` and `exp(ln_mu0)`.
-    ///
-    /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// Arguments:
-    /// - `ln_mu0`: hypothesized `mean(ln(latency(f)))`, or equivalently, `ln(median(latency(f)))`,
-    ///   where the latency is expressed in the recording unit.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
-    /// - `number of non-zero observations <= 1`.
-    /// - `self.stdev_ln() == 0`.
-    pub fn student_ln_ts(&self, ln_mu0: f64) -> [f64; K] {
-        array::from_fn(|k| self.arr[k].student_ln_t(ln_mu0))
-    }
-
-    /// Degrees of freedom for Student's t statistics for `mean(ln(latency(f)))`
-    /// (where `ln` is the natural logarithm, in the recording unit).
-    ///
-    /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    /// Thus, this statistics equivalently pertains to `ln(median(latency(f)))`.
-    pub fn student_ln_dfs(&self) -> [f64; K] {
-        array::from_fn(|k| self.arr[k].student_ln_df())
-    }
-
-    /// p-values of Student's one-sample t-tests for
-    /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm, in the recording unit),
-    /// or equivalently, the equality of `median(latency(f))` and `exp(ln_mu0)`.
-    ///
-    /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// Arguments:
-    /// - `ln_mu0`: hypothesized `mean(ln(latency(f)))`, or equivalently, `ln(median(latency(f)))`,
-    ///   where the latency is expressed in the recording unit.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `self.panic_on_error() == true` **and** any of the following conditions is true:
-    /// - Number of non-zero observations <= 1.
-    /// - `self.stdev_ln()` == 0.
-    pub fn student_ln_ps(&self, ln_mu0: f64, alt_hyp: AltHyp) -> [f64; K] {
-        array::from_fn(|k| self.arr[k].student_ln_p(ln_mu0, alt_hyp))
-    }
-
-    /// Student's one-sample confidence intervals for
-    /// `mean(ln(latency(f)))` (where `ln` is the natural logarithm, in the recording unit).
-    /// with confidence level `(1 - alpha)`.
-    ///
-    /// Assumes that `latency(f)` is approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the following conditions is true:
-    /// - `number of non-zero observations <= 1`.
-    /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_ln_cis(&self, alpha: f64) -> [Ci; K] {
-        array::from_fn(|k| self.arr[k].student_ln_ci(alpha))
-    }
-
-    /// Student's one-sample confidence intervals for
-    /// `median(latency(f))`,
-    /// with confidence level `(1 - alpha)`.
-    ///
-    /// Assumes that `latency(f)` is approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the following conditions is true:
-    /// - `Sample size <= 1`.
-    /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_median_cis(&self, alpha: f64) -> [(FpSeconds, FpSeconds); K] {
-        array::from_fn(|k| self.arr[k].student_median_ci(alpha))
-    }
-
-    /// Positions of `value` with respect to
-    /// Student's one-sample confidence interval for
-    /// `median(latency(f))`,
-    /// with confidence level `(1 - alpha)`.
-    ///
-    /// Assumes that `latency(f)` is approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the following conditions is true:
-    /// - `Sample size <= 1`.
-    /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_value_position_wrt_median_cis(
-        &self,
-        value: FpSeconds,
-        alpha: f64,
-    ) -> [PositionWrtCi; K] {
-        array::from_fn(|k| self.arr[k].student_value_position_wrt_median_ci(value, alpha))
-    }
-
-    /// Student's one-sample tests of the hypotheses that
-    /// `mean(ln(latency(f))) == ln_mu0` (where `ln` is the natural logarithm, in the recording unit), or equivalently,
-    /// `median(latency(f)) == exp(ln_mu0)`.
-    ///
-    /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// Arguments:
-    /// - `ln_mu0`: hypothesized `mean(ln(latency(f)))`, or equivalently, `ln(median(latency(f)))`,
-    ///   where the latency is expressed in the recording unit.
-    /// - `alt_hyp`: alternative hypothesis.
-    /// - `alpha`: confidence level is `1 - alpha`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the following conditions is true:
-    /// - `number of non-zero observations <= 1`.
-    /// - `self.stdev_ln()` == 0.
-    /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_ln_tests(&self, ln_mu0: f64, alt_hyp: AltHyp, alpha: f64) -> [HypTestResult; K] {
-        array::from_fn(|k| self.arr[k].student_ln_test(ln_mu0, alt_hyp, alpha))
+    /// Returns an iterator that yields `self`'s components
+    pub fn iter(&self) -> impl Iterator<Item = &crate::BenchOut> {
+        self.arr.iter()
     }
 }
 
@@ -385,210 +190,6 @@ mod test {
         samp_size: usize,
     ) -> impl Iterator<Item = [FpSeconds; 2]> {
         lognormal_samp(rec_mu, sigma, samp_size).map(|x| [x, x])
-    }
-
-    #[test]
-    fn test_bench_out_descriptive_stats() {
-        const EPSILON: f64 = 0.001;
-
-        // in ln of microseconds
-        let mu_micro = 8.;
-        // in ln of seconds: ln(exp(mu_micro)*1e-6) = mu_micro - ln(1e6)
-        let mu = mu_micro - 1e6_f64.ln();
-        let sigma = *LO_STDEV_LN;
-        let samp_size = 20_000;
-
-        let cfg = BenchCfg::default();
-        let ru = cfg.recording_unit();
-
-        let mut out = BenchOut::<2>::new(&cfg, None);
-        out.record_from_iter(lognormal_samp2(mu, sigma, samp_size));
-
-        assert_eq!(ru, LatencyUnit::NANO);
-        assert_eq!(out.n() as usize, samp_size);
-
-        let normal = Normal::new(mu, sigma).unwrap();
-
-        let exp_mean_ln = mu;
-        let exp_stdev_ln = sigma;
-        let exp_mean = (mu + 0.5 * sigma.powi(2)).exp();
-        let exp_stdev = exp_mean * ((sigma.powi(2).exp() - 1.).sqrt());
-        let exp_p1 = normal.inverse_cdf(0.01).exp();
-        let exp_p5 = normal.inverse_cdf(0.05).exp();
-        let exp_p10 = normal.inverse_cdf(0.10).exp();
-        let exp_p25 = normal.inverse_cdf(0.25).exp();
-        let exp_median = normal.inverse_cdf(0.5).exp();
-        let exp_p75 = normal.inverse_cdf(0.75).exp();
-        let exp_p90 = normal.inverse_cdf(0.90).exp();
-        let exp_p95 = normal.inverse_cdf(0.95).exp();
-        let exp_p99 = normal.inverse_cdf(0.99).exp();
-
-        let summaries = out.summaries();
-
-        println!(
-            "exp_mean={:?}, out.means={:?}",
-            FpSeconds(exp_mean),
-            out.means()
-        );
-        println!("exp_stdev={:?}, out.stdevs={:?}", exp_stdev, out.stdevs());
-        println!(
-            "exp_p1={:?}, summaries.p1={:?}",
-            FpSeconds(exp_p1),
-            summaries.iter().map(|s| s.p1).collect::<Vec<_>>()
-        );
-        println!(
-            "exp_p5={:?}, summaries.p5={:?}",
-            FpSeconds(exp_p5),
-            summaries.iter().map(|s| s.p5).collect::<Vec<_>>()
-        );
-        println!(
-            "exp_p10={:?}, summaries.p10={:?}",
-            FpSeconds(exp_p10),
-            summaries.iter().map(|s| s.p10).collect::<Vec<_>>()
-        );
-        println!(
-            "exp_p25={:?}, summaries.p25={:?}",
-            FpSeconds(exp_p25),
-            summaries.iter().map(|s| s.p25).collect::<Vec<_>>()
-        );
-        println!(
-            "exp_median={:?}, summaries.median={:?}",
-            FpSeconds(exp_median),
-            summaries.iter().map(|s| s.median).collect::<Vec<_>>()
-        );
-        println!(
-            "exp_p75={:?}, summaries.p75={:?}",
-            FpSeconds(exp_p75),
-            summaries.iter().map(|s| s.p75).collect::<Vec<_>>()
-        );
-        println!(
-            "exp_p90={:?}, summaries.p90={:?}",
-            FpSeconds(exp_p90),
-            summaries.iter().map(|s| s.p90).collect::<Vec<_>>()
-        );
-        println!(
-            "exp_p95={:?}, summaries.p95={:?}",
-            FpSeconds(exp_p95),
-            summaries.iter().map(|s| s.p95).collect::<Vec<_>>()
-        );
-        println!(
-            "exp_p99={:?}, summaries.p99={:?}",
-            FpSeconds(exp_p99),
-            summaries.iter().map(|s| s.p99).collect::<Vec<_>>()
-        );
-
-        for k in 0..out.arity() {
-            rel_approx_eq_fpsecs!(FpSeconds(exp_mean), out[k].mean(), EPSILON);
-            rel_approx_eq_fpsecs!(FpSeconds(exp_stdev), out[k].stdev(), EPSILON);
-            rel_approx_eq_fpsecs!(FpSeconds(exp_median), out[k].median_r(), EPSILON);
-            approx_eq!(exp_mean_ln, out[k].mean_ln_r(), EPSILON);
-            approx_eq!(exp_stdev_ln, out[k].stdev_ln_r(), EPSILON);
-
-            rel_approx_eq_fpsecs!(FpSeconds(exp_mean), summaries[k].mean, EPSILON);
-            rel_approx_eq_fpsecs!(FpSeconds(exp_stdev), summaries[k].stdev, EPSILON);
-            rel_approx_eq_fpsecs!(FpSeconds(exp_p1), summaries[k].p1, EPSILON);
-            rel_approx_eq_fpsecs!(FpSeconds(exp_p5), summaries[k].p5, EPSILON);
-            rel_approx_eq_fpsecs!(FpSeconds(exp_p10), summaries[k].p10, EPSILON);
-            rel_approx_eq_fpsecs!(FpSeconds(exp_p25), summaries[k].p25, EPSILON);
-            rel_approx_eq_fpsecs!(FpSeconds(exp_median), summaries[k].median, EPSILON);
-            rel_approx_eq_fpsecs!(FpSeconds(exp_p75), summaries[k].p75, EPSILON);
-            rel_approx_eq_fpsecs!(FpSeconds(exp_p90), summaries[k].p90, EPSILON);
-            rel_approx_eq_fpsecs!(FpSeconds(exp_p95), summaries[k].p95, EPSILON);
-            rel_approx_eq_fpsecs!(FpSeconds(exp_p99), summaries[k].p99, EPSILON);
-        }
-    }
-
-    #[test]
-    fn test_bench_out_student() {
-        const EPSILON: f64 = 0.001;
-
-        // in ln of microseconds
-        let mu_micro = 8.;
-        // in ln of seconds: ln(exp(mu_micro)*1e-6) = mu_micro - ln(1e6)
-        let mu = mu_micro - 1e6_f64.ln();
-        let sigma = *LO_STDEV_LN;
-        let samp_size = 20_000;
-
-        let cfg = BenchCfg::default();
-        let mut out = BenchOut::new(&cfg, None);
-        out.record_from_iter(lognormal_samp2(mu, sigma, samp_size));
-
-        let normal_samp = normal_detm_samp(mu, sigma, samp_size).unwrap();
-        let moments_ln = SampleMoments::from_iterator(normal_samp);
-
-        assert_eq!(out.recording_unit(), LatencyUnit::NANO);
-        assert_eq!(out.n() as usize, samp_size);
-
-        // The true median should lie inside the CI
-        let true_median = FpSeconds(mu.exp());
-        let positions = out.student_value_position_wrt_median_cis(true_median, ALPHA);
-        assert_eq!(positions, array::from_fn(|_| PositionWrtCi::In));
-
-        {
-            let ratio_medians: f64 = 1.0;
-            let mu0 = mu - ratio_medians.ln();
-            let alt_hyp = AltHyp::Ne;
-            let exp_accepted_hyp = AcceptedHyp::Null;
-
-            let exp_t = student_1samp_t(&moments_ln, mu0).unwrap();
-            let exp_df = student_1samp_df(&moments_ln).unwrap();
-            let exp_p = student_1samp_p(&moments_ln, mu0, alt_hyp).unwrap();
-            let exp_ln_ci = student_1samp_ci(&moments_ln, ALPHA).unwrap();
-            let exp_ci_ns_low = exp_ln_ci.0.exp();
-            let exp_ci_ns_high = exp_ln_ci.1.exp();
-
-            for k in 0..out.arity() {
-                approx_eq!(exp_t, out[k].student_ln_t(mu0), EPSILON);
-                approx_eq!(exp_df, out[k].student_ln_df(), EPSILON);
-                rel_approx_eq!(exp_p, out[k].student_ln_p(mu0, alt_hyp), EPSILON);
-                rel_approx_eq_fpsecs!(
-                    FpSeconds(exp_ci_ns_low),
-                    out[k].student_median_ci(ALPHA).0,
-                    EPSILON
-                );
-                rel_approx_eq_fpsecs!(
-                    FpSeconds(exp_ci_ns_high),
-                    out[k].student_median_ci(ALPHA).1,
-                    EPSILON
-                );
-                let student_test = out[k].student_ln_test(mu0, alt_hyp, ALPHA);
-                println!("out[k].student_test={student_test:?}");
-                assert_eq!(exp_accepted_hyp, student_test.accepted());
-            }
-        }
-
-        {
-            let ratio_medians: f64 = 1.01;
-            let mu0 = mu - ratio_medians.ln();
-            let alt_hyp = AltHyp::Gt;
-            let exp_accepted_hyp = AcceptedHyp::Alt;
-
-            let exp_t = student_1samp_t(&moments_ln, mu0).unwrap();
-            let exp_df = student_1samp_df(&moments_ln).unwrap();
-            let exp_p = student_1samp_p(&moments_ln, mu0, alt_hyp).unwrap();
-            let exp_ln_ci = student_1samp_ci(&moments_ln, ALPHA).unwrap();
-            let exp_ci_ns_low = exp_ln_ci.0.exp();
-            let exp_ci_ns_high = exp_ln_ci.1.exp();
-
-            for k in 0..out.arity() {
-                rel_approx_eq!(exp_t, out[k].student_ln_t(mu0), EPSILON);
-                approx_eq!(exp_df, out[k].student_ln_df(), EPSILON);
-                approx_eq!(exp_p, out[k].student_ln_p(mu0, alt_hyp), EPSILON);
-                rel_approx_eq_fpsecs!(
-                    FpSeconds(exp_ci_ns_low),
-                    out[k].student_median_ci(ALPHA).0,
-                    EPSILON
-                );
-                rel_approx_eq_fpsecs!(
-                    FpSeconds(exp_ci_ns_high),
-                    out[k].student_median_ci(ALPHA).1,
-                    EPSILON
-                );
-                let student_test = out[k].student_ln_test(mu0, alt_hyp, ALPHA);
-                println!("out.student_test={student_test:?}");
-                assert_eq!(exp_accepted_hyp, student_test.accepted());
-            }
-        }
     }
 
     #[test]
@@ -662,6 +263,5 @@ mod test {
         assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].median_r())).is_err());
         assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].mean_ln_r())).is_err());
         assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].stdev_ln_r())).is_err());
-        assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].student_ln_t(0.0))).is_err());
     }
 }

@@ -78,7 +78,7 @@ impl BusyWork {
         target_latency: Duration,
         budget: RunLength,
     ) -> u32 {
-        let (budget_count, budget_dur) = budget.exec_count_and_duration();
+        let (budget_count, budget_dur) = budget.count_and_time();
         let mut acc_latency = Duration::ZERO;
         let mut acc_effort: u32 = 0;
 

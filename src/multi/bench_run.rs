@@ -2,6 +2,7 @@
 
 use crate::{
     BenchCfg, FpSeconds, RunLength,
+    dev_support::batched_run_length,
     multi::{BenchOut, LatencySrc},
     status::{DefaultStatus, NoStatus, Status},
 };
@@ -25,22 +26,20 @@ impl<const K: usize> BenchState<K> {
     ) {
         assert!(status_count > 0, "status_count must be > 0");
 
-        let (exec_count, run_time) = run_length.exec_count_and_duration();
-        debug!("execute >>> exec_count={exec_count}, run_time={run_time:?}");
-        assert!(exec_count > 0, "exec_count must be > 0");
+        let bsz = src.bsz();
+        let adj_run_length = batched_run_length(run_length, src.batch());
+        let (groups, run_time) = adj_run_length.count_and_time();
+        debug!("execute >>> groups={groups}, run_time={run_time:?}");
+        assert!(groups > 0, "groups must be > 0");
 
         let mut acc_latency = FpSeconds::ZERO; // enables testing with synthetic latency sources
         let start = Instant::now();
 
-        let batch = src.batch().unwrap_or(1).max(1);
-
-        for i in 1..=exec_count {
-            let src_finished = if let Some(batch_latencies) = src.next() {
-                acc_latency += batch_latencies.iter().cloned().sum::<FpSeconds>() * batch;
-                trace!(
-                    "execute >>> i={i}, batch_latencies={batch_latencies:?}, acc_latency={acc_latency:?}"
-                );
-                self.capture_data(batch_latencies);
+        for i in 1..=groups {
+            let src_finished = if let Some(batch_avgs) = src.next() {
+                acc_latency += batch_avgs.iter().cloned().sum::<FpSeconds>() * bsz;
+                trace!("execute >>> i={i}, batch_avgs={batch_avgs:?}, acc_latency={acc_latency:?}");
+                self.capture_data(batch_avgs);
                 false
             } else {
                 true
@@ -49,13 +48,13 @@ impl<const K: usize> BenchState<K> {
             let elapsed = start.elapsed();
             trace!("execute >>> i={i}, elapsed={elapsed:?}");
 
-            if i == exec_count
+            if i == groups
                 || elapsed >= run_time
                 || i.is_multiple_of(status_count)
                 || acc_latency.as_duration() >= run_time
                 || src_finished
             {
-                let finished = i == exec_count
+                let finished = i == groups
                     || elapsed >= run_time
                     || acc_latency.as_duration() >= run_time
                     || src_finished;
@@ -96,20 +95,20 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     mut s: S,
 ) -> BenchOut<K> {
     debug!("bench_run_x >>> run_length={run_length:?}");
-    let mut state = BenchOut::new(cfg, None);
-    let execs_per_second = cfg.execs_per_sec(&mut src, run_length);
-    debug!("bench_run_x >>> execs_per_second={execs_per_second}");
+    let mut state = BenchOut::new(cfg, src.batch());
+    let iters_per_second = cfg.iters_per_sec(&mut src, run_length);
+    debug!("bench_run_x >>> execs_per_second={iters_per_second}");
 
     let warmup_run_length = RunLength::Time(Duration::from_millis(cfg.warmup_millis()));
-    let warmup_est_time = warmup_run_length.estimated_time(execs_per_second);
-    let warmup_est_count = warmup_run_length.estimated_count(execs_per_second);
-    let exec_est_time = run_length.estimated_time(execs_per_second);
-    let exec_est_count = run_length.estimated_count(execs_per_second);
+    let warmup_est_time = warmup_run_length.estimated_time(iters_per_second);
+    let warmup_est_count = warmup_run_length.estimated_count(iters_per_second);
+    let main_est_time = run_length.estimated_time(iters_per_second);
+    let main_est_count = run_length.estimated_count(iters_per_second);
 
     // Warm-up.
     let warmup_status = S::part_apply(s.warmup_status(), warmup_est_time, warmup_est_count);
     let warmup_status_count = if warmup_status.is_some() {
-        cfg.status_count(execs_per_second)
+        cfg.status_count(iters_per_second)
     } else {
         usize::MAX
     };
@@ -126,16 +125,16 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     state.reset();
 
     // Execute.
-    let exec_status = S::part_apply(s.exec_status(), exec_est_time, exec_est_count);
-    let exec_status_count = if exec_status.is_some() {
-        cfg.status_count(execs_per_second)
+    let main_status = S::part_apply(s.main_status(), main_est_time, main_est_count);
+    let main_status_count = if main_status.is_some() {
+        cfg.status_count(iters_per_second)
     } else {
         usize::MAX
     };
-    debug!("bench_run_x >>> exec_status_count={exec_status_count}");
-    state.execute(&mut src, run_length, exec_status_count, exec_status);
-    if let Some(end_exec_status) = s.end_exec_status() {
-        end_exec_status();
+    debug!("bench_run_x >>> main_status_count={main_status_count}");
+    state.execute(&mut src, run_length, main_status_count, main_status);
+    if let Some(end_main_status) = s.end_main_status() {
+        end_main_status();
     }
 
     state
@@ -280,7 +279,7 @@ mod status {
             "Executing bench_run".to_owned(),
         );
 
-        let execs_per_second = cfg.execs_per_sec(&mut src, run_length);
+        let execs_per_second = cfg.iters_per_sec(&mut src, run_length);
 
         let out = bench_run_x(&cfg, src, run_length, status);
 

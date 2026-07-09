@@ -1,4 +1,4 @@
-use crate::{LatencyUnit, RunLength, latency, multi::LatencySrc};
+use crate::{LatencyUnit, RunLength, dev_support::batched_run_length, latency, multi::LatencySrc};
 use log::{Level, debug, log_enabled};
 use std::time::{Duration, Instant};
 
@@ -75,9 +75,9 @@ impl BenchCfg {
         self
     }
 
-    fn execs_per_sec_budget(&self, exec_run_length: RunLength) -> RunLength {
+    fn iters_per_sec_budget(&self, run_length: RunLength) -> RunLength {
         const WARMUP_DIVISOR: u32 = 3;
-        const EXEC_DIVISOR: u32 = 30;
+        const RUN_DIVISOR: u32 = 30;
 
         // Computes the median of a vector of length 3 or less.
         fn median(mut vec: Vec<f64>) -> Option<f64> {
@@ -94,16 +94,16 @@ impl BenchCfg {
         let adj_warmup_run_length = RunLength::Time(Duration::from_millis(
             self.warmup_millis / WARMUP_DIVISOR as u64,
         ));
-        let adj_exec_run_length = match exec_run_length {
-            RunLength::Count(count) => RunLength::Count(count / EXEC_DIVISOR as usize),
-            RunLength::Time(dur) => RunLength::Time(dur / EXEC_DIVISOR),
+        let adj_main_run_length = match run_length {
+            RunLength::Count(count) => RunLength::Count(count / RUN_DIVISOR as usize),
+            RunLength::Time(dur) => RunLength::Time(dur / RUN_DIVISOR),
             RunLength::CountWithTimeout(count, dur) => {
-                RunLength::CountWithTimeout(count / EXEC_DIVISOR as usize, dur / EXEC_DIVISOR)
+                RunLength::CountWithTimeout(count / RUN_DIVISOR as usize, dur / RUN_DIVISOR)
             }
         };
 
-        let run_lengths = [adj_warmup_run_length, adj_exec_run_length];
-        debug!("execs_per_sec_budget >>> run_lengths[warmup, exec]={run_lengths:?}");
+        let run_lengths = [adj_warmup_run_length, adj_main_run_length];
+        debug!("iters_per_sec_budget >>> run_lengths[warmup, main]={run_lengths:?}");
 
         let counts = run_lengths
             .iter()
@@ -113,7 +113,7 @@ impl BenchCfg {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        debug!("execs_per_sec_budget >>> counts={counts:?}");
+        debug!("iters_per_sec_budget >>> counts={counts:?}");
 
         let durs = run_lengths
             .iter()
@@ -123,11 +123,11 @@ impl BenchCfg {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        debug!("execs_per_sec_budget >>> durs={durs:?}");
+        debug!("iters_per_sec_budget >>> durs={durs:?}");
 
         let median_count = median(counts);
         let median_dur = median(durs);
-        debug!("execs_per_sec_budget >>> median_count={median_count:?}, median_dur={median_dur:?}");
+        debug!("iters_per_sec_budget >>> median_count={median_count:?}, median_dur={median_dur:?}");
 
         let budget = match (median_count, median_dur) {
             (Some(count), Some(dur)) => {
@@ -138,7 +138,7 @@ impl BenchCfg {
             (None, None) => unreachable!("impossible"),
         };
 
-        debug!("execs_per_sec_budget >>> budget={budget:?}");
+        debug!("iters_per_sec_budget >>> budget={budget:?}");
         budget
     }
 
@@ -151,10 +151,10 @@ impl BenchCfg {
     /// Returns `f64::INFINITY` if the aggregate latency for any iteration is zero.
     /// In particular, this can happen if `src` is finite and its length is less than or equal to one half
     /// of the estimation budget count (see [`latency::execs_per_sec`] and [`Self::execs_per_sec_budget`]).
-    pub(crate) fn execs_per_sec<const K: usize>(
+    pub(crate) fn iters_per_sec<const K: usize>(
         &self,
         src: &mut impl LatencySrc<K>,
-        exec_run_length: RunLength,
+        run_length: RunLength,
     ) -> f64 {
         let start = if log_enabled!(Level::Debug) {
             Some(Instant::now())
@@ -162,15 +162,16 @@ impl BenchCfg {
             None
         };
 
-        let budget = self.execs_per_sec_budget(exec_run_length);
-        let eps = latency::execs_per_sec(src.aggregate(), budget);
+        let adj_run_length = batched_run_length(run_length, src.batch());
+        let budget = self.iters_per_sec_budget(adj_run_length);
+        let ips = latency::iters_per_sec(src.aggregate(), budget);
 
         debug!(
-            "execs_per_sec >>> execs_per_sec={eps:?}, elapsed={:?}",
+            "iters_per_sec >>> iters_per_sec={ips:?}, elapsed={:?}",
             start.map(|start| start.elapsed())
         );
 
-        eps
+        ips
     }
 
     /// Number of executions between status updates, derived from `execs_per_second`.
@@ -228,18 +229,18 @@ mod test {
     #[test]
     fn test_run_length_get_exec_count_and_time() {
         // Count variant
-        let (count, dur) = RunLength::Count(100).exec_count_and_duration();
+        let (count, dur) = RunLength::Count(100).count_and_time();
         assert_eq!(count, 100);
         assert_eq!(dur, Duration::MAX);
 
         // Duration variant
-        let (count, dur) = RunLength::Time(Duration::from_secs(5)).exec_count_and_duration();
+        let (count, dur) = RunLength::Time(Duration::from_secs(5)).count_and_time();
         assert_eq!(count, usize::MAX);
         assert_eq!(dur, Duration::from_secs(5));
 
         // CountWithTimeout variant
         let (count, dur) =
-            RunLength::CountWithTimeout(100, Duration::from_secs(5)).exec_count_and_duration();
+            RunLength::CountWithTimeout(100, Duration::from_secs(5)).count_and_time();
         assert_eq!(count, 100);
         assert_eq!(dur, Duration::from_secs(5));
     }
@@ -351,7 +352,7 @@ mod test {
         let cfg = BenchCfg::default();
         // Using a no-op closure, the calibration should return a reasonable positive value
         let mut src = LatencySrc1::new(|| {});
-        let eps = cfg.execs_per_sec(&mut src, RunLength::Count(10));
+        let eps = cfg.iters_per_sec(&mut src, RunLength::Count(10));
         assert!(eps.is_finite());
     }
 
@@ -360,7 +361,7 @@ mod test {
         let cfg = BenchCfg::default();
         let mut src =
             LognormalLatencySrc::<1>::new_with_default_sigmas([FpSeconds::from_millis(10)], 1);
-        let eps = cfg.execs_per_sec(&mut src, RunLength::Count(500));
+        let eps = cfg.iters_per_sec(&mut src, RunLength::Count(500));
         // Expected: 1000ms / 10ms = 100.0
         rel_approx_eq!(100.0, eps, 0.05);
     }
@@ -370,7 +371,7 @@ mod test {
         let cfg = BenchCfg::default();
         let mut src =
             LognormalLatencySrc::<1>::new_with_default_sigmas([FpSeconds::from_millis(1)], 1);
-        let eps = cfg.execs_per_sec(&mut src, RunLength::Time(Duration::from_millis(5)));
+        let eps = cfg.iters_per_sec(&mut src, RunLength::Time(Duration::from_millis(5)));
         assert!(eps.is_finite() && eps > 0.0);
         // Rough check: should be close to 1000 (1000ms / 1ms)
         rel_approx_eq!(1000.0, eps, 0.30);
@@ -381,7 +382,7 @@ mod test {
         let cfg = BenchCfg::default();
         let mut src =
             LognormalLatencySrc::<1>::new_with_default_sigmas([FpSeconds::from_millis(5)], 1);
-        let eps = cfg.execs_per_sec(
+        let eps = cfg.iters_per_sec(
             &mut src,
             RunLength::CountWithTimeout(200, Duration::from_millis(5)),
         );

@@ -72,7 +72,7 @@ impl BusyWork {
     /// `calibration_budget` limits the length of the iterative process by time and/or count
     /// (= accumulated calibration effort).
     fn calibrate_internal(state: &mut u64, target_latency: Duration, budget: RunLength) -> u32 {
-        let (budget_count, budget_dur) = budget.exec_count_and_duration();
+        let (budget_count, budget_dur) = budget.count_and_time();
         let mut acc_latency = Duration::ZERO;
         let mut acc_effort: u32 = 0;
 

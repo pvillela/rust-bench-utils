@@ -28,23 +28,23 @@ pub trait Status<'a> {
     where
         'a: 'b;
 
-    /// Returns an optional status closure for the execution phase.
+    /// Returns an optional status closure for the main execution phase.
     ///
     /// The closure receives `(est_time, est_count, i)` where:
     /// - `est_time` is the estimated execution duration.
     /// - `est_count` is the estimated number of execution iterations.
     /// - `i` is the current execution iteration.
-    fn exec_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
+    fn main_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
     where
         'a: 'b;
 
-    /// Returns an optional closure to end status reporting for the execution phase.
+    /// Returns an optional closure to end status reporting for the main execution phase.
     ///
     /// The closure receives `(est_time, est_count, i)` where:
     /// - `est_time` is the estimated warm-up duration.
     /// - `est_count` is the estimated number of warm-up iterations.
     /// - `i` is the current warm-up iteration.
-    fn end_exec_status<'b>(&'b mut self) -> Option<impl FnOnce() + 'b>
+    fn end_main_status<'b>(&'b mut self) -> Option<impl FnOnce() + 'b>
     where
         'a: 'b;
 
@@ -79,14 +79,14 @@ impl<'a> Status<'a> for NoStatus {
         None::<fn()>
     }
 
-    fn exec_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
+    fn main_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
     where
         'a: 'b,
     {
         None::<fn(Duration, usize, usize)>
     }
 
-    fn end_exec_status<'b>(&'b mut self) -> Option<impl FnOnce() + 'b>
+    fn end_main_status<'b>(&'b mut self) -> Option<impl FnOnce() + 'b>
     where
         'a: 'b,
     {
@@ -104,8 +104,8 @@ pub struct DefaultStatus<'a, W: Write> {
     pub w: &'a mut W,
     /// Preamble string printed before warm-up progress.
     pub warmup_preamble: String,
-    /// Preamble string printed before execution progress.
-    pub exec_preamble: String,
+    /// Preamble string printed before main execution progress.
+    pub main_preamble: String,
 }
 
 impl<'a, W: Write> DefaultStatus<'a, W> {
@@ -115,12 +115,12 @@ impl<'a, W: Write> DefaultStatus<'a, W> {
     ///
     /// - `w` - the writer (typically stderr or a `StringWriter` from `test_support` for testing).
     /// - `warmup_preamble` - text printed before warm-up progress (e.g. `"Warming up"`).
-    /// - `exec_preamble` - text printed before execution progress (e.g. `"Executing bench_run"`).
-    pub fn new(w: &'a mut W, warmup_preamble: String, exec_preamble: String) -> Self {
+    /// - `main_preamble` - text printed before main execution progress (e.g. `"Executing bench_run"`).
+    pub fn new(w: &'a mut W, warmup_preamble: String, main_preamble: String) -> Self {
         Self {
             w,
             warmup_preamble,
-            exec_preamble,
+            main_preamble,
         }
     }
 
@@ -179,14 +179,14 @@ impl<'a, W: Write> Status<'a> for DefaultStatus<'a, W> {
         Some(Self::make_end_status(self.w))
     }
 
-    fn exec_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
+    fn main_status<'b>(&'b mut self) -> Option<impl FnMut(Duration, usize, usize) + 'b>
     where
         'a: 'b,
     {
-        Some(Self::make_status::<'b>(self.w, self.exec_preamble.clone()))
+        Some(Self::make_status::<'b>(self.w, self.main_preamble.clone()))
     }
 
-    fn end_exec_status<'b>(&'b mut self) -> Option<impl FnOnce() + 'b>
+    fn end_main_status<'b>(&'b mut self) -> Option<impl FnOnce() + 'b>
     where
         'a: 'b,
     {
@@ -205,7 +205,7 @@ mod test {
     fn test_no_status_returns_none() {
         let mut ns = NoStatus;
         assert!(ns.warmup_status().is_none());
-        assert!(ns.exec_status().is_none());
+        assert!(ns.main_status().is_none());
     }
 
     #[test]
@@ -239,7 +239,7 @@ mod test {
         let mut w = StringWriter::new();
         let ds = DefaultStatus::new(&mut w, "Warm".to_owned(), "Exec".to_owned());
         assert_eq!(ds.warmup_preamble, "Warm");
-        assert_eq!(ds.exec_preamble, "Exec");
+        assert_eq!(ds.main_preamble, "Exec");
     }
 
     #[test]
@@ -248,8 +248,8 @@ mod test {
         let mut ds = DefaultStatus::new(&mut w, "Warm".to_owned(), "Exec".to_owned());
         assert!(ds.warmup_status().is_some());
         assert!(ds.end_warmup_status().is_some());
-        assert!(ds.exec_status().is_some());
-        assert!(ds.end_exec_status().is_some());
+        assert!(ds.main_status().is_some());
+        assert!(ds.end_main_status().is_some());
     }
 
     #[test]
@@ -286,7 +286,7 @@ mod test {
             let mut w = StringWriter::new();
             {
                 let mut ds = DefaultStatus::new(&mut w, "Warm".to_owned(), "Exec".to_owned());
-                let mut exec_fn = ds.exec_status().unwrap();
+                let mut exec_fn = ds.main_status().unwrap();
                 exec_fn(Duration::from_millis(5000), 10000, 6000);
             }
             let output = w.as_str().unwrap();
