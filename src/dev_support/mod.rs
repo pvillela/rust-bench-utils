@@ -1,5 +1,5 @@
 mod quicksort;
 pub use quicksort::*;
 
-mod batched_run_length;
-pub use batched_run_length::*;
+mod batched_utils;
+pub use batched_utils::*;

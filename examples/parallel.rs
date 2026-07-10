@@ -26,7 +26,7 @@ fn main() {
 
     let start = Instant::now();
 
-    let out = bench_run_parallel_arg_cfg(&cfg, f1, f2, exec_run_length);
+    let out = bench_run_parallel_arg_cfg(&cfg, f1, f2, exec_run_length, None);
 
     let elapsed = start.elapsed();
 
@@ -36,8 +36,8 @@ fn main() {
     let median_ratio = out1.median_r().as_f64() / out2.median_r().as_f64();
 
     println!("median_ratio={median_ratio}");
-    println!("out1.summary={:?}", out1.summary_r());
-    println!("out2.summary={:?}", out2.summary_r());
+    println!("out1.summary={:?}", out1.summary());
+    println!("out2.summary={:?}", out2.summary());
 
     let elapsed_total = start_total.elapsed();
     println!("*** elapsed_in_threads={elapsed:?}, elapsed_total={elapsed_total:?}");

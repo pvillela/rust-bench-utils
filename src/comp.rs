@@ -355,7 +355,7 @@ mod test {
 
     fn are_eq_bench_out(out1: &BenchOut, out2: &BenchOut) -> bool {
         out1.recording_unit == out2.recording_unit
-            && out1.summary_r() == out2.summary_r()
+            && out1.summary() == out2.summary()
             && out1.sum == out2.sum
             && out1.sum2 == out2.sum2
             && out1.n_nz == out2.n_nz

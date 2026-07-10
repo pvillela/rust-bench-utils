@@ -1,78 +1,73 @@
 use crate::{BenchOut, FpSeconds};
 
 /// Common summary statistics useful in latency testing/benchmarking.
-///
-/// Includes the number of recorded values and their mean, standard deviation, median, several percentiles,
-/// min, and max.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SummaryStats {
     /// Number of recorded values.
-    pub count: u64,
+    pub n_r: u64,
     /// Batching used to record values.
     pub batch: Option<usize>,
     /// Total number of function executions taking into account batching.
-    pub executions: u64,
+    pub n: u64,
     /// Arithmetic mean of the recorded values.
     pub mean: FpSeconds,
     /// Sample standard deviation of the recorded values.
+    pub stdev_r: FpSeconds,
+    /// Sample standard deviation accounting for batching.
     pub stdev: FpSeconds,
-    /// Estimate of the underlying lognormal `mu` parameter in ln(seconds).
-    pub mu: f64,
-    /// Estimate of the underlying lognormal `sigma` parameter,
-    pub sigma: f64,
     /// Minimum recorded value.
     pub min: FpSeconds,
-    /// 1st percentile value.
+    /// 1st percentile recorded value.
     pub p1: FpSeconds,
-    /// 5th percentile value.
+    /// 5th percentile recorded value.
     pub p5: FpSeconds,
-    /// 10th percentile value.
+    /// 10th percentile recorded value.
     pub p10: FpSeconds,
-    /// 25th percentile value.
+    /// 25th percentile recorded value.
     pub p25: FpSeconds,
-    /// 50th percentile (median) value.
-    pub median: FpSeconds,
-    /// 75th percentile value.
+    /// 50th percentile recorded value.
+    pub p50: FpSeconds,
+    /// 75th percentile recorded value.
     pub p75: FpSeconds,
-    /// 90th percentile value.
+    /// 90th percentile recorded value.
     pub p90: FpSeconds,
-    /// 95th percentile value.
+    /// 95th percentile recorded value.
     pub p95: FpSeconds,
-    /// 99th percentile value.
+    /// 99th percentile recorded value.
     pub p99: FpSeconds,
     /// Maximum recorded value.
     pub max: FpSeconds,
 }
 
-#[doc(hidden)]
 /// Computes a [`SummaryStats`] from a [`BenchOut`].
 ///
 /// # Panics
 ///
 /// Panics if the number of recorded values is zero.
-pub fn summary_stats(out: &BenchOut) -> SummaryStats {
-    let hist = &out.hist;
-    let ru = out.recording_unit();
+impl SummaryStats {
+    pub(crate) fn new(out: &BenchOut) -> Self {
+        let hist = &out.hist;
+        let ru = out.recording_unit();
 
-    SummaryStats {
-        count: hist.len(),
-        batch: out.batch(),
-        executions: out.n(),
-        mean: out.mean(),
-        stdev: out.stdev(),
-        mu: out.mu(),
-        sigma: out.sigma(),
-        min: ru.fpsecs_from_value(hist.min()),
-        p1: ru.fpsecs_from_value(hist.value_at_quantile(0.01)),
-        p5: ru.fpsecs_from_value(hist.value_at_quantile(0.05)),
-        p10: ru.fpsecs_from_value(hist.value_at_quantile(0.10)),
-        p25: ru.fpsecs_from_value(hist.value_at_quantile(0.25)),
-        median: ru.fpsecs_from_value(hist.value_at_quantile(0.50)),
-        p75: ru.fpsecs_from_value(hist.value_at_quantile(0.75)),
-        p90: ru.fpsecs_from_value(hist.value_at_quantile(0.90)),
-        p95: ru.fpsecs_from_value(hist.value_at_quantile(0.95)),
-        p99: ru.fpsecs_from_value(hist.value_at_quantile(0.99)),
-        max: ru.fpsecs_from_value(hist.max()),
+        Self {
+            n_r: hist.len(),
+            batch: out.batch(),
+            n: out.n(),
+            mean: out.mean(),
+            stdev_r: out.stdev_r(),
+            stdev: out.stdev(),
+            min: ru.fpsecs_from_value(hist.min()),
+            p1: ru.fpsecs_from_value(hist.value_at_quantile(0.01)),
+            p5: ru.fpsecs_from_value(hist.value_at_quantile(0.05)),
+            p10: ru.fpsecs_from_value(hist.value_at_quantile(0.10)),
+            p25: ru.fpsecs_from_value(hist.value_at_quantile(0.25)),
+            p50: ru.fpsecs_from_value(hist.value_at_quantile(0.50)),
+            p75: ru.fpsecs_from_value(hist.value_at_quantile(0.75)),
+            p90: ru.fpsecs_from_value(hist.value_at_quantile(0.90)),
+            p95: ru.fpsecs_from_value(hist.value_at_quantile(0.95)),
+            p99: ru.fpsecs_from_value(hist.value_at_quantile(0.99)),
+            max: ru.fpsecs_from_value(hist.max()),
+        }
     }
 }
 
@@ -90,7 +85,8 @@ mod test {
         let cfg = BenchCfg::default();
         let mut out = crate::BenchOut::new(&cfg, None);
         out.record_from_iter(std::iter::empty::<FpSeconds>());
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| summary_stats(&out)));
+        let result =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| SummaryStats::new(&out)));
         assert!(result.is_err(), "expected panic on empty sample");
     }
 
@@ -107,7 +103,7 @@ mod test {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::new(&cfg, None);
         out.record_from_iter(src.aggregate().take(SAMPLE_SIZE));
-        let summary = summary_stats(&out);
+        let summary = SummaryStats::new(&out);
 
         let normal = Normal::new(mu, sigma).unwrap();
 
@@ -125,7 +121,7 @@ mod test {
 
         rel_approx_eq!(exp_mean, summary.mean.0, EPSILON);
         rel_approx_eq!(exp_stdev, summary.stdev.0, EPSILON);
-        rel_approx_eq!(exp_median, summary.median.0, EPSILON);
+        rel_approx_eq!(exp_median, summary.p50.0, EPSILON);
         rel_approx_eq!(exp_p1, summary.p1.0, EPSILON);
         rel_approx_eq!(exp_p5, summary.p5.0, EPSILON);
         rel_approx_eq!(exp_p10, summary.p10.0, EPSILON);
@@ -135,8 +131,8 @@ mod test {
         rel_approx_eq!(exp_p95, summary.p95.0, EPSILON);
         rel_approx_eq!(exp_p99, summary.p99.0, EPSILON);
 
-        assert_eq!(out.groups(), SAMPLE_SIZE as u64);
-        assert_eq!(summary.count, SAMPLE_SIZE as u64);
+        assert_eq!(out.n_r(), SAMPLE_SIZE as u64);
+        assert_eq!(summary.n_r, SAMPLE_SIZE as u64);
         assert!(summary.min > FpSeconds::ZERO);
         assert!(summary.max > summary.p99);
     }

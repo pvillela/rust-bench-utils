@@ -28,14 +28,14 @@ impl<const K: usize> BenchState<K> {
 
         let bsz = src.bsz();
         let adj_run_length = batched_run_length(run_length, src.batch());
-        let (groups, run_time) = adj_run_length.count_and_time();
-        debug!("execute >>> groups={groups}, run_time={run_time:?}");
-        assert!(groups > 0, "groups must be > 0");
+        let (iters, run_time) = adj_run_length.count_and_time();
+        debug!("execute >>> iters={iters}, run_time={run_time:?}");
+        assert!(iters > 0, "iters must be > 0");
 
         let mut acc_latency = FpSeconds::ZERO; // enables testing with synthetic latency sources
         let start = Instant::now();
 
-        for i in 1..=groups {
+        for i in 1..=iters {
             let src_finished = if let Some(batch_avgs) = src.next() {
                 acc_latency += batch_avgs.iter().cloned().sum::<FpSeconds>() * bsz;
                 trace!("execute >>> i={i}, batch_avgs={batch_avgs:?}, acc_latency={acc_latency:?}");
@@ -48,13 +48,13 @@ impl<const K: usize> BenchState<K> {
             let elapsed = start.elapsed();
             trace!("execute >>> i={i}, elapsed={elapsed:?}");
 
-            if i == groups
+            if i == iters
                 || elapsed >= run_time
                 || i.is_multiple_of(status_count)
                 || acc_latency.as_duration() >= run_time
                 || src_finished
             {
-                let finished = i == groups
+                let finished = i == iters
                     || elapsed >= run_time
                     || acc_latency.as_duration() >= run_time
                     || src_finished;
@@ -86,7 +86,7 @@ impl<const K: usize> BenchState<K> {
 /// Arguments:
 /// - `cfg` - bench configuration used to run the benchmark.
 /// - `src` - iterator yielding arrays of measured latencies.
-/// - `run_length` - target run length (iteration count and/or duration) for data collection.
+/// - `run_length` - target run length (execution count and/or duration) for data collection.
 /// - `s` - status handler for reporting warm-up and execution progress.
 pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     cfg: &BenchCfg,
@@ -150,7 +150,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
 ///
 /// Arguments:
 /// - `f` - benchmark target.
-/// - `run_length` - target run length (iteration count and/or duration) for data collection.
+/// - `run_length` - target run length (execution count and/or duration) for data collection.
 pub fn bench_run<const K: usize>(src: impl LatencySrc<K>, run_length: RunLength) -> BenchOut<K> {
     let cfg = BenchCfg::default();
     bench_run_arg_cfg(&cfg, src, run_length)
@@ -167,7 +167,7 @@ pub fn bench_run<const K: usize>(src: impl LatencySrc<K>, run_length: RunLength)
 /// Arguments:
 /// - `cfg` - bench configuration used to run the benchmark.
 /// - `f` - benchmark target.
-/// - `run_length` - target run length (iteration count and/or duration) for data collection.
+/// - `run_length` - target run length (execution count and/or duration) for data collection.
 pub fn bench_run_arg_cfg<const K: usize>(
     cfg: &BenchCfg,
     src: impl LatencySrc<K>,
@@ -186,7 +186,7 @@ pub fn bench_run_arg_cfg<const K: usize>(
 ///
 /// Arguments:
 /// - `f` - benchmark target.
-/// - `run_length` - target run length (iteration count and/or duration) for data collection.
+/// - `run_length` - target run length (execution count and/or duration) for data collection.
 pub fn bench_run_with_status<const K: usize>(
     src: impl LatencySrc<K>,
     run_length: RunLength,
@@ -207,7 +207,7 @@ pub fn bench_run_with_status<const K: usize>(
 /// Arguments:
 /// - `cfg` - bench configuration used to run the benchmark.
 /// - `f` - benchmark target.
-/// - `run_length` - target run length (iteration count and/or duration) for data collection.
+/// - `run_length` - target run length (execution count and/or duration) for data collection.
 pub fn bench_run_with_status_arg_cfg<const K: usize>(
     cfg: &BenchCfg,
     src: impl LatencySrc<K>,

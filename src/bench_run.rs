@@ -2,6 +2,7 @@
 
 use crate::{
     BenchCfg, BenchOut, RunLength,
+    dev_support::bsz,
     multi::{self, LatencySrc1, LatencySrc1b},
     status::Status,
 };
@@ -12,18 +13,55 @@ use crate::{
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
 /// `cfg.warmup_millis` milliseconds.
 ///
+/// Batching can be used to dilute measurement overhead, but see library documentation about the caveats
+/// of batching.
+///
 /// Arguments:
 /// - `cfg` - bench configuration used to run the benchmark.
 /// - `f` - benchmark target closure.
-/// - `run_length` - target run length (iteration count and/or duration) for data collection.
-/// - `s` - status handler for reporting warm-up and execution progress.
+/// - `run_length` - target run length (execution count and/or duration) for data collection.
+/// - `s` - status handler for reporting warm-up and main execution progress.
+/// - `batch` - determines whether batching is used and, if so, the batch size. `None` means no batching.
 pub fn bench_run_x<'a, S: Status<'a>>(
     cfg: &BenchCfg,
     f: impl FnMut(),
     run_length: RunLength,
     s: S,
+    batch: Option<usize>,
 ) -> BenchOut {
-    multi::bench_run_x(cfg, LatencySrc1::new(f), run_length, s).into()
+    match batch {
+        None => multi::bench_run_x(cfg, LatencySrc1::new(f), run_length, s).into(),
+        Some(_) => multi::bench_run_x(cfg, LatencySrc1b::new(f, bsz(batch)), run_length, s).into(),
+    }
+}
+
+/// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
+///
+/// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
+/// [`BenchCfg::warmup_millis`] milliseconds.
+///
+/// This function is equivalent to calling [`bench_run_x`] with a pre-defined no-op status object.
+///
+/// Batching can be used to dilute measurement overhead, but see library documentation about the caveats
+/// of batching.
+///
+/// Arguments:
+/// - `cfg` - bench configuration used to run the benchmark.
+/// - `f` - benchmark target.
+/// - `run_length` - target run length (iteration count and/or duration) for data collection.
+/// - `batch` - determines whether batching is used and, if so, the batch size. `None` means no batching.
+pub fn bench_run_arg_cfg(
+    cfg: &BenchCfg,
+    f: impl FnMut(),
+    run_length: RunLength,
+    batch: Option<usize>,
+) -> BenchOut {
+    match batch {
+        None => multi::bench_run_arg_cfg(cfg, LatencySrc1::new(f), run_length).into(),
+        Some(_) => {
+            multi::bench_run_arg_cfg(cfg, LatencySrc1b::new(f, bsz(batch)), run_length).into()
+        }
+    }
 }
 
 /// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
@@ -31,45 +69,19 @@ pub fn bench_run_x<'a, S: Status<'a>>(
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
 /// [`BenchCfg::warmup_millis`] milliseconds.
-/// This function calls [`bench_run_x`] with no-op closures for the arguments that support the output of
-/// benchmark status.
+///
+/// This function calls [`bench_run_arg_cfg`] with the default [`BenchCfg`].
+///
+/// Batching can be used to dilute measurement overhead, but see library documentation about the caveats
+/// of batching.
 ///
 /// Arguments:
 /// - `f` - benchmark target.
 /// - `run_length` - target run length (iteration count and/or duration) for data collection.
-pub fn bench_run(f: impl FnMut(), run_length: RunLength) -> BenchOut {
-    multi::bench_run(LatencySrc1::new(f), run_length).into()
-}
-
-/// Repeatedly executes closure `f` and collects the resulting latency data in a [`BenchOut`] object.
-///
-/// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
-/// [`BenchCfg::warmup_millis`] milliseconds.
-/// This function calls [`bench_run_x`] with no-op closures for the arguments that support the output of
-/// benchmark status.
-///
-/// Arguments:
-/// - `cfg` - bench configuration used to run the benchmark.
-/// - `f` - benchmark target.
-/// - `run_length` - target run length (iteration count and/or duration) for data collection.
-pub fn bench_run_arg_cfg(cfg: &BenchCfg, f: impl FnMut(), run_length: RunLength) -> BenchOut {
-    multi::bench_run_arg_cfg(cfg, LatencySrc1::new(f), run_length).into()
-}
-
-/// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
-/// outputs information about the benchmark and its execution status.
-/// Runs with the default [`BenchCfg`].
-///
-/// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
-/// [`BenchCfg::warmup_millis`] milliseconds.
-/// This function calls [`bench_run_x`] with pre-defined closures for the arguments that support the output of
-/// benchmark status to `stderr`.
-///
-/// Arguments:
-/// - `f` - benchmark target.
-/// - `run_length` - target run length (iteration count and/or duration) for data collection.
-pub fn bench_run_with_status(f: impl FnMut(), run_length: RunLength) -> BenchOut {
-    multi::bench_run_with_status(LatencySrc1::new(f), run_length).into()
+/// - `batch` - determines whether batching is used and, if so, the batch size. `None` means no batching.
+pub fn bench_run(f: impl FnMut(), run_length: RunLength, batch: Option<usize>) -> BenchOut {
+    let cfg = BenchCfg::default();
+    bench_run_arg_cfg(&cfg, f, run_length, batch)
 }
 
 /// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
@@ -77,135 +89,56 @@ pub fn bench_run_with_status(f: impl FnMut(), run_length: RunLength) -> BenchOut
 ///
 /// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
 /// [`BenchCfg::warmup_millis`] milliseconds.
-/// This function calls [`bench_run_x`] with pre-defined closures for the arguments that support the output of
-/// benchmark status to `stderr`.
+///
+/// This function is equivalent to calling [`bench_run_x`] with a pre-defined status object that supports
+/// the output of benchmark status to `stderr`.
+///
+/// Batching can be used to dilute measurement overhead, but see library documentation about the caveats
+/// of batching.
 ///
 /// Arguments:
 /// - `cfg` - bench configuration used to run the benchmark.
 /// - `f` - benchmark target.
 /// - `run_length` - target run length (iteration count and/or duration) for data collection.
+/// - `batch` - determines whether batching is used and, if so, the batch size. `None` means no batching.
 pub fn bench_run_with_status_arg_cfg(
     cfg: &BenchCfg,
     f: impl FnMut(),
     run_length: RunLength,
-) -> BenchOut {
-    multi::bench_run_with_status_arg_cfg(cfg, LatencySrc1::new(f), run_length).into()
-}
-
-/// Similar to [`bench_run_x`] but batches the executions of `f` into groups of size `batch`.
-///
-/// Batching may reduce measurement overhead.
-/// Each batch results in the batch average being collected `batch` times, so the number of captured
-/// latency values is not impacted by grouping.
-/// However, a potential consequence is that the statistical tests provided by [`BenchOut`] may be somewhat
-/// distorted as the resulting distribution may no longer be approximately logormal.
-pub fn bench_run_x_b<'a, S: Status<'a>>(
-    cfg: &BenchCfg,
-    f: impl FnMut(),
-    run_length: RunLength,
-    s: S,
-    batch: usize,
-) -> BenchOut {
-    let run_length = batch_run_length(run_length, Some(batch));
-    multi::bench_run_x(cfg, LatencySrc1b::new(f, batch), run_length, s).into()
-}
-
-/// Similar to [`bench_run`] but batches the executions of `f` into groups of size `batch`.
-///
-/// Batching may reduce measurement overhead.
-/// Each batch results in the batch average being collected `batch` times, so the number of captured
-/// latency values is not impacted by grouping.
-/// However, a potential consequence is that the statistical tests provided by [`BenchOut`] may be somewhat
-/// distorted as the resulting distribution may no longer be approximately logormal.
-pub fn bench_run_b(f: impl FnMut(), run_length: RunLength, batch: usize) -> BenchOut {
-    let run_length = batch_run_length(run_length, Some(batch));
-    multi::bench_run(LatencySrc1b::new(f, batch), run_length).into()
-}
-
-/// Similar to [`bench_run_arg_cfg`] but batches the executions of `f` into groups of size `batch`.
-///
-/// Batching may reduce measurement overhead.
-/// Each batch results in the batch average being collected `batch` times, so the number of captured
-/// latency values is not impacted by grouping.
-/// However, a potential consequence is that the statistical tests provided by [`BenchOut`] may be somewhat
-/// distorted as the resulting distribution may no longer be approximately logormal.
-pub fn bench_run_arg_cfg_b(
-    cfg: &BenchCfg,
-    f: impl FnMut(),
-    run_length: RunLength,
-    batch: usize,
-) -> BenchOut {
-    let run_length = batch_run_length(run_length, Some(batch));
-    multi::bench_run_arg_cfg(cfg, LatencySrc1b::new(f, batch), run_length).into()
-}
-
-/// Similar to [`bench_run_with_status`] but batches the executions of `f` into groups of size `batch`.
-///
-/// Batching may reduce measurement overhead.
-/// Each batch results in the batch average being collected `batch` times, so the number of captured
-/// latency values is not impacted by grouping.
-/// However, a potential consequence is that the statistical tests provided by [`BenchOut`] may be somewhat
-/// distorted as the resulting distribution may no longer be approximately logormal.
-pub fn bench_run_with_status_b(f: impl FnMut(), run_length: RunLength, batch: usize) -> BenchOut {
-    let run_length = batch_run_length(run_length, Some(batch));
-    multi::bench_run_with_status(LatencySrc1b::new(f, batch), run_length).into()
-}
-
-/// Similar to [`bench_run_with_status_arg_cfg`] but batches the executions of `f` into groups of size `batch`.
-///
-/// Batching may reduce measurement overhead.
-/// Each batch results in the batch average being collected `batch` times, so the number of captured
-/// latency values is not impacted by grouping.
-/// However, a potential consequence is that the statistical tests provided by [`BenchOut`] may be somewhat
-/// distorted as the resulting distribution may no longer be approximately logormal.
-pub fn bench_run_with_status_arg_cfg_b(
-    cfg: &BenchCfg,
-    f: impl FnMut(),
-    run_length: RunLength,
-    batch: usize,
-) -> BenchOut {
-    let run_length = batch_run_length(run_length, Some(batch));
-    multi::bench_run_with_status_arg_cfg(cfg, LatencySrc1b::new(f, batch), run_length).into()
-}
-
-#[cfg(feature = "_test_support")]
-pub fn bench_run_x_o<'a, S: Status<'a>>(
-    cfg: &BenchCfg,
-    f: impl FnMut(),
-    run_length: RunLength,
-    s: S,
     batch: Option<usize>,
 ) -> BenchOut {
     match batch {
-        None => bench_run_x(&cfg, f, run_length, s),
-        Some(batch) => bench_run_x_b(&cfg, f, run_length, s, batch),
+        None => multi::bench_run_with_status_arg_cfg(cfg, LatencySrc1::new(f), run_length).into(),
+        Some(_) => {
+            multi::bench_run_with_status_arg_cfg(cfg, LatencySrc1b::new(f, bsz(batch)), run_length)
+                .into()
+        }
     }
 }
 
-#[cfg(feature = "_test_support")]
-pub fn bench_run_arg_cfg_o(
-    cfg: &BenchCfg,
+/// Repeatedly executes closure `f`, collects the resulting latency data in a [`BenchOut`] object, and
+/// outputs information about the benchmark and its execution status.
+/// Runs with the default [`BenchCfg`].
+///
+/// Prior to data collection, the benchmark is "warmed-up" by repeatedly executing `f` for
+/// [`BenchCfg::warmup_millis`] milliseconds.
+///
+/// This function calls [`bench_run_with_status_arg_cfg`] with the default [`BenchCfg`].
+///
+/// Batching can be used to dilute measurement overhead, but see library documentation about the caveats
+/// of batching.
+///
+/// Arguments:
+/// - `f` - benchmark target.
+/// - `run_length` - target run length (iteration count and/or duration) for data collection.
+/// - `batch` - determines whether batching is used and, if so, the batch size. `None` means no batching.
+pub fn bench_run_with_status(
     f: impl FnMut(),
     run_length: RunLength,
     batch: Option<usize>,
 ) -> BenchOut {
-    match batch {
-        None => bench_run_arg_cfg(&cfg, f, run_length),
-        Some(batch) => bench_run_arg_cfg_b(&cfg, f, run_length, batch),
-    }
-}
-
-#[cfg(feature = "_test_support")]
-pub fn bench_run_with_status_arg_cfg_o(
-    cfg: &BenchCfg,
-    f: impl FnMut(),
-    run_length: RunLength,
-    batch: Option<usize>,
-) -> BenchOut {
-    match batch {
-        None => bench_run_with_status_arg_cfg(&cfg, f, run_length),
-        Some(batch) => bench_run_with_status_arg_cfg_b(&cfg, f, run_length, batch),
-    }
+    let cfg = BenchCfg::default();
+    bench_run_with_status_arg_cfg(&cfg, f, run_length, batch).into()
 }
 
 #[cfg(test)]
@@ -229,9 +162,9 @@ mod simple_tests {
     #[test]
     fn test_bench_run_with_count() {
         let cfg = quick_cfg();
-        let out = bench_run_arg_cfg(&cfg, || (), RunLength::Count(5));
+        let out = bench_run_arg_cfg(&cfg, || (), RunLength::Count(5), None);
         // With 5 count and no timeout, we should have exactly 5 iterations
-        assert_eq!(out.groups(), 5);
+        assert_eq!(out.n_r(), 5);
     }
 
     #[test]
@@ -243,9 +176,10 @@ mod simple_tests {
             &cfg,
             || thread::sleep(Duration::from_nanos(1)),
             RunLength::Time(Duration::from_nanos(1)),
+            None,
         );
         // At least some executions should have been captured
-        assert!(out.groups() > 0);
+        assert!(out.n_r() > 0);
     }
 
     #[test]
@@ -257,23 +191,24 @@ mod simple_tests {
             &cfg,
             || thread::sleep(Duration::from_nanos(1)),
             RunLength::CountWithTimeout(20, Duration::from_nanos(1)),
+            None,
         );
         // At least some executions should have been captured
-        assert!(out.groups() > 0 && out.groups() < 20);
+        assert!(out.n_r() > 0 && out.n_r() < 20);
     }
 
     #[test]
     /// Takes  3 seconds to run due to default warmup_millis.
     fn test_bench_run_default() {
-        let out = bench_run(|| (), RunLength::Count(5));
-        assert_eq!(out.groups(), 5);
+        let out = bench_run(|| (), RunLength::Count(5), None);
+        assert_eq!(out.n_r(), 5);
     }
 
     #[test]
     /// Takes  3 seconds to run due to default warmup_millis.
     fn test_bench_run_with_status() {
-        let out = bench_run_with_status(|| (), RunLength::Count(5));
-        assert_eq!(out.groups(), 5);
+        let out = bench_run_with_status(|| (), RunLength::Count(5), None);
+        assert_eq!(out.n_r(), 5);
     }
 
     #[test]
@@ -281,7 +216,7 @@ mod simple_tests {
         let cfg = quick_cfg();
         let mut buf = StringWriter::new();
         let status = DefaultStatus::new(&mut buf, "Warming up".to_string(), "Running".to_string());
-        let out = bench_run_x(&cfg, || (), RunLength::Count(5), status);
-        assert_eq!(out.groups(), 5);
+        let out = bench_run_x(&cfg, || (), RunLength::Count(5), status, None);
+        assert_eq!(out.n_r(), 5);
     }
 }

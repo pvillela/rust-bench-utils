@@ -1,6 +1,6 @@
 //! Module defining the key data structure produced by [`crate::bench_run`].
 
-use crate::{BenchCfg, FpSeconds, LatencyUnit, SummaryStats, multi, summary_stats};
+use crate::{BenchCfg, FpSeconds, LatencyUnit, SummaryStats, multi};
 use basic_stats::{
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean, sample_stdev},
     normal::{student_1samp_ci, student_1samp_p, student_1samp_t, student_1samp_test},
@@ -107,6 +107,7 @@ impl BenchOut {
         self.sum_ln = 0.;
         self.sum2_ln = 0.;
         self.rousseeuw_croux_q = f64::NAN;
+        self.rousseeuw_croux_q_ln = f64::NAN;
     }
 
     #[inline(always)]
@@ -179,22 +180,22 @@ impl BenchOut {
 
     /// Number of recorded values. In case of batching, each group (batch) contributes one recorded value.
     #[inline(always)]
-    pub fn groups(&self) -> u64 {
+    pub fn n_r(&self) -> u64 {
         self.hist.len()
     }
 
     /// Total number of function executions accounting for batching (`= self.groups() * self.bsz()`).
     #[inline(always)]
     pub fn n(&self) -> u64 {
-        self.groups() * self.bsz() as u64
+        self.n_r() * self.bsz() as u64
     }
 
-    /// Summary descriptive statistics for recorded values.
+    /// Summary descriptive statistics.
     ///
     /// # Panics
     /// Panics if the number of recorded values is zero.
-    pub fn summary_r(&self) -> SummaryStats {
-        summary_stats(self)
+    pub fn summary(&self) -> SummaryStats {
+        SummaryStats::new(self)
     }
 
     /// Sample mean. Doesn't depend on batching.
@@ -202,7 +203,7 @@ impl BenchOut {
     /// # Panics
     /// Panics if the number of recorded values is zero.
     pub fn mean(&self) -> FpSeconds {
-        let mean = sample_mean(self.groups(), self.sum).expect("number of recorded values is zero");
+        let mean = sample_mean(self.n_r(), self.sum).expect("number of recorded values is zero");
         mean.into()
     }
 
@@ -211,7 +212,7 @@ impl BenchOut {
     /// # Panics
     /// Panics if the number of recorded values is zero.
     pub fn stdev_r(&self) -> FpSeconds {
-        let stdev_r = sample_stdev(self.groups(), self.sum, self.sum2)
+        let stdev_r = sample_stdev(self.n_r(), self.sum, self.sum2)
             .expect("number of recorded values is zero");
         stdev_r.into()
     }
@@ -229,7 +230,7 @@ impl BenchOut {
     /// # Panics
     /// Panics if the number of recorded values is zero.
     pub fn median_r(&self) -> FpSeconds {
-        self.summary_r().median
+        self.summary().p50
     }
 
     //=== Helper functions for estimators ===
@@ -253,7 +254,7 @@ impl BenchOut {
 
         const C_Q: f64 = 2.2219;
 
-        let mut rc_hist = Histogram::new_from(self.hist());
+        let mut rc_hist = Histogram::new_from(&self.hist);
         for (i, iv_i) in self.hist.iter_recorded().enumerate() {
             let v = iv_i.value_iterated_to();
             if v == 0 {
@@ -280,8 +281,8 @@ impl BenchOut {
     }
 
     fn priv_rousseeuw_croux_q(&mut self) -> f64 {
-        if !self.rousseeuw_croux_q_ln.is_nan() {
-            return self.rousseeuw_croux_q_ln;
+        if !self.rousseeuw_croux_q.is_nan() {
+            return self.rousseeuw_croux_q;
         }
 
         let inflate = |value: u64| -> u64 { value };
@@ -408,7 +409,7 @@ impl BenchOut {
     /// - `number of recorded values <= 1`.
     /// - `self.stdev() == 0`.
     fn student_t(&self, mu0: FpSeconds) -> f64 {
-        let moments = SampleMoments::new(self.groups(), self.sum, self.sum2);
+        let moments = SampleMoments::new(self.n_r(), self.sum, self.sum2);
         student_1samp_t(&moments, mu0.into())
             .expect("`number of recorded values <= 1` or `self.stdev_ln() == 0`")
     }
@@ -595,13 +596,13 @@ impl Debug for BenchOut {
         f.write_str(&format!("BenchOut {{ recording_unit={:?}, sigfig={}, n={}, sum={}, sum2={}, n_nz={}, sum_ln={}, sum2_ln={}, summary={:?} }}",
             self.recording_unit,
             self.hist.sigfig(),
-            self.groups(),
+            self.n_r(),
             self.sum,
             self.sum2,
             self.n_nz,
             self.sum_ln,
             self.sum2_ln,
-            self.summary_r()))
+            self.summary()))
     }
 }
 
@@ -735,7 +736,7 @@ mod test {
         out.record_from_iter(lognormal_samp);
 
         assert_eq!(ru, LatencyUnit::NANO);
-        assert_eq!(out.groups() as usize, samp_size);
+        assert_eq!(out.n_r() as usize, samp_size);
 
         let normal = Normal::new(mu, sigma).unwrap();
 
@@ -753,7 +754,7 @@ mod test {
         let exp_p95 = normal.inverse_cdf(0.95).exp();
         let exp_p99 = normal.inverse_cdf(0.99).exp();
 
-        let summary = out.summary_r();
+        let summary = out.summary();
 
         println!("exp_mean={:?}, out.mean={:?}", exp_mean, out.mean());
         println!("exp_stdev={:?}, out.stdev={:?}", exp_stdev, out.stdev());
@@ -763,7 +764,7 @@ mod test {
         println!("exp_p25={:?}, summary.p25={:?}", exp_p25, summary.p25);
         println!(
             "exp_median={:?}, summary.median={:?}",
-            exp_median, summary.median
+            exp_median, summary.p50
         );
         println!("exp_p75={:?}, summary.p75={:?}", exp_p75, summary.p75);
         println!("exp_p90={:?}, summary.p90={:?}", exp_p90, summary.p90);
@@ -782,7 +783,7 @@ mod test {
         rel_approx_eq!(exp_p5, summary.p5.as_f64(), EPSILON);
         rel_approx_eq!(exp_p10, summary.p10.as_f64(), EPSILON);
         rel_approx_eq!(exp_p25, summary.p25.as_f64(), EPSILON);
-        rel_approx_eq!(exp_median, summary.median.as_f64(), EPSILON);
+        rel_approx_eq!(exp_median, summary.p50.as_f64(), EPSILON);
         rel_approx_eq!(exp_p75, summary.p75.as_f64(), EPSILON);
         rel_approx_eq!(exp_p90, summary.p90.as_f64(), EPSILON);
         rel_approx_eq!(exp_p95, summary.p95.as_f64(), EPSILON);
@@ -810,7 +811,7 @@ mod test {
         let moments_ln = SampleMoments::from_iterator(normal_samp);
 
         assert_eq!(out.recording_unit(), LatencyUnit::NANO);
-        assert_eq!(out.groups() as usize, samp_size);
+        assert_eq!(out.n_r() as usize, samp_size);
 
         // The true median should lie inside the CI
         let true_median = FpSeconds(mu.exp());
@@ -939,8 +940,8 @@ mod test {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::new(&cfg, None);
         out.record_from_iter([FpSeconds::from_millis(1), FpSeconds::from_millis(2)].into_iter());
-        assert_eq!(out.groups(), 2);
+        assert_eq!(out.n_r(), 2);
         out.reset();
-        assert_eq!(out.groups(), 0);
+        assert_eq!(out.n_r(), 0);
     }
 }

@@ -45,8 +45,8 @@ pub fn validate_latency_overhead(
 
     println!("running solo_f: {name}");
     let out_solo =
-        bench_run_with_status_arg_cfg(cfg, &mut solo_f, RunLength::Count(exec_count_solo));
-    println!("{:?}", out_solo.summary_r());
+        bench_run_with_status_arg_cfg(cfg, &mut solo_f, RunLength::Count(exec_count_solo), None);
+    println!("{:?}", out_solo.summary());
     let solo_median = out_solo.median_r();
     println!(
         "target_median_solo={target_latency:?}, out_solo.median()={solo_median:?}, rel_diff={}",
@@ -55,8 +55,9 @@ pub fn validate_latency_overhead(
     println!();
 
     println!("running group_f: {name}");
-    let out_group = bench_run_with_status_arg_cfg(cfg, group_f, RunLength::Count(exec_count_group));
-    println!("{:?}", out_group.summary_r());
+    let out_group =
+        bench_run_with_status_arg_cfg(cfg, group_f, RunLength::Count(exec_count_group), None);
+    println!("{:?}", out_group.summary());
     let group_median = out_group.median_r();
     println!(
         "target_median_group={:?}, out_group.median()={group_median:?}, rel_diff={}",

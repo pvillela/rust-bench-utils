@@ -1,8 +1,7 @@
 //! Module defining the key data structure produced by the [`multi::bench_run`](super::bench_run) and
 //! related benchmarking functions.
 
-use crate::{BenchCfg, FpSeconds, LatencyUnit, SummaryStats, summary_stats};
-use basic_stats::core::{AltHyp, Ci, HypTestResult, PositionWrtCi};
+use crate::{BenchCfg, FpSeconds, LatencyUnit};
 use std::{
     array,
     fmt::Debug,
@@ -146,8 +145,8 @@ impl<const K: usize> BenchOut<K> {
 
     /// Number of recorded values. In case of batching, each group (batch) contributes one recorded value.
     #[inline(always)]
-    pub fn groups(&self) -> u64 {
-        self.first().groups()
+    pub fn n_r(&self) -> u64 {
+        self.first().n_r()
     }
 
     /// Total number of function executions accounting for batching (`= self.groups() * self.bsz()`).
@@ -159,6 +158,11 @@ impl<const K: usize> BenchOut<K> {
     /// Returns an iterator that yields `self`'s components
     pub fn iter(&self) -> impl Iterator<Item = &crate::BenchOut> {
         self.arr.iter()
+    }
+
+    /// Applies `f` to each component of `self` and collects the results in an array.
+    pub fn map<T>(&self, mut f: impl FnMut(&crate::BenchOut) -> T) -> [T; K] {
+        array::from_fn(|k| f(&self[k]))
     }
 }
 
@@ -217,8 +221,8 @@ mod test {
         // Both outputs are fed the same data (`[y, y]`), so medians are equal
         assert_eq!(comp.out_f1().median_r(), comp.out_f2().median_r());
         // Verify both outputs have the expected sample size: 2*k*k - 1
-        assert_eq!(comp.out_f1().groups() as usize, samp_size);
-        assert_eq!(comp.out_f2().groups() as usize, samp_size);
+        assert_eq!(comp.out_f1().n_r() as usize, samp_size);
+        assert_eq!(comp.out_f2().n_r() as usize, samp_size);
     }
 
     #[test]
@@ -230,7 +234,7 @@ mod test {
         );
 
         let flat: crate::BenchOut = out.flatten();
-        assert_eq!(flat.groups(), 2);
+        assert_eq!(flat.n_r(), 2);
     }
 
     #[test]
@@ -256,7 +260,7 @@ mod test {
         out.record_from_iter(std::iter::empty::<[FpSeconds; 2]>());
 
         assert_eq!(out.n(), 0);
-        assert_eq!(out[0].groups(), 0);
+        assert_eq!(out[0].n_r(), 0);
 
         assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].mean())).is_err());
         assert!(catch_unwind(std::panic::AssertUnwindSafe(|| out[0].stdev())).is_err());

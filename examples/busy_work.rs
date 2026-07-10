@@ -6,7 +6,7 @@
 //! cargo run -r --example busy_work --features load
 //! ```
 
-use bench_utils::{BenchCfg, RunLength, bench_run_arg_cfg, bench_run_arg_cfg_b, load::BusyWork};
+use bench_utils::{BenchCfg, RunLength, bench_run_arg_cfg, load::BusyWork};
 use env_logger;
 use std::time::{Duration, Instant};
 
@@ -19,17 +19,14 @@ fn run(target_latency: Duration, warmup_millis: u64, run_length: RunLength, batc
     let cfg = BenchCfg::default().with_warmup_millis(warmup_millis);
 
     let start = Instant::now();
-    let out = match batch {
-        None => bench_run_arg_cfg(&cfg, f, run_length),
-        Some(batch) => bench_run_arg_cfg_b(&cfg, f, run_length, batch),
-    };
+    let out = bench_run_arg_cfg(&cfg, f, run_length, batch);
     let elapsed = start.elapsed();
     println!("elaped time={elapsed:?}");
     println!(
         "target_latency/median_latency={}",
         target_latency.as_secs_f64() / out.median_r().as_f64()
     );
-    println!("{:?}", out.summary_r());
+    println!("{:?}", out.summary());
 }
 
 fn main() {

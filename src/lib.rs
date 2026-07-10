@@ -2,33 +2,20 @@
 
 //! # Quick start
 //!
-//! ```rust
-//! use bench_utils::{bench_run, BenchCfg, RunLength};
-//!
-//! // Benchmark a no-op closure for 1000 iterations with default configuration.
-//! let out = bench_run(|| {}, RunLength::Count(1000));
-//! println!("median: {:?}", out.median());
+//! ```rust,no_run
+#![doc = include_str!("../examples/doc_bench_run.rs")]
 //! ```
 //!
-//! With a custom configuration and two closures benchmarked together:
+//! Two closures benchmarked together with custom configuration, status reporting, and batching.
 //!
 //! ```rust,no_run
-//! use bench_utils::{BenchCfg, RunLength};
-//! use bench_utils::multi::{bench_run_arg_cfg, LatencySrc2};
-//! use std::time::Duration;
+#![doc = include_str!("../examples/doc_bench_run_duo.rs")]
+//! ```
 //!
-//! let cfg = BenchCfg::default()
-//!     .with_warmup_millis(500);
+//! Two closures benchmarked in parallel with custom configuration and batching.
 //!
-//! let f1: fn() = || std::thread::sleep(Duration::from_micros(10));
-//! let f2: fn() = || std::thread::sleep(Duration::from_micros(20));
-//!
-//! let out = bench_run_arg_cfg(
-//!     &cfg,
-//!     &mut LatencySrc2::new(f1, f2),
-//!     RunLength::Time(Duration::from_secs(1)),
-//! );
-//! println!("n = {}, medians = {:?}", out.n(), out.medians());
+//! ```rust,no_run
+#![doc = include_str!("../examples/doc_bench_run_parallel.rs")]
 //! ```
 //!
 //! # Feature flags

@@ -7,11 +7,11 @@ use bench_utils::{BenchCfg, Comp, FpSeconds, RunLength, bench_run_arg_cfg};
 fn test_bench_run_to_comp_roundtrip_with_fn() {
     let cfg = BenchCfg::default().with_warmup_millis(10);
     // Run benchmark for f1 and f2 separately
-    let out1 = bench_run_arg_cfg(&cfg, || {}, RunLength::Count(10));
-    let out2 = bench_run_arg_cfg(&cfg, || {}, RunLength::Count(10));
+    let out1 = bench_run_arg_cfg(&cfg, || {}, RunLength::Count(10), None);
+    let out2 = bench_run_arg_cfg(&cfg, || {}, RunLength::Count(10), None);
 
-    assert_eq!(out1.groups(), 10);
-    assert_eq!(out2.groups(), 10);
+    assert_eq!(out1.n_r(), 10);
+    assert_eq!(out2.n_r(), 10);
 
     // Compare them via Comp
     let comp = Comp::new(&out1, &out2);

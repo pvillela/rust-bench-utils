@@ -326,7 +326,7 @@ pub mod test_support {
             let src = LognormalLatencySrc::new_with_default_sigmas(targets, 2);
             let mut out = BenchOut::new(&cfg, None);
             out.record_from_iter(src.take(SAMP_SIZE));
-            let out_medians = out.medians();
+            let out_medians = out.map(crate::BenchOut::median_r);
 
             println!(
                 "*** src[0]={:?}",
@@ -389,7 +389,7 @@ pub mod test_support {
             let src = LognormalLatencySrc::<1>::new([(target, 0.2)], 3);
             let mut out = BenchOut::new(&cfg, None);
             out.record_from_iter(src.take(2000));
-            let medians = out.medians();
+            let medians = out.map(crate::BenchOut::median_r);
             rel_approx_eq!(medians[0].0, target.0, 0.05);
 
             let result = catch_unwind(|| {

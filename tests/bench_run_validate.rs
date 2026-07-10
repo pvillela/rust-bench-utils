@@ -107,7 +107,7 @@ fn run<const K: usize, R, Src>(
             out[i].hist().value_at_quantile(0.5)
         );
 
-        println!("out[{i}].summary()={:?}", out[i].summary_r());
+        println!("out[{i}].summary()={:?}", out[i].summary());
     }
 
     println!("test total elapsed time = {:?}", start.elapsed());
@@ -194,7 +194,7 @@ fn batch_opt_for_acc_ltncy(tgt_ltncy: Duration, acc_ltncy: Duration) -> Option<u
 // cargo test -r --test bench_run_validate --all-features -- no_status1 --nocapture --test-threads=1
 mod no_status1 {
     use super::*;
-    use bench_utils::bench_run_arg_cfg_o;
+    use bench_utils::bench_run_arg_cfg;
 
     fn runner(
         cfg: &BenchCfg,
@@ -202,7 +202,7 @@ mod no_status1 {
         run_length: RunLength,
         batch: Option<usize>,
     ) -> BenchOut<1> {
-        bench_run_arg_cfg_o(cfg, fns.f1(), run_length, batch).into()
+        bench_run_arg_cfg(cfg, fns.f1(), run_length, batch).into()
     }
 
     fn run_bench(
@@ -453,7 +453,7 @@ mod no_status1 {
 // cargo test -r --test bench_run_validate --all-features -- with_status1 --nocapture --test-threads=1
 mod with_status1 {
     use super::*;
-    use bench_utils::bench_run_with_status_arg_cfg_o;
+    use bench_utils::bench_run_with_status_arg_cfg;
 
     fn runner(
         cfg: &BenchCfg,
@@ -461,7 +461,7 @@ mod with_status1 {
         run_length: RunLength,
         batch: Option<usize>,
     ) -> BenchOut<1> {
-        bench_run_with_status_arg_cfg_o(cfg, fns.f1(), run_length, batch).into()
+        bench_run_with_status_arg_cfg(cfg, fns.f1(), run_length, batch).into()
     }
 
     fn run_bench(
@@ -726,7 +726,7 @@ mod with_status1 {
 // cargo test -r --test bench_run_validate --all-features -- no_status2 --nocapture --test-threads=1
 mod no_status2 {
     use super::*;
-    use bench_utils::duo::bench_run_arg_cfg_o;
+    use bench_utils::duo::bench_run_arg_cfg;
 
     fn runner(
         cfg: &BenchCfg,
@@ -734,7 +734,7 @@ mod no_status2 {
         run_length: RunLength,
         batch: Option<usize>,
     ) -> BenchOut<2> {
-        bench_run_arg_cfg_o(cfg, fns.f1(), fns.f2(), run_length, batch)
+        bench_run_arg_cfg(cfg, fns.f1(), fns.f2(), run_length, batch)
     }
 
     fn run_bench(
@@ -985,7 +985,7 @@ mod no_status2 {
 // cargo test -r --test bench_run_validate --all-features -- with_status2 --nocapture --test-threads=1
 mod with_status2 {
     use super::*;
-    use bench_utils::duo::bench_run_with_status_arg_cfg_o;
+    use bench_utils::duo::bench_run_with_status_arg_cfg;
 
     fn runner(
         cfg: &BenchCfg,
@@ -993,7 +993,7 @@ mod with_status2 {
         run_length: RunLength,
         batch: Option<usize>,
     ) -> BenchOut<2> {
-        bench_run_with_status_arg_cfg_o(cfg, fns.f1(), fns.f2(), run_length, batch).into()
+        bench_run_with_status_arg_cfg(cfg, fns.f1(), fns.f2(), run_length, batch).into()
     }
 
     fn run_bench(

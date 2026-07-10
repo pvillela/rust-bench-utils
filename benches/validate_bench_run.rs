@@ -1,6 +1,6 @@
 use bench_utils::{
-    BenchCfg, RunLength, bench_run_with_status_arg_cfg, bench_run_with_status_arg_cfg_b, latency,
-    load::BusyWork, rel_approx_eq_dur, test_support::AbsRelDiffDur,
+    BenchCfg, RunLength, bench_run_with_status_arg_cfg, latency, load::BusyWork, rel_approx_eq_dur,
+    test_support::AbsRelDiffDur,
 };
 use std::time::Duration;
 
@@ -25,12 +25,7 @@ fn run_bench_with_status(
     let cfg = BenchCfg::default()
         .with_warmup_millis(warmup_millis)
         .with_status_millis(status_millis);
-    let out = match batch {
-        None => bench_run_with_status_arg_cfg(&cfg, &mut f, RunLength::Count(exec_count)),
-        Some(batch) => {
-            bench_run_with_status_arg_cfg_b(&cfg, &mut f, RunLength::Count(exec_count), batch)
-        }
-    };
+    let out = bench_run_with_status_arg_cfg(&cfg, &mut f, RunLength::Count(exec_count), batch);
     println!();
 
     let out_mean = out.mean();

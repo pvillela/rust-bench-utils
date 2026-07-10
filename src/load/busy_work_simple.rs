@@ -232,8 +232,13 @@ mod validate_ratio {
             .with_recording_unit(LatencyUnit::sub_sec(11))
             .with_warmup_millis(100);
 
-        let out =
-            duo::bench_run_arg_cfg_b(&cfg, f1, f2, RunLength::Count(batch * samp_size), batch);
+        let out = duo::bench_run_arg_cfg(
+            &cfg,
+            f1,
+            f2,
+            RunLength::Count(batch * samp_size),
+            Some(batch),
+        );
 
         let latency_ratio = out.ratio_medians_f1_f2();
         let rel_diff = latency_ratio.abs_rel_diff(ratio);
