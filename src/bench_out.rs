@@ -1,12 +1,12 @@
 //! Module defining the key data structure produced by [`crate::bench_run`].
 
-use crate::{BenchCfg, FpSeconds, LatencyUnit, SummaryStats, multi};
+use crate::{BenchCfg, FpSeconds, LatencyUnit, SummaryStats, dev_support::memoized_value, multi};
 use basic_stats::{
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean, sample_stdev},
     normal::{student_1samp_ci, student_1samp_p, student_1samp_t, student_1samp_test},
 };
 use hdrhistogram::Histogram;
-use std::{fmt::Debug, iter};
+use std::{fmt::Debug, iter, sync::Mutex};
 
 /// Constructs a [`Histogram<u64>`]. The arguments correspond to [Histogram::high] and [Histogram::sigfig].
 pub(crate) fn new_hdrhist(hist_high: u64, hist_sigfig: u8) -> Histogram<u64> {
@@ -14,6 +14,18 @@ pub(crate) fn new_hdrhist(hist_high: u64, hist_sigfig: u8) -> Histogram<u64> {
         .expect("should not happen given histogram construction");
     hist.auto(true);
     hist
+}
+
+struct CachedStats {
+    rousseeuw_croux_q: Option<f64>,
+}
+
+impl Default for CachedStats {
+    fn default() -> Self {
+        Self {
+            rousseeuw_croux_q: None,
+        }
+    }
 }
 
 /// Contains the latency observations resulting from benchmarking a closure.
@@ -43,8 +55,7 @@ pub struct BenchOut {
     pub(crate) sum_ln: f64,
     pub(crate) sum2_ln: f64,
     pub(crate) batch: Option<usize>,
-    rousseeuw_croux_q: f64,
-    rousseeuw_croux_q_ln: f64,
+    cached_stats: Mutex<CachedStats>,
 }
 
 impl BenchOut {
@@ -58,8 +69,7 @@ impl BenchOut {
         let sum_ln = 0.;
         let sum2_ln = 0.;
         let batch = batch.map(|n| n.max(1));
-        let rousseeuw_croux_q = f64::NAN;
-        let rousseeuw_croux_q_ln = f64::NAN;
+        let cached_stats = Mutex::new(CachedStats::default());
 
         Self {
             recording_unit: cfg.recording_unit(),
@@ -70,8 +80,7 @@ impl BenchOut {
             sum_ln,
             sum2_ln,
             batch,
-            rousseeuw_croux_q,
-            rousseeuw_croux_q_ln,
+            cached_stats,
         }
     }
 
@@ -106,8 +115,7 @@ impl BenchOut {
         self.n_nz = 0;
         self.sum_ln = 0.;
         self.sum2_ln = 0.;
-        self.rousseeuw_croux_q = f64::NAN;
-        self.rousseeuw_croux_q_ln = f64::NAN;
+        self.cached_stats = Mutex::new(CachedStats::default());
     }
 
     #[inline(always)]
@@ -245,8 +253,7 @@ impl BenchOut {
         todo!()
     }
 
-    #[allow(unused)]
-    fn priv_rousseeuw_croux_q_general(
+    fn rousseeuw_croux_q_general(
         &self,
         inflate: impl Fn(u64) -> u64,
         deflate: impl Fn(u64) -> f64,
@@ -272,7 +279,9 @@ impl BenchOut {
                 let count_j = iv_j.count_at_value();
                 let abs_diff = mid_i.abs_diff(mid_j);
                 let count = count_i * count_j;
-                rc_hist.record_n(abs_diff, count);
+                rc_hist
+                    .record_n(abs_diff, count)
+                    .expect("shouldn't happen as histogram is sized properly");
             }
         }
         let quartile = rc_hist.value_at_quantile(0.25);
@@ -280,25 +289,38 @@ impl BenchOut {
     }
 
     #[allow(unused)]
-    fn priv_rousseeuw_croux_q(&mut self) -> f64 {
+    /// Returns the Rousseeuw-Croux Q statistic computed in natural scale.
+    fn rousseeuw_croux_q_ns(&self) -> f64 {
         let inflate = |value: u64| -> u64 { value };
         let deflate = |value: u64| -> f64 { value as f64 };
 
-        self.priv_rousseeuw_croux_q_general(inflate, deflate)
+        self.rousseeuw_croux_q_general(inflate, deflate)
     }
 
     #[allow(unused)]
-    fn priv_rousseeuw_croux_q_ln(&mut self) -> f64 {
+    /// Returns the Rousseeuw-Croux Q statistic computed in log scale.
+    fn rousseeuw_croux_q_ls(&self) -> f64 {
         let max = self.hist.max() as f64;
         let multiplyer = max / max.ln();
         let inflate = |value: u64| -> u64 { ((value as f64).ln() * multiplyer).round() as u64 };
         let deflate = |value: u64| -> f64 { ((value as f64) / multiplyer).exp() };
 
-        self.priv_rousseeuw_croux_q_general(inflate, deflate)
+        self.rousseeuw_croux_q_general(inflate, deflate)
     }
 
+    /// Returns the Rousseeuw-Croux Q statistic.
+    pub fn rousseeuw_croux_q(&self) -> f64 {
+        let mut rcq = self
+            .cached_stats
+            .lock()
+            .expect("mutex shouldn't be poisoned")
+            .rousseeuw_croux_q;
+        memoized_value(&mut rcq, || self.rousseeuw_croux_q_ls())
+    }
+
+    #[allow(unused)]
     fn sigma2_rousseeuw_croux(&self) -> f64 {
-        let sigma_y = self.rousseeuw_croux_q;
+        let sigma_y = self.rousseeuw_croux_q();
         (1.0 + self.bsz() as f64 * sigma_y.powi(2) / self.mean().powi(2)).ln()
     }
 
@@ -344,10 +366,11 @@ impl BenchOut {
         }
     }
 
-    pub fn simple_median(&self) -> FpSeconds {
+    fn simple_median(&self) -> FpSeconds {
         const HI_BSZ: usize = 100;
         let median_1 = self.mean_ln_r().exp();
-        let median_hi_bsz = self.mean() / (1.0 + self.stdev().powi(2) / self.mean().powi(2)).sqrt();
+        let median_hi_bsz =
+            self.median_r() / (1.0 + self.stdev().powi(2) / self.median_r().powi(2)).sqrt();
         let clipped_bsz = self.bsz().min(HI_BSZ);
         let median_interp = ((median_1.ln() * (HI_BSZ - clipped_bsz) as f64
             + median_hi_bsz.ln() * (clipped_bsz - 1) as f64)

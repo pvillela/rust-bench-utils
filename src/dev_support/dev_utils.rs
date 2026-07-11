@@ -16,3 +16,14 @@ pub fn batched_run_length(run_length: RunLength, batch: Option<usize>) -> RunLen
         }
     }
 }
+
+pub fn memoized_value<T: Clone>(opt: &mut Option<T>, f: impl FnOnce() -> T) -> T {
+    match opt {
+        Some(value) => value.clone(),
+        None => {
+            let value = f();
+            *opt = Some(value.clone());
+            value
+        }
+    }
+}
