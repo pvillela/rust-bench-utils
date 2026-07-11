@@ -63,7 +63,7 @@ impl<'a> Comp<'a> {
     ///
     /// Panics if `self.out_f1().n() == 0` or `self.out_f2().n() == 0`, since
     pub fn ratio_medians_f1_f2(&self) -> f64 {
-        self.0.median_r().as_f64() / self.1.median_r().as_f64()
+        self.0.median().as_f64() / self.1.median().as_f64()
     }
 
     /// The difference between the mean of `f1`'s latencies and the mean of `f2`'s latencies,

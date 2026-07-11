@@ -1,0 +1,16 @@
+Lognormal distribution
+======================
+
+Median from mean and standard deviation
+---------------------------------------
+
+mean_ln = ln(mean) - 1/2 * ln(1 + stdev^2 / mean^2)
+median = exp(mean_ln) = mean / sqrt(1 + stedv^2 / mean^2)
+
+stdev_ln^2 = ln(1 + stdev^2 / mean^2)
+
+
+Mean from mean of logs and standard deviation of logs
+-----------------------------------------------------
+
+mean = exp(mean_ln + stdev_ln^2 / 2)

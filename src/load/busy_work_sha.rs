@@ -123,7 +123,7 @@ mod validate_latency {
 
     use super::*;
     use crate::{
-        FpSeconds, median_batch_latency, rel_approx_eq_fpsecs,
+        BenchCfg, FpSeconds, LatencyUnit, bench_run_arg_cfg, rel_approx_eq_fpsecs,
         test_support::{AbsRelDiffFpSecs, count_for_acc_ltncy},
     };
 
@@ -134,7 +134,11 @@ mod validate_latency {
         let effort = BusyWork::calibrate(tgt);
         let f = BusyWork::fun(effort);
 
-        let latency_fpsecs = median_batch_latency(f, batch, samp_size);
+        let cfg = BenchCfg::default()
+            .with_recording_unit(LatencyUnit::sub_sec(12))
+            .with_warmup_millis(100);
+        let out = bench_run_arg_cfg(&cfg, f, RunLength::Count(batch * samp_size), Some(batch));
+        let latency_fpsecs = out.median();
         let tgt_fpsecs: FpSeconds = tgt.into();
         let rel_diff = tgt_fpsecs.abs_rel_diff_fpsecs(latency_fpsecs);
 
@@ -146,7 +150,7 @@ mod validate_latency {
         (tgt_fpsecs, latency_fpsecs)
     }
 
-    const ACC_LTNCY: Duration = Duration::from_millis(1);
+    const ACC_LTNCY: Duration = Duration::from_micros(50);
 
     #[test]
     fn test_busy_work_ltncy_zero() {
@@ -165,7 +169,7 @@ mod validate_latency {
     #[test]
     fn test_busy_work_ltncy_100_nano() {
         const EPSILON: f64 = 0.05;
-        const SAMP_SIZE: usize = 50;
+        const SAMP_SIZE: usize = 200;
         let tgt = Duration::from_nanos(100);
         let batch = count_for_acc_ltncy(tgt, ACC_LTNCY);
         let (tgt_fpsecs, latency_fpsecs) = run(tgt, batch, SAMP_SIZE);
@@ -175,7 +179,7 @@ mod validate_latency {
     #[test]
     fn test_busy_work_ltncy_1_micro() {
         const EPSILON: f64 = 0.05;
-        const SAMP_SIZE: usize = 20;
+        const SAMP_SIZE: usize = 200;
         let tgt = Duration::from_micros(1);
         let batch = count_for_acc_ltncy(tgt, ACC_LTNCY);
         let (tgt_fpsecs, latency_fpsecs) = run(tgt, batch, SAMP_SIZE);
@@ -186,9 +190,9 @@ mod validate_latency {
     #[test]
     fn test_busy_work_ltncy_1_milli() {
         const EPSILON: f64 = 0.05;
-        const SAMP_SIZE: usize = 20;
+        const SAMP_SIZE: usize = 200;
         let tgt = Duration::from_millis(1);
-        let batch = count_for_acc_ltncy(tgt, ACC_LTNCY);
+        let batch = count_for_acc_ltncy(tgt, ACC_LTNCY); // 1
         let (tgt_fpsecs, latency_fpsecs) = run(tgt, batch, SAMP_SIZE);
         rel_approx_eq_fpsecs!(tgt_fpsecs, latency_fpsecs, EPSILON);
     }
@@ -197,9 +201,9 @@ mod validate_latency {
     #[test]
     fn test_busy_work_ltncy_10_milli() {
         const EPSILON: f64 = 0.05;
-        const SAMP_SIZE: usize = 20;
+        const SAMP_SIZE: usize = 50;
         let tgt = Duration::from_millis(10);
-        let batch = count_for_acc_ltncy(tgt, ACC_LTNCY);
+        let batch = count_for_acc_ltncy(tgt, ACC_LTNCY); // 1
         let (tgt_fpsecs, latency_fpsecs) = run(tgt, batch, SAMP_SIZE);
         rel_approx_eq_fpsecs!(tgt_fpsecs, latency_fpsecs, EPSILON);
     }
@@ -208,7 +212,7 @@ mod validate_latency {
     #[test]
     fn test_busy_work_ltncy_50_milli() {
         const EPSILON: f64 = 0.05;
-        const SAMP_SIZE: usize = 20;
+        const SAMP_SIZE: usize = 50;
         let tgt = Duration::from_millis(50);
         let batch = count_for_acc_ltncy(tgt, ACC_LTNCY);
         let (tgt_fpsecs, latency_fpsecs) = run(tgt, batch, SAMP_SIZE);
@@ -226,6 +230,8 @@ mod validate_ratio {
     use super::*;
     use crate::{BenchCfg, LatencyUnit, duo, test_support::count_for_acc_ltncy};
     use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
+
+    const ACC_LTNCY: Duration = Duration::from_micros(50);
 
     fn run(tgt1: Duration, ratio: f64, batch: usize, samp_size: usize) -> (f64, f64) {
         _ = env_logger::try_init();
@@ -272,9 +278,9 @@ mod validate_ratio {
     // too small for proper calibration
     fn test_busy_work_ratio_10_nano() {
         const EPSILON: f64 = 0.10; // overtakes the ratio relative difference
-        const SAMP_SIZE: usize = 100;
+        const SAMP_SIZE: usize = 200;
         let tgt1 = Duration::from_nanos(10);
-        let batch = count_for_acc_ltncy(tgt1, Duration::from_micros(10));
+        let batch = count_for_acc_ltncy(tgt1, ACC_LTNCY);
         let (adjusted_ratio, latency_ratio) = run(tgt1, RATIO, batch, SAMP_SIZE);
         rel_approx_eq!(adjusted_ratio, latency_ratio, EPSILON);
     }
@@ -283,9 +289,9 @@ mod validate_ratio {
     #[test]
     fn test_busy_work_ratio_100_nano() {
         const EPSILON: f64 = 0.02;
-        const SAMP_SIZE: usize = 100;
+        const SAMP_SIZE: usize = 200;
         let tgt1 = Duration::from_nanos(100);
-        let batch = count_for_acc_ltncy(tgt1, Duration::from_micros(10));
+        let batch = count_for_acc_ltncy(tgt1, ACC_LTNCY);
         let (adjusted_ratio, latency_ratio) = run(tgt1, RATIO, batch, SAMP_SIZE);
         rel_approx_eq!(adjusted_ratio, latency_ratio, EPSILON);
     }
@@ -293,9 +299,9 @@ mod validate_ratio {
     #[test]
     fn test_busy_work_ratio_1_micro() {
         const EPSILON: f64 = 0.02;
-        const SAMP_SIZE: usize = 100;
+        const SAMP_SIZE: usize = 200;
         let tgt1 = Duration::from_micros(1);
-        let batch = count_for_acc_ltncy(tgt1, Duration::from_micros(10));
+        let batch = count_for_acc_ltncy(tgt1, ACC_LTNCY);
         let (adjusted_ratio, latency_ratio) = run(tgt1, RATIO, batch, SAMP_SIZE);
         rel_approx_eq!(adjusted_ratio, latency_ratio, EPSILON);
     }
@@ -303,9 +309,9 @@ mod validate_ratio {
     #[test]
     fn test_busy_work_ratio_10_micro() {
         const EPSILON: f64 = 0.02;
-        const SAMP_SIZE: usize = 100;
+        const SAMP_SIZE: usize = 200;
         let tgt1 = Duration::from_micros(1);
-        let batch = 1;
+        let batch = count_for_acc_ltncy(tgt1, ACC_LTNCY);
         let (adjusted_ratio, latency_ratio) = run(tgt1, RATIO, batch, SAMP_SIZE);
         rel_approx_eq!(adjusted_ratio, latency_ratio, EPSILON);
     }
@@ -313,9 +319,9 @@ mod validate_ratio {
     #[test]
     fn test_busy_work_ratio_100_micro() {
         const EPSILON: f64 = 0.01;
-        const SAMP_SIZE: usize = 100;
+        const SAMP_SIZE: usize = 200;
         let tgt1 = Duration::from_micros(100);
-        let batch = 1;
+        let batch = count_for_acc_ltncy(tgt1, ACC_LTNCY);
         let (adjusted_ratio, latency_ratio) = run(tgt1, RATIO, batch, SAMP_SIZE);
         rel_approx_eq!(adjusted_ratio, latency_ratio, EPSILON);
     }
@@ -323,9 +329,9 @@ mod validate_ratio {
     #[test]
     fn test_busy_work_ratio_1_milli() {
         const EPSILON: f64 = 0.01;
-        const SAMP_SIZE: usize = 100;
+        const SAMP_SIZE: usize = 200;
         let tgt1 = Duration::from_millis(1);
-        let batch = 1;
+        let batch = count_for_acc_ltncy(tgt1, ACC_LTNCY);
         let (adjusted_ratio, latency_ratio) = run(tgt1, RATIO, batch, SAMP_SIZE);
         rel_approx_eq!(adjusted_ratio, latency_ratio, EPSILON);
     }
@@ -333,9 +339,9 @@ mod validate_ratio {
     #[test]
     fn test_busy_work_ratio_10_milli() {
         const EPSILON: f64 = 0.01;
-        const SAMP_SIZE: usize = 40;
+        const SAMP_SIZE: usize = 50;
         let tgt1 = Duration::from_millis(10);
-        let batch = 1;
+        let batch = count_for_acc_ltncy(tgt1, ACC_LTNCY);
         let (adjusted_ratio, latency_ratio) = run(tgt1, RATIO, batch, SAMP_SIZE);
         rel_approx_eq!(adjusted_ratio, latency_ratio, EPSILON);
     }

@@ -170,23 +170,11 @@ impl<const K: usize> BenchOut<K> {
 #[cfg(feature = "_test")]
 mod test {
     use super::*;
-    use crate::rel_approx_eq_fpsecs;
     use crate::{
         BenchCfg,
         test_support::{LO_STDEV_LN, lognormal_samp},
     };
-    use basic_stats::{
-        approx_eq,
-        core::{AcceptedHyp, PositionWrtCi, SampleMoments},
-        normal::{
-            normal_detm_samp, student_1samp_ci, student_1samp_df, student_1samp_p, student_1samp_t,
-        },
-        rel_approx_eq,
-    };
-    use statrs::distribution::{ContinuousCDF, Normal};
     use std::panic::catch_unwind;
-
-    const ALPHA: f64 = 0.05;
 
     fn lognormal_samp2(
         rec_mu: f64,

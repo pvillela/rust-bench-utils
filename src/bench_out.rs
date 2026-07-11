@@ -235,23 +235,22 @@ impl BenchOut {
 
     //=== Helper functions for estimators ===
 
+    #[allow(unused)]
     fn cv(&self) -> f64 {
         todo!()
     }
 
+    #[allow(unused)]
     fn cv_rob(&self) -> f64 {
         todo!()
     }
 
+    #[allow(unused)]
     fn priv_rousseeuw_croux_q_general(
-        &mut self,
+        &self,
         inflate: impl Fn(u64) -> u64,
         deflate: impl Fn(u64) -> f64,
     ) -> f64 {
-        if !self.rousseeuw_croux_q.is_nan() {
-            return self.rousseeuw_croux_q;
-        }
-
         const C_Q: f64 = 2.2219;
 
         let mut rc_hist = Histogram::new_from(&self.hist);
@@ -280,32 +279,22 @@ impl BenchOut {
         deflate(quartile) * C_Q
     }
 
+    #[allow(unused)]
     fn priv_rousseeuw_croux_q(&mut self) -> f64 {
-        if !self.rousseeuw_croux_q.is_nan() {
-            return self.rousseeuw_croux_q;
-        }
-
         let inflate = |value: u64| -> u64 { value };
         let deflate = |value: u64| -> f64 { value as f64 };
 
-        let rsq = self.priv_rousseeuw_croux_q_general(inflate, deflate);
-        self.rousseeuw_croux_q = rsq;
-        rsq
+        self.priv_rousseeuw_croux_q_general(inflate, deflate)
     }
 
+    #[allow(unused)]
     fn priv_rousseeuw_croux_q_ln(&mut self) -> f64 {
-        if !self.rousseeuw_croux_q_ln.is_nan() {
-            return self.rousseeuw_croux_q_ln;
-        }
-
         let max = self.hist.max() as f64;
         let multiplyer = max / max.ln();
         let inflate = |value: u64| -> u64 { ((value as f64).ln() * multiplyer).round() as u64 };
         let deflate = |value: u64| -> f64 { ((value as f64) / multiplyer).exp() };
 
-        let rsq_ln = self.priv_rousseeuw_croux_q_general(inflate, deflate);
-        self.rousseeuw_croux_q_ln = rsq_ln;
-        rsq_ln
+        self.priv_rousseeuw_croux_q_general(inflate, deflate)
     }
 
     fn sigma2_rousseeuw_croux(&self) -> f64 {
@@ -355,6 +344,22 @@ impl BenchOut {
         }
     }
 
+    pub fn simple_median(&self) -> FpSeconds {
+        const HI_BSZ: usize = 100;
+        let median_1 = self.mean_ln_r().exp();
+        let median_hi_bsz = self.mean() / (1.0 + self.stdev().powi(2) / self.mean().powi(2)).sqrt();
+        let clipped_bsz = self.bsz().min(HI_BSZ);
+        let median_interp = ((median_1.ln() * (HI_BSZ - clipped_bsz) as f64
+            + median_hi_bsz.ln() * (clipped_bsz - 1) as f64)
+            / (HI_BSZ - 1) as f64)
+            .exp();
+        median_interp.into()
+    }
+
+    pub fn median(&self) -> FpSeconds {
+        self.simple_median()
+    }
+
     /// Sample mean of the natural logarithms of recorded [`FpSeconds`] values.
     ///
     /// # Panics
@@ -372,6 +377,7 @@ impl BenchOut {
             .expect("number of non-zero observations is zero")
     }
 
+    #[allow(unused)]
     /// Student's one-sample t statistic for
     /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm in [`FpSeconds`]),
     /// or equivalently, the equality of `median(latency(f))` and `exp(ln_mu0)`.
@@ -395,6 +401,7 @@ impl BenchOut {
             .expect("`number of non-zero recorded values <= 1` or `self.stdev_ln() == 0`")
     }
 
+    #[allow(unused)]
     /// Student's one-sample t statistic for
     /// the equality of `mean(latency(f))` and `mu0` in [`FpSeconds`]),
     ///
@@ -414,6 +421,7 @@ impl BenchOut {
             .expect("`number of recorded values <= 1` or `self.stdev_ln() == 0`")
     }
 
+    #[allow(unused)]
     /// Degrees of freedom for Student's t statistic for `mean(ln(latency(f)))` (where `ln` is the natural logarithm,
     /// in [`FpSeconds`]).
     ///
@@ -427,6 +435,7 @@ impl BenchOut {
         self.n_nz as f64 - 1.
     }
 
+    #[allow(unused)]
     /// Degrees of freedom for Student's t statistic for `mean(latency(f))` with latency expressed in [`FpSeconds`]).
     ///
     /// For sufficiently high batch sizes, the recorded values can be assumed to be approximately normal.
