@@ -17,7 +17,7 @@ fn test_bench_run_to_comp_roundtrip_with_fn() {
     let comp = Comp::new(&out1, &out2);
 
     // Both ran the same no-op, so ratio should be ~1.0
-    let ratio = comp.ratio_medians_f1_f2();
+    let ratio = comp.ratio_medians_f1_f2_r();
     assert!(
         ratio > 0.5 && ratio < 2.0,
         "ratio should be close to 1.0, got {}",
@@ -50,7 +50,7 @@ fn test_bench_run_to_comp_accept_null_hyp() {
     let comp = Comp::new(&out1, &out2);
 
     // Same target median → ratio should be ~1.0
-    let ratio = comp.ratio_medians_f1_f2();
+    let ratio = comp.ratio_medians_f1_f2_r();
     assert!(
         (0.95..=1.05).contains(&ratio),
         "ratio should be close to 1.0, got {}",
@@ -96,7 +96,7 @@ fn test_bench_run_to_comp_reject_null_hyp() {
     let comp = Comp::new(&out1, &out2);
 
     // Ratio should be ~10.0/9.0
-    let ratio = comp.ratio_medians_f1_f2();
+    let ratio = comp.ratio_medians_f1_f2_r();
     approx_eq!(10.0 / 9.0, ratio, 0.01);
 
     // Must reject the null hypothesis that ln(median) difference is 0

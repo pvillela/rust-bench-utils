@@ -385,15 +385,15 @@ impl BenchOut {
     fn log_space_median_estimator(&self) -> FpSeconds {
         let k = self.bsz() as f64;
         let m_y_ln = self.median_r().ln();
-        let s_z = self.pure_rousseeuw_croux_q_ls();
-        let sigma2_x = (1.0 + k * (s_z.powi(2).exp() - 1.0)).ln();
-        (m_y_ln + (s_z.powi(2) - sigma2_x) / 2.0).exp().into()
+        let sigma_y = self.rousseeuw_croux_q_ls();
+        let sigma2_x = (1.0 + k * (sigma_y.powi(2).exp() - 1.0)).ln();
+        (m_y_ln + (sigma_y.powi(2) - sigma2_x) / 2.0).exp().into()
     }
 
     fn rmom_median_estimator(&self) -> FpSeconds {
         let k = self.bsz() as f64;
-        let nu_y = self.median_r(); // could replace with trimmed mean
-        let tau_y = self.pure_rousseeuw_croux_q_ns();
+        let nu_y = self.median_r();
+        let tau_y = self.rousseeuw_croux_q_ns();
         (nu_y / (1.0 + k * tau_y.powi(2) / nu_y.powi(2)).sqrt()).into()
     }
 
@@ -425,26 +425,20 @@ impl BenchOut {
         median_abs_diff / INV_PHI_0_75
     }
 
-    // fn s_hat(&self) -> f64 {
-    //     let mut s_hat = self
-    //         .cached_stats
-    //         .lock()
-    //         .expect("mutex shouldn't be poisoned")
-    //         .s_hat;
-    //     memoized_value(&mut s_hat, || self.pure_s_hat())
-    // }
-
     fn s_hat(&self) -> f64 {
-        self.memoized(CachedStats::s_hat, || self.s_hat())
+        self.memoized(CachedStats::s_hat, || self.pure_s_hat())
     }
 
-    // pub fn median(&self) -> FpSeconds {
-    //     let s_hat =
-    //     match self.bsz() {
-    //         1 => self.median_r(),
-    //         _ 0.3 <
-    //     }
-    // }
+    pub fn median_rob(&self) -> FpSeconds {
+        let s_hat = self.s_hat();
+        match self.bsz() {
+            1 => self.median_r(),
+            _ if s_hat <= 0.3 => self.rmom_median_estimator(),
+            _ if 0.3 < s_hat && s_hat <= 0.6 => self.log_space_median_estimator(),
+            _ if s_hat > 0.6 => self.rmom_median_estimator(),
+            _ => self.median_r(),
+        }
+    }
 
     /// Sample mean of the natural logarithms of recorded [`FpSeconds`] values.
     ///

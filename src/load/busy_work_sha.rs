@@ -119,13 +119,12 @@ impl BusyWork {
 #[cfg(feature = "_bench")]
 /// cargo test -r --lib --all-features -- load::busy_work_sha::validate_latency --nocapture --test-threads=1
 mod validate_latency {
-    use std::time::Instant;
-
     use super::*;
     use crate::{
         BenchCfg, FpSeconds, LatencyUnit, bench_run_arg_cfg, rel_approx_eq_fpsecs,
         test_support::{AbsRelDiffFpSecs, count_for_acc_ltncy},
     };
+    use std::time::Instant;
 
     fn run(tgt: Duration, batch: usize, samp_size: usize) -> (FpSeconds, FpSeconds) {
         _ = env_logger::try_init();
@@ -138,7 +137,7 @@ mod validate_latency {
             .with_recording_unit(LatencyUnit::sub_sec(12))
             .with_warmup_millis(100);
         let out = bench_run_arg_cfg(&cfg, f, RunLength::Count(batch * samp_size), Some(batch));
-        let latency_fpsecs = out.median();
+        let latency_fpsecs = out.median_r();
         let tgt_fpsecs: FpSeconds = tgt.into();
         let rel_diff = tgt_fpsecs.abs_rel_diff_fpsecs(latency_fpsecs);
 
@@ -254,12 +253,12 @@ mod validate_ratio {
             Some(batch),
         );
 
-        let latency_ratio = out.ratio_medians_f1_f2();
+        let latency_ratio = out.ratio_medians_f1_f2_rob();
         let rel_diff = latency_ratio.abs_rel_diff(ratio);
         let adjusted_rel_diff = latency_ratio.abs_rel_diff(adjusted_ratio);
 
         println!(
-            "out_f1().median()={:?}, out_f2().median()={:?}",
+            "out_f1().median_r()={:?}, out_f2().median_r()={:?}",
             out.out_f1().median_r(),
             out.out_f2().median_r()
         );

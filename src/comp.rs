@@ -48,22 +48,38 @@ impl<'a> Comp<'a> {
         self.1
     }
 
-    /// Difference between the median of `f1`'s latencies and the median of `f2`'s latencies,
-    /// in [`FpSeconds`].
-    pub fn diff_medians_f1_f2(&self) -> FpSeconds {
+    /// Difference between the medians of recorded values for `f1` and `f2`, respectively, in [`FpSeconds`].
+    pub fn diff_medians_f1_f2_r(&self) -> FpSeconds {
         self.0.median_r() - self.1.median_r()
     }
 
-    /// Ratio of the median of `f1`'s latencies to the median of `f2`'s latencies.
+    /// Ratio between the medians of recorded values for `f1` and `f2`, respectively.
     ///
-    /// Returns `f64::INFINITY` if the median of `f2` is zero, and `f64::NAN` if both
+    /// Returns `f64::INFINITY` if the median for `f2` is zero, and `f64::NAN` if both
     /// medians are zero.
     ///
     /// # Panics
     ///
-    /// Panics if `self.out_f1().n() == 0` or `self.out_f2().n() == 0`, since
-    pub fn ratio_medians_f1_f2(&self) -> f64 {
-        self.0.median().as_f64() / self.1.median().as_f64()
+    /// Panics if `self.out_f1().n() == 0` or `self.out_f2().n() == 0`.
+    pub fn ratio_medians_f1_f2_r(&self) -> f64 {
+        self.0.median_r().as_f64() / self.1.median_r().as_f64()
+    }
+
+    /// Difference between the robust median estimates for `f1` and `f2`, respectively, in [`FpSeconds`].
+    pub fn diff_medians_f1_f2_rob(&self) -> FpSeconds {
+        self.0.median_rob() - self.1.median_rob()
+    }
+
+    /// Ratio between the robust median estimates for `f1` and `f2`, respectively.
+    ///
+    /// Returns `f64::INFINITY` if the median for `f2` is zero, and `f64::NAN` if both
+    /// medians are zero.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.out_f1().n() == 0` or `self.out_f2().n() == 0`.
+    pub fn ratio_medians_f1_f2_rob(&self) -> f64 {
+        self.0.median_rob().as_f64() / self.1.median_rob().as_f64()
     }
 
     /// The difference between the mean of `f1`'s latencies and the mean of `f2`'s latencies,
@@ -84,16 +100,6 @@ impl<'a> Comp<'a> {
     /// Panics if `self.out_f1().n_nz == 0` or `self.out_f2().n_nz == 0`.
     pub fn mean_diff_ln_f1_f2(&self) -> f64 {
         self.0.mean_ln_r() - self.1.mean_ln_r()
-    }
-
-    /// Estimated ratio of the median `f1` latency to the median `f2` latency,
-    /// computed as the `exp()` of [`Self::mean_diff_ln_f1_f2`].
-    ///
-    /// # Panics
-    ///
-    /// Panics if `self.out_f1().n_nz == 0` or `self.out_f2().n_nz == 0`.
-    pub fn ratio_medians_f1_f2_from_lns(&self) -> f64 {
-        self.mean_diff_ln_f1_f2().exp()
     }
 
     fn moments_ln_f1(&self) -> SampleMoments {
@@ -446,15 +452,14 @@ mod test {
 
             assert_eq!(
                 f1_out.median_r() - f2_out.median_r(),
-                comp.diff_medians_f1_f2()
+                comp.diff_medians_f1_f2_r()
             );
-            approx_eq!(ratio_medians, comp.ratio_medians_f1_f2(), EPSILON);
+            approx_eq!(ratio_medians, comp.ratio_medians_f1_f2_r(), EPSILON);
             assert_eq!(f1_out.mean() - f2_out.mean(), comp.mean_diff_f1_f2());
             assert_eq!(
                 f1_out.mean_ln_r() - f2_out.mean_ln_r(),
                 comp.mean_diff_ln_f1_f2()
             );
-            approx_eq!(ratio_medians, comp.ratio_medians_f1_f2_from_lns(), EPSILON);
             assert_eq!(
                 welch_t(mom_ln1, mom_ln2, ln_d0).unwrap(),
                 comp.welch_ln_t(ln_d0)

@@ -240,13 +240,13 @@ mod validate_ratio {
             Some(batch),
         );
 
-        let latency_ratio = out.ratio_medians_f1_f2();
+        let latency_ratio = out.ratio_medians_f1_f2_rob();
         let rel_diff = latency_ratio.abs_rel_diff(ratio);
 
         println!(
-            "out_f1().median()={:?}, out_f2().median()={:?}",
-            out.out_f1().median_r(),
-            out.out_f2().median_r()
+            "out_f1().median_rob()={:?}, out_f2().median_rob()={:?}",
+            out.out_f1().median_rob(),
+            out.out_f2().median_rob()
         );
 
         println!(
