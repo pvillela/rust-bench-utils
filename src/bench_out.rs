@@ -1,12 +1,12 @@
 //! Module defining the key data structure produced by [`crate::bench_run`].
 
-use crate::{BenchCfg, FpSeconds, LatencyUnit, SummaryStats, dev_support::memoized_value, multi};
+use crate::{BenchCfg, FpSeconds, LatencyUnit, SummaryStats, dev_support::memoized_fn, multi};
 use basic_stats::{
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean, sample_stdev},
     normal::{student_1samp_ci, student_1samp_p, student_1samp_t, student_1samp_test},
 };
 use hdrhistogram::Histogram;
-use std::{fmt::Debug, iter, sync::Mutex};
+use std::{fmt::Debug, iter, ops::DerefMut, sync::Mutex};
 
 /// Constructs a [`Histogram<u64>`]. The arguments correspond to [Histogram::high] and [Histogram::sigfig].
 pub(crate) fn new_hdrhist(hist_high: u64, hist_sigfig: u8) -> Histogram<u64> {
@@ -17,13 +17,31 @@ pub(crate) fn new_hdrhist(hist_high: u64, hist_sigfig: u8) -> Histogram<u64> {
 }
 
 struct CachedStats {
-    rousseeuw_croux_q: Option<f64>,
+    rousseeuw_croux_q_ns: Option<f64>,
+    rousseeuw_croux_q_ls: Option<f64>,
+    s_hat: Option<f64>,
+}
+
+impl CachedStats {
+    fn rousseeuw_croux_q_ns(&mut self) -> &mut Option<f64> {
+        &mut self.rousseeuw_croux_q_ns
+    }
+
+    fn rousseeuw_croux_q_ls(&mut self) -> &mut Option<f64> {
+        &mut self.rousseeuw_croux_q_ls
+    }
+
+    fn s_hat(&mut self) -> &mut Option<f64> {
+        &mut self.s_hat
+    }
 }
 
 impl Default for CachedStats {
     fn default() -> Self {
         Self {
-            rousseeuw_croux_q: None,
+            rousseeuw_croux_q_ns: None,
+            rousseeuw_croux_q_ls: None,
+            s_hat: None,
         }
     }
 }
@@ -243,6 +261,19 @@ impl BenchOut {
 
     //=== Helper functions for estimators ===
 
+    fn memoized<T: Clone>(
+        &self,
+        extract: impl FnOnce(&mut CachedStats) -> &mut Option<T>,
+        f: impl FnOnce() -> T,
+    ) -> T {
+        let mut lock = self
+            .cached_stats
+            .lock()
+            .expect("mutex shouldn't be poisoned");
+        let cached = lock.deref_mut();
+        memoized_fn(cached, extract, f)
+    }
+
     #[allow(unused)]
     fn cv(&self) -> f64 {
         todo!()
@@ -253,20 +284,31 @@ impl BenchOut {
         todo!()
     }
 
+    /// Consistency constant `d` normalises `Q` so that `Q/d` is a consistent estimator of sigma$ for a Gaussian population.
+    fn rousseeuw_croux_d(&self) -> f64 {
+        const C_Q: f64 = 2.2219;
+        let g = self.n_r() as f64;
+
+        C_Q * g
+            / if self.n_r().is_multiple_of(2) {
+                g + 3.8
+            } else {
+                g + 1.4
+            }
+    }
+
     fn rousseeuw_croux_q_general(
         &self,
-        inflate: impl Fn(u64) -> u64,
-        deflate: impl Fn(u64) -> f64,
+        transf_in: impl Fn(u64) -> u64,
+        transf_out: impl Fn(u64) -> f64,
     ) -> f64 {
-        const C_Q: f64 = 2.2219;
-
         let mut rc_hist = Histogram::new_from(&self.hist);
         for (i, iv_i) in self.hist.iter_recorded().enumerate() {
             let v = iv_i.value_iterated_to();
             if v == 0 {
                 continue;
             }
-            let mid_i = inflate(self.hist.median_equivalent(v));
+            let mid_i = transf_in(self.hist.median_equivalent(v));
             let count_i: u64 = iv_i.count_at_value();
             if count_i > 1 {
                 rc_hist
@@ -275,7 +317,7 @@ impl BenchOut {
             }
             for iv_j in self.hist.iter_recorded().skip(i + 1) {
                 let v = iv_j.value_iterated_to();
-                let mid_j = inflate(self.hist.median_equivalent(v));
+                let mid_j = transf_in(self.hist.median_equivalent(v));
                 let count_j = iv_j.count_at_value();
                 let abs_diff = mid_i.abs_diff(mid_j);
                 let count = count_i * count_j;
@@ -285,87 +327,48 @@ impl BenchOut {
             }
         }
         let quartile = rc_hist.value_at_quantile(0.25);
-        deflate(quartile) * C_Q
+        transf_out(quartile) * self.rousseeuw_croux_d()
     }
 
     #[allow(unused)]
-    /// Returns the Rousseeuw-Croux Q statistic computed in natural scale.
-    fn rousseeuw_croux_q_ns(&self) -> f64 {
-        let inflate = |value: u64| -> u64 { value };
-        let deflate = |value: u64| -> f64 { value as f64 };
+    /// Returns the Rousseeuw-Croux Q statistic computed in natural space.
+    fn pure_rousseeuw_croux_q_ns(&self) -> f64 {
+        let transf_in = |value: u64| -> u64 { value };
+        let transf_out = |value: u64| -> f64 { value as f64 };
 
-        self.rousseeuw_croux_q_general(inflate, deflate)
+        self.rousseeuw_croux_q_general(transf_in, transf_out)
     }
 
     #[allow(unused)]
-    /// Returns the Rousseeuw-Croux Q statistic computed in log scale.
-    fn rousseeuw_croux_q_ls(&self) -> f64 {
+    /// Returns the Rousseeuw-Croux Q statistic computed in log space.
+    fn pure_rousseeuw_croux_q_ls(&self) -> f64 {
         let max = self.hist.max() as f64;
         let multiplyer = max / max.ln();
-        let inflate = |value: u64| -> u64 { ((value as f64).ln() * multiplyer).round() as u64 };
-        let deflate = |value: u64| -> f64 { ((value as f64) / multiplyer).exp() };
+        let transf_in = |value: u64| -> u64 { ((value as f64).ln() * multiplyer).round() as u64 };
+        let transf_out = |value: u64| -> f64 { (value as f64) / multiplyer };
 
-        self.rousseeuw_croux_q_general(inflate, deflate)
+        self.rousseeuw_croux_q_general(transf_in, transf_out)
     }
 
-    /// Returns the Rousseeuw-Croux Q statistic.
-    pub fn rousseeuw_croux_q(&self) -> f64 {
-        let mut rcq = self
-            .cached_stats
-            .lock()
-            .expect("mutex shouldn't be poisoned")
-            .rousseeuw_croux_q;
-        memoized_value(&mut rcq, || self.rousseeuw_croux_q_ls())
+    /// Returns the Rousseeuw-Croux Q statistic in natural space.
+    fn rousseeuw_croux_q_ns(&self) -> f64 {
+        self.memoized(CachedStats::rousseeuw_croux_q_ns, || {
+            self.pure_rousseeuw_croux_q_ns()
+        })
     }
 
-    #[allow(unused)]
-    fn sigma2_rousseeuw_croux(&self) -> f64 {
-        let sigma_y = self.rousseeuw_croux_q();
-        (1.0 + self.bsz() as f64 * sigma_y.powi(2) / self.mean().powi(2)).ln()
+    /// Returns the Rousseeuw-Croux Q statistic in log space.
+    fn rousseeuw_croux_q_ls(&self) -> f64 {
+        self.memoized(CachedStats::rousseeuw_croux_q_ls, || {
+            self.pure_rousseeuw_croux_q_ls()
+        })
     }
 
     //=== Estimators of population mean ===
 
-    /// Robust estimator of mean latency for moderate to large batch sizes (Y near-symmetric).
-    fn mean_a_rousseeuw_croux(&self) -> FpSeconds {
-        self.mean() * (-self.sigma2_rousseeuw_croux() / 2.0).exp()
-    }
-
-    /// Robust estimator of mean latency for small batch size (Y still skewed, n_r large).
-    fn mean_b_rousseeuw_croux(&self) -> FpSeconds {
-        self.mean() * (-self.sigma2_rousseeuw_croux() / 2.0).exp()
-    }
-
-    /// Robust estimator of mean latency across batch sizes.
-    pub fn mean_rob(&self) -> FpSeconds {
-        if self.cv_rob() >= 0.2 {
-            self.mean_b_rousseeuw_croux()
-        } else {
-            self.mean_a_rousseeuw_croux()
-        }
-    }
-
     //=== Estimators of population median ===
 
-    /// Robust estimator of median latency for moderate to large batch sizes (Y near-symmetric).
-    fn median_a_rousseeuw_croux(&self) -> FpSeconds {
-        self.median_r() * (-self.sigma2_rousseeuw_croux() / 2.0).exp()
-    }
-
-    /// Robust estimator of median latency for small batch size (Y still skewed, n_r large).
-    fn median_b_rousseeuw_croux(&self) -> FpSeconds {
-        self.mean() * (-self.sigma2_rousseeuw_croux() / 2.0).exp()
-    }
-
-    /// Robust estimator of median latency across batch sizes.
-    pub fn median_rob(&self) -> FpSeconds {
-        if self.cv_rob() >= 0.2 {
-            self.median_b_rousseeuw_croux()
-        } else {
-            self.median_a_rousseeuw_croux()
-        }
-    }
-
+    #[allow(unused)]
     fn simple_median(&self) -> FpSeconds {
         const HI_BSZ: usize = 100;
         let median_1 = self.mean_ln_r().exp();
@@ -379,9 +382,69 @@ impl BenchOut {
         median_interp.into()
     }
 
-    pub fn median(&self) -> FpSeconds {
-        self.simple_median()
+    fn log_space_median_estimator(&self) -> FpSeconds {
+        let k = self.bsz() as f64;
+        let m_y_ln = self.median_r().ln();
+        let s_z = self.pure_rousseeuw_croux_q_ls();
+        let sigma2_x = (1.0 + k * (s_z.powi(2).exp() - 1.0)).ln();
+        (m_y_ln + (s_z.powi(2) - sigma2_x) / 2.0).exp().into()
     }
+
+    fn rmom_median_estimator(&self) -> FpSeconds {
+        let k = self.bsz() as f64;
+        let nu_y = self.median_r(); // could replace with trimmed mean
+        let tau_y = self.pure_rousseeuw_croux_q_ns();
+        (nu_y / (1.0 + k * tau_y.powi(2) / nu_y.powi(2)).sqrt()).into()
+    }
+
+    fn pure_s_hat(&self) -> f64 {
+        const INV_PHI_0_75: f64 = 0.6745; // Inverse normal CDF at 0.75.
+        let m = self.median_r().as_f64();
+        let max = self.hist.max() as f64;
+        if max.ln() == m {
+            return 0.0;
+        }
+        let multiplyer = max / (max.ln() - m);
+
+        let mut rc_hist = Histogram::<u64>::new_from(&self.hist);
+        for iv in self.hist.iter_recorded() {
+            let v = iv.value_iterated_to();
+            if v == 0 {
+                continue;
+            }
+            let mid = self.hist.median_equivalent(v) as f64;
+            let abs_diff = (mid.ln() - m).abs();
+            let abs_diff_x = (abs_diff * multiplyer).round() as u64;
+            let count: u64 = iv.count_at_value();
+            rc_hist
+                .record_n(abs_diff_x, count)
+                .expect("shouldn't happen as histogram is sized properly");
+        }
+        let median_abs_diff_x = rc_hist.value_at_quantile(0.5);
+        let median_abs_diff = median_abs_diff_x as f64 / multiplyer;
+        median_abs_diff / INV_PHI_0_75
+    }
+
+    // fn s_hat(&self) -> f64 {
+    //     let mut s_hat = self
+    //         .cached_stats
+    //         .lock()
+    //         .expect("mutex shouldn't be poisoned")
+    //         .s_hat;
+    //     memoized_value(&mut s_hat, || self.pure_s_hat())
+    // }
+
+    fn s_hat(&self) -> f64 {
+        self.memoized(CachedStats::s_hat, || self.s_hat())
+    }
+
+    // pub fn median(&self) -> FpSeconds {
+    //     let s_hat =
+    //     match self.bsz() {
+    //         1 => self.median_r(),
+    //         _ 0.3 <
+    //     }
+    // }
 
     /// Sample mean of the natural logarithms of recorded [`FpSeconds`] values.
     ///
@@ -914,48 +977,48 @@ mod test {
     }
 
     #[test]
+    #[should_panic(expected = "number of recorded values is zero")]
     fn test_mean_panics_on_empty() {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::new(&cfg, None);
         out.record_from_iter(std::iter::empty());
-        let result = std::panic::catch_unwind(|| out.mean());
-        assert!(result.is_err());
+        out.mean();
     }
 
     #[test]
+    #[should_panic(expected = "number of recorded values is zero")]
     fn test_stdev_panics_on_empty() {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::new(&cfg, None);
         out.record_from_iter(std::iter::empty());
-        let result = std::panic::catch_unwind(|| out.stdev());
-        assert!(result.is_err());
+        out.stdev();
     }
 
     #[test]
+    #[should_panic(expected = "number of recorded values is zero")]
     fn test_median_panics_on_empty() {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::new(&cfg, None);
         out.record_from_iter(std::iter::empty());
-        let result = std::panic::catch_unwind(|| out.median_r());
-        assert!(result.is_err());
+        out.median_r();
     }
 
     #[test]
+    #[should_panic(expected = "number of non-zero observations is zero")]
     fn test_mean_ln_panics_on_empty() {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::new(&cfg, None);
         out.record_from_iter(std::iter::empty());
-        let result = std::panic::catch_unwind(|| out.mean_ln_r());
-        assert!(result.is_err());
+        out.mean_ln_r();
     }
 
     #[test]
+    #[should_panic(expected = "number of non-zero observations is zero")]
     fn test_stdev_ln_panics_on_empty() {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::new(&cfg, None);
         out.record_from_iter(std::iter::empty());
-        let result = std::panic::catch_unwind(|| out.stdev_ln_r());
-        assert!(result.is_err());
+        out.stdev_ln_r();
     }
 
     #[test]

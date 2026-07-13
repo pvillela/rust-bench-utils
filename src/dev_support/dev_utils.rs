@@ -27,3 +27,12 @@ pub fn memoized_value<T: Clone>(opt: &mut Option<T>, f: impl FnOnce() -> T) -> T
         }
     }
 }
+
+pub fn memoized_fn<S, T: Clone>(
+    s: &mut S,
+    extract: impl FnOnce(&mut S) -> &mut Option<T>,
+    f: impl FnOnce() -> T,
+) -> T {
+    let opt = extract(s);
+    memoized_value(opt, f)
+}
