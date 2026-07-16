@@ -13,17 +13,16 @@ mkdir -p ${LOCAL_BIN}
 # echo "Installing Rust ..."
 # curl --proto '=https' --tlsv1.2 -sSfL https://sh.rustup.rs | bash
 
-echo "Installing Claude Code..."
+echo "Installing nvm ..."
+export NVM_DIR="$HOME/.nvm"
+mkdir -p ${NVM_DIR}
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.5/install.sh | bash
 
-# Download and execute the official native installer (requires no sudo or Node at runtime)
-curl -fsSL https://claude.ai/install.sh | bash
+echo "Installing nodejs and npm ..."
+(source ${NVM_DIR}/nvm.sh && nvm install --lts --latest-npm)
 
-# Ensure ~/.local/bin is explicitly added to the PATH for non-interactive shells if needed
-if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-fi
-
-echo "Claude Code installation complete!"
+# echo "Installing Claude Code ..."
+# curl -fsS https://claude.ai/install.sh | bash
 
 # echo "Installing Bun ..."
 # curl -fsSL https://bun.com/install | bash
