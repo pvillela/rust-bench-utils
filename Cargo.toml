@@ -21,10 +21,11 @@ exclude = ["CHANGELOG.md", "*.sh", ".gitignore", "examples", "bin"]
 
 [dependencies]
 basic_stats = { path = "../basic-stats", default-features = false, optional = true }
+blake3 = { version = "1.8.5", optional = true }
 criterion = { version = "0.8.2", optional = true }
 hdrhistogram = "7.5"
 log = "0.4.33"
-regex = { version = "1.12.4", optional = true }
+regex = { version = "1.13.1", optional = true }
 sha2 = { version = "0.11.0", optional = true }
 syn = { version = "2.0.118", features = ["full", "visit"], optional = true }
 walkdir = { version = "2.5.0", optional = true }
@@ -36,8 +37,8 @@ statrs = "0.18"
 [features]
 
 ## Public
-default = ["basic_stats/normal"] # should always be enabled for public use
-load = ["dep:sha2"]
+default = ["basic_stats/normal"]  # should always be enabled for public use
+load = ["dep:sha2", "dep:blake3"]
 
 ## Helpers
 __null = ["dep:basic_stats"]
