@@ -169,6 +169,14 @@ impl Div<f64> for FpSeconds {
     }
 }
 
+impl Div<FpSeconds> for FpSeconds {
+    type Output = f64;
+
+    fn div(self, rhs: FpSeconds) -> Self::Output {
+        self.0 / rhs.0
+    }
+}
+
 impl Sum for FpSeconds {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.map(|v| v.0).sum::<f64>().into()

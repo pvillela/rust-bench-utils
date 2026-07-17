@@ -1,4 +1,4 @@
-use crate::{RunLength, latency};
+use crate::{FpSeconds, RunLength, latency};
 use sha2::{Digest, Sha256};
 use std::{hint::black_box, time::Duration};
 
@@ -36,8 +36,11 @@ impl BusyWork {
     /// Estimates the `effort` required for the resulting closure to have the `target_latency`, using
     /// an iterative process.
     ///
+    /// The first component of the returned tuple is the effort. The second component is the measured
+    /// latency using the returned effort.
+    ///
     /// Calls [`calibrate_with_budget`](Self::calibrate_with_budget) using a default budget.
-    pub fn calibrate(target_latency: Duration) -> u32 {
+    pub fn calibrate(target_latency: Duration) -> (u32, FpSeconds) {
         let budget: RunLength = RunLength::Time(Duration::from_millis(1).max(target_latency));
         Self::calibrate_with_budget(target_latency, budget)
     }
@@ -47,8 +50,11 @@ impl BusyWork {
     /// `calibration_budget` limits the length of the iterative process by time and/or count
     /// (= accumulated calibration effort).
     ///
+    /// The first component of the returned tuple is the effort. The second component is the measured
+    /// latency using the returned effort.
+    ///
     /// The total calibration takes longer than `run_length` because a warm-up period is added.
-    pub fn calibrate_with_budget(target_latency: Duration, budget: RunLength) -> u32 {
+    pub fn calibrate_with_budget(target_latency: Duration, budget: RunLength) -> (u32, FpSeconds) {
         let (buf, mut hasher) = Self::pre_work();
         Self::warmup(&buf, &mut hasher, target_latency, budget);
         Self::calibrate_internal(&buf, &mut hasher, target_latency, budget)
@@ -76,37 +82,39 @@ impl BusyWork {
         hasher: &mut Sha256,
         target_latency: Duration,
         budget: RunLength,
-    ) -> u32 {
+    ) -> (u32, FpSeconds) {
+        let target_fps = FpSeconds::from_duration(target_latency);
         let (budget_count, budget_dur) = budget.count_and_time();
-        let mut acc_latency = Duration::ZERO;
-        let mut acc_effort: u32 = 0;
+        let budget_fps = FpSeconds::from_duration(budget_dur);
+
+        let mut acc_latency = FpSeconds::ZERO;
+        let mut acc_effort_fp: f64 = 0.0;
 
         for i in 1.. {
             let iter_effort = 2u32.pow(i - 1);
-            let iter_latency = latency(|| Self::work(iter_effort, buf, hasher));
+            let iter_latency: FpSeconds = latency(|| Self::work(iter_effort, buf, hasher)).into();
 
             acc_latency += iter_latency;
-            acc_effort += iter_effort;
+            acc_effort_fp += iter_effort as f64;
 
-            // Castings to f64 to avoid integer overflow or truncation to zero.
-            if iter_latency >= budget_dur / 3
-                || acc_latency.as_secs_f64() >= budget_dur.as_secs_f64() * (2.0 / 3.0)
-                || acc_effort as f64 >= budget_count as f64 * (2.0 / 3.0)
+            if iter_latency >= budget_fps / 3
+                || acc_latency >= budget_fps * 2 / 3
+                || acc_effort_fp >= budget_count as f64 * (2.0 / 3.0)
             {
                 // Estimate of target effort based on latest iteration.
-                let iter_target_effort = (target_latency.as_secs_f64() * iter_effort as f64
-                    / iter_latency.as_secs_f64())
-                .round() as u32;
+                let iter_target_effort = target_fps * iter_effort as f64 / iter_latency;
 
                 // Estimate of target effort based on weighted average of the estimated target efforts
                 // for all iterations.
-                let acc_target_effort = (target_latency.as_secs_f64() * acc_effort as f64
-                    / acc_latency.as_secs_f64())
-                .round() as u32;
+                let acc_target_effort = target_fps * acc_effort_fp / acc_latency;
 
                 // The last iteration should have been the most efficient due to previous warming;
                 // if that's not the case, returns the weighted average estimated target effort.
-                return iter_target_effort.min(acc_target_effort);
+                let effort_fp = iter_target_effort.min(acc_target_effort);
+                let effort = effort_fp.round() as u32;
+                let calibr_ltncy = target_fps / effort as f64 * effort_fp;
+
+                return (effort, calibr_ltncy);
             }
         }
 
@@ -129,7 +137,7 @@ mod validate_latency {
         _ = env_logger::try_init();
 
         let start = Instant::now();
-        let effort = BusyWork::calibrate(tgt);
+        let (effort, tgt_fpsecs) = BusyWork::calibrate(tgt);
         let f = BusyWork::fun(effort);
 
         let cfg = BenchCfg::default()
@@ -137,7 +145,6 @@ mod validate_latency {
             .with_warmup_millis(100);
         let out = bench_run_arg_cfg(&cfg, f, RunLength::Count(batch * samp_size), Some(batch));
         let latency_fpsecs = out.median_r();
-        let tgt_fpsecs: FpSeconds = tgt.into();
         let rel_diff = tgt_fpsecs.abs_rel_diff_fpsecs(latency_fpsecs);
 
         let elapsed = start.elapsed();
@@ -236,7 +243,7 @@ mod validate_ratio {
     fn run(tgt1: Duration, ratio: f64, batch: usize, samp_size: usize) -> (f64, f64) {
         _ = env_logger::try_init();
 
-        let effort2 = BusyWork::calibrate(tgt1);
+        let (effort2, _) = BusyWork::calibrate(tgt1);
         let effort1 = (effort2 as f64 * ratio).round() as u32;
         let adjusted_ratio = effort1 as f64 / effort2 as f64;
         let f1 = BusyWork::fun(effort1);

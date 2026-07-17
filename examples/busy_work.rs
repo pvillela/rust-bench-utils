@@ -11,9 +11,9 @@ use env_logger;
 use std::time::{Duration, Instant};
 
 fn run(target_latency: Duration, warmup_millis: u64, run_length: RunLength, batch: Option<usize>) {
-    let effort = BusyWork::calibrate(target_latency);
+    let (effort, calibr_ltncy) = BusyWork::calibrate(target_latency);
     println!(
-        "\nRunning with target_latency={target_latency:?}, effort={effort}, run_length={run_length:?}, batch={batch:?}"
+        "\nRunning with target_latency={target_latency:?}, calibr_ltncy={calibr_ltncy:?}, effort={effort}, run_length={run_length:?}, batch={batch:?}"
     );
     let f = BusyWork::fun(effort);
     let cfg = BenchCfg::default().with_warmup_millis(warmup_millis);

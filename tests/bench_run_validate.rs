@@ -21,6 +21,7 @@ trait FnsSrc<const K: usize>: Clone {
     fn f1(&self) -> impl FnMut();
     fn f2(&self) -> impl FnMut();
     fn base_effort(&self) -> u32;
+    fn base_calibr_ltncy(&self) -> FpSeconds;
 }
 
 fn run<const K: usize, R, Src>(
@@ -29,7 +30,6 @@ fn run<const K: usize, R, Src>(
     fsrc: Src,
     base_warmup_millis: u64,
     base_status_millis: u64,
-    base_target_latency: Duration,
     samp_size: usize,
     batch: Option<usize>,
     epsilon: f64,
@@ -46,13 +46,14 @@ fn run<const K: usize, R, Src>(
     let mut f1 = fsrc1.f1();
     let mut f2 = fsrc1.f2();
     let base_effort = fsrc1.base_effort();
+    let base_calibr_latency = fsrc1.base_calibr_ltncy();
 
     let warmup_millis = base_warmup_millis * K as u64;
     let status_millis = base_status_millis * K as u64;
     let count = batch.unwrap_or(1) * samp_size;
 
     println!(
-        "validate_bench_run: K={K}, rec_unit={rec_unit:?}, base_target_latency={base_target_latency:?}, base_effort={base_effort}, warmup={warmup_millis}, batch={batch:?}, samp_size={samp_size}"
+        "validate_bench_run: K={K}, rec_unit={rec_unit:?}, base_calibr_latency={base_calibr_latency:?}, base_effort={base_effort}, warmup={warmup_millis}, batch={batch:?}, samp_size={samp_size}"
     );
 
     let cfg = BenchCfg::default()
@@ -81,20 +82,18 @@ fn run<const K: usize, R, Src>(
         })
         .collect();
 
-    let base_target_fpsecs = FpSeconds::from_duration(base_target_latency);
-
     for i in 0..K {
         let out_median = out[i].median_r();
         let v_median = v_medians[i];
 
         println!(
-            "base_target_fpsecs={base_target_fpsecs:?}, out[{i}].median()={out_median:?}, rel_diff={}",
-            base_target_fpsecs.abs_rel_diff_fpsecs(out_median)
+            "base_calibr_latency={base_calibr_latency:?}, out[{i}].median()={out_median:?}, rel_diff={}",
+            base_calibr_latency.abs_rel_diff_fpsecs(out_median)
         );
 
         println!(
-            "base_target_fpsecs={base_target_fpsecs:?}, v_medians[{i}]={v_median:?}, rel_diff={}",
-            base_target_fpsecs.abs_rel_diff_fpsecs(v_median)
+            "base_calibr_latency={base_calibr_latency:?}, v_medians[{i}]={v_median:?}, rel_diff={}",
+            base_calibr_latency.abs_rel_diff_fpsecs(v_median)
         );
 
         println!(
@@ -127,14 +126,18 @@ const DEFAULT_RUN_TIME: Duration = Duration::from_millis(100);
 #[derive(Clone)]
 struct Fns1 {
     effort: u32,
+    calibr_ltncy: FpSeconds,
 }
 
 impl Fns1 {
     fn new(base_target_latency: Duration) -> Self {
         _ = env_logger::try_init();
-        let effort = BusyWork::calibrate(base_target_latency);
+        let (effort, calibr_ltncy) = BusyWork::calibrate(base_target_latency);
         debug!("Fns1::new >>> effort={effort}");
-        Self { effort }
+        Self {
+            effort,
+            calibr_ltncy,
+        }
     }
 }
 
@@ -150,19 +153,25 @@ impl FnsSrc<1> for Fns1 {
     fn base_effort(&self) -> u32 {
         self.effort
     }
+
+    fn base_calibr_ltncy(&self) -> FpSeconds {
+        self.calibr_ltncy
+    }
 }
 
 #[derive(Clone)]
 struct Fns2 {
     effort0: u32,
+    calibr_ltncy0: FpSeconds,
     effort_delta: u32,
 }
 
 impl Fns2 {
     fn new(base_target_latency: Duration) -> Self {
-        let effort0 = BusyWork::calibrate(base_target_latency);
+        let (effort0, calibr_ltncy0) = BusyWork::calibrate(base_target_latency);
         Self {
             effort0,
+            calibr_ltncy0,
             effort_delta: effort0 / 10,
         }
     }
@@ -184,6 +193,10 @@ impl FnsSrc<2> for Fns2 {
 
     fn base_effort(&self) -> u32 {
         self.effort0
+    }
+
+    fn base_calibr_ltncy(&self) -> FpSeconds {
+        self.calibr_ltncy0
     }
 }
 
@@ -219,7 +232,6 @@ mod no_status1 {
             Fns1::new(base_target_latency),
             base_warmup_millis,
             0,
-            base_target_latency,
             samp_size,
             batch,
             epsilon,
@@ -479,7 +491,6 @@ mod with_status1 {
             Fns1::new(base_target_latency),
             base_warmup_millis,
             base_status_millis,
-            base_target_latency,
             samp_size,
             batch,
             epsilon,
@@ -751,7 +762,6 @@ mod no_status2 {
             Fns2::new(base_target_latency),
             base_warmup_millis,
             0,
-            base_target_latency,
             samp_size,
             batch,
             epsilon,
@@ -1011,7 +1021,6 @@ mod with_status2 {
             Fns2::new(base_target_latency),
             base_warmup_millis,
             base_status_millis,
-            base_target_latency,
             samp_size,
             batch,
             epsilon,

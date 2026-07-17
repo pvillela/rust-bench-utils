@@ -10,7 +10,8 @@ use crate::{
 };
 use std::time::Duration;
 
-/// Compares latency outputs for `n` executions of a function `f` with `n/batch` executions of `f` grouped `batch` times.
+/// Compares latency outputs for `n` executions of a function `f` with `n/batch` executions of a loop where
+/// `f` is executed `batch` times.
 ///
 /// # Panics
 ///
@@ -29,7 +30,7 @@ pub fn validate_latency_overhead(
         "`target_latency` and `batch` must both be positive"
     );
     let name = "Group of ".to_owned() + &batch.to_string();
-    let effort = BusyWork::calibrate(target_latency);
+    let (effort, calibr_latency) = BusyWork::calibrate(target_latency);
     let mut solo_f = BusyWork::fun(effort);
     let mut solo_fc = solo_f.clone();
     let group_f = || {
@@ -38,9 +39,9 @@ pub fn validate_latency_overhead(
         }
     };
 
-    let target_group_latency = target_latency * batch as u32;
+    let target_group_latency = calibr_latency * batch;
     let exec_count_group =
-        (bench_duration.as_secs_f64() / target_group_latency.as_secs_f64()).round() as usize;
+        (bench_duration.as_secs_f64() / target_group_latency.as_f64()).round() as usize;
     let exec_count_solo = exec_count_group * batch;
 
     println!("running solo_f: {name}");
@@ -49,8 +50,8 @@ pub fn validate_latency_overhead(
     println!("{:?}", out_solo.summary());
     let solo_median = out_solo.median_r();
     println!(
-        "target_median_solo={target_latency:?}, out_solo.median()={solo_median:?}, rel_diff={}",
-        FpSeconds::from_duration(target_latency).abs_rel_diff_fpsecs(solo_median)
+        "target_latency={target_latency:?}, calibr_latency_solo={calibr_latency:?}, out_solo.median()={solo_median:?}, rel_diff={}",
+        calibr_latency.abs_rel_diff_fpsecs(solo_median)
     );
     println!();
 
@@ -62,7 +63,7 @@ pub fn validate_latency_overhead(
     println!(
         "target_median_group={:?}, out_group.median()={group_median:?}, rel_diff={}",
         target_group_latency,
-        FpSeconds::from_duration(target_group_latency).abs_rel_diff_fpsecs(group_median)
+        target_group_latency.abs_rel_diff_fpsecs(group_median)
     );
     println!();
 

@@ -20,7 +20,7 @@ fn test() {
 
     let cfg = BenchCfg::default().with_warmup_millis(WARMUP_MILLIS);
     let exec_run_length = RunLength::Time(RUN_TIME);
-    let effort1 = BusyWork::calibrate(TARGET_BASE_LATENCY);
+    let (effort1, _) = BusyWork::calibrate(TARGET_BASE_LATENCY);
     let effort2 = (effort1 as f64 / TARGET_MEDIAN_RATIO).round() as u32;
     let f1 = BusyWork::fun(effort1);
     let f2 = BusyWork::fun(effort2);

@@ -19,7 +19,7 @@ fn run_bench_with_status(
 
     println!("validate_bench_run: {name}");
 
-    let effort = BusyWork::calibrate(target_latency);
+    let (effort, _) = BusyWork::calibrate(target_latency);
     let mut f = BusyWork::fun(effort);
 
     let cfg = BenchCfg::default()
