@@ -323,16 +323,6 @@ so keep the value histogram's unit resolution fine relative to $\tau_Y$ — e.g.
 time in fine units rather than pre-dividing by $k$ into coarse integers. This matters on either
 scale but more on the log scale.
 
-**Retain temporal order alongside the histogram.** A histogram destroys the *order* in which the
-group means arrived, and two of the cheapest contamination diagnostics — the longest-run
-statistic and the aggregation-scale variance ratio, which separate localized (burst)
-interference from diffuse noise — need the $Y_j$ in temporal order [ref. 17, rec 5]. Storing the
-plain sequence of $g$ group means next to the histogram costs only $O(g)$ memory and keeps those
-diagnostics (and post-hoc excision of an identified interference window) available; see §6.3.
-If the pipeline genuinely cannot keep the sequence, [ref. 17] rec 5 closes with order-free
-substitutes (streaming lag-1 autocovariance and run counters computed at collection time, or
-per-epoch histograms) and the conservative fallback when none is available.
-
 ---
 
 ## 4. Estimators for the Mean of X
@@ -363,20 +353,6 @@ $k \geq 4$, versus $+90\%$ for $\bar{Y}$ (Table B.1). **Exception:** at $k=1$ wi
 ($\sigma = 1.5$, $g = 20$) the Jensen bias and the contamination *compound* to $+107\%$ — worse
 than $\bar{Y}$ — so no estimator in this report is reliable there at small $g$ (see Table B.1
 and the regime table below).
-
-**Contamination-scope caveat (concentrated vs. diffuse).** The breakdown and bias figures above
-— and this report's contamination model (Appendix B: whole group means inflated ×10) — apply to
-contamination that is **concentrated relative to the groups**: interference events that corrupt
-some group means entirely and leave the rest clean. *Diffuse* per-draw contamination (each raw
-draw independently corrupted with probability $\varepsilon$) behaves very differently: once
-$\varepsilon k \gtrsim 1$, essentially **every** group mean is inflated by
-$\approx \varepsilon(\lambda - 1)\,\mathrm{E}[X]$ (for artifacts of magnitude $\lambda\times$),
-and no statistic of the group means — median, $Q_n$, hence this estimator too — can reject it.
-Group-level robustness therefore requires $\varepsilon k \lesssim 1$, working rule
-$k \lesssim 1/(5\varepsilon)$; see §6.2 and the companion study
-[`Assessment_Contamination_Robustness.md`](Assessment_Contamination_Robustness.md) [ref. 17],
-which demonstrates this crossover empirically and provides diagnostics that distinguish
-concentrated from diffuse contamination.
 
 **Finite-sample Jensen bias (upward).** By convexity of $\exp$:
 
@@ -490,11 +466,7 @@ practically identical. Use the UMVUE only in the same clean, trusted-lognormal n
 The **Primary** column names the recommended estimator for each regime; "(efficiency choice)"
 marks cases where a non-robust estimator (0% breakdown) is primary because the data are verified
 clean and unbiasedness / low variance takes precedence over breakdown protection. In all
-contaminated rows the primary has ~50% breakdown. **Proviso:** "contaminated" in this table means
-contamination *concentrated relative to the groups* (§4.1 caveat). Under diffuse per-draw
-contamination with $\varepsilon k \gtrsim 1$, every estimator in the table tracks the
-contaminated mean; the remedy is a smaller $k$ or a pipeline fix (§6.2), not an estimator choice
-[ref. 17].
+contaminated rows the primary has ~50% breakdown.
 
 **The clean/contaminated split is the main driver for the mean** (unlike the median, where
 skewness dominates): because $\mathrm{E}[Y] = \mathrm{E}[X]$ exactly at every $k$ (§1.3),
@@ -522,12 +494,7 @@ defaults below.
   more groups rather than raising $k$ (§6.2).
 - **$\hat{S} \leq 0.3$ ($Y$ near-normal), contaminated:** Log-space mean (§4.1, ~50% BP) as
   primary. Now that $Y$ is symmetric, TM (§4.2) and Huber-M (§4.3) become **unbiased** and are
-  strong secondaries — with the trim fraction **sized to the plausible corrupted-group fraction**
-  (per side, or right-only), not to clean-model RMSE: a trimmed mean rejects bursts only up to
-  its trim and fails hard beyond it [ref. 17, rec 2]. When the threat fraction is bounded well
-  below the trim, TM is also the more *efficient* of the two and a co-equal choice; when the
-  threat is unbounded, prefer the log-space mean (in this band it $\approx$ the median of $Y$,
-  since the correction $e^{\tilde\sigma_Y^2/2} \approx 1$, and keeps ~50% breakdown).
+  strong secondaries (~20% BP; raise the trim fraction if contamination approaches 10%).
 - **$\hat{S} \leq 0.3$ ($Y$ near-normal), clean:** $\bar{Y}$ (§4.4) for minimum variance; TM/Huber
   and the log-space mean as cross-checks. If the log-space mean diverges from $\bar{Y}$, suspect
   undetected contamination and switch to the contaminated row above.
@@ -757,14 +724,6 @@ is biased low at small $k$ and should not be substituted for it.
 **$k$ is determined by measurement overhead, not by statistical preference** (§1.2). Use $k = k_{\min}$:
 - **For median estimation:** Every increment above $k_{\min}$ widens the gap between $\mathrm{median}(Y)$ and $\mathrm{median}(X)$, increasing back-transform bias. Use $k_{\min}$.
 - **For mean estimation:** The log-space mean (§4.1) is valid at all $k$. Larger $k$ reduces $\hat{S}$ and reduces the small bias of trimmed-mean alternatives (§4.2), but there is no statistical reason to increase $k$ beyond $k_{\min}$ when using the log-space mean (§4.1).
-- **For artifact rejection:** every robust estimator in this report operates on the group means,
-  so it can only reject contamination that is *concentrated* relative to the groups (§4.1
-  caveat). Diffuse per-draw contamination at fraction $\varepsilon$ is rejectable only while
-  $\varepsilon k \lesssim 1$ — working rule $k \lesssim 1/(5\varepsilon)$ [ref. 17, rec 3] — a
-  second, independent reason never to raise $k$ above $k_{\min}$. If $k_{\min}$ itself exceeds
-  $1/(5\varepsilon)$ for a plausible diffuse fraction, no estimator choice helps materially:
-  treat it as a measurement-hygiene problem (isolate the environment, remove the interference
-  source) or model the contamination explicitly as a mixture.
 - **If $\hat{S} > 0.6$ after fixing $k = k_{\min}$:** The distribution of $Y$ is still strongly skewed. Do **not** increase $k$ to reduce $\hat{S}$ — that costs groups $g$ and worsens median estimation. Instead, collect more groups (increase total $n$ at fixed $k$).
 
 ### 6.3 Decision Flow: Mean of X
@@ -792,17 +751,6 @@ flowchart TD
 ```
 
 **Always:** flag $Y_i > Q_3 + 3\cdot\mathrm{IQR}$ for manual investigation (§6.5).
-
-**Classifying the contamination (for the "contamination possible" branch).** The branch above
-protects against contamination *concentrated* relative to the groups; it cannot protect against
-diffuse per-draw contamination once $\varepsilon k \gtrsim 1$ (§4.1 caveat, §6.2). The three
-regimes — clean, bursty/concentrated, diffuse — are distinguishable from the data at $O(g)$ cost
-using the diagnostic suite of [`Assessment_Contamination_Robustness.md`](Assessment_Contamination_Robustness.md)
-[ref. 17, rec 5]: the $\bar{Y}$-vs-primary gap of the flow above is its indicator (a); add the
-robust-z outlier count (b), the longest-run statistic (c), and the aggregation-scale variance
-ratio (d) — (c) and (d) need the group means *in temporal order* (§3.4) — and, to detect the
-diffuse regime, a cross-scale comparison (e) against a few probe blocks timed at a smaller batch
-size (their extra per-block overhead is acceptable for detection, though not for estimation).
 
 ### 6.4 Decision Flow: Median of X
 
@@ -1302,10 +1250,3 @@ Gaussian efficiency (82% vs. 58%).
 15. Coefficient of variation. Wikipedia: [Coefficient of variation](https://en.wikipedia.org/wiki/Coefficient_of_variation).
 
 16. Mean squared error. Wikipedia: [Mean squared error](https://en.wikipedia.org/wiki/Mean_squared_error).
-
-17. Companion study: [`Assessment_Contamination_Robustness.md`](Assessment_Contamination_Robustness.md)
-    (report #3 of the Assessment chain) — estimator robustness under an explicit draw-level
-    contamination model (point/diffuse and burst patterns), including the
-    $\varepsilon k \lesssim 1$ crossover for group-robust estimators and the rec-5 diagnostic
-    suite. Reconciliation of its recommendations with this report:
-    [`Reconciliation_notes_Contamination_vs_Fable_mean_estimators.md`](Reconciliation_notes_Contamination_vs_Fable_mean_estimators.md).
