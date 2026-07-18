@@ -142,7 +142,15 @@ fn run_and_display(
     let mean = out.mean();
     let stdev = out.stdev();
     let cv = stdev / mean;
+    let stdev_r = out.stdev_r();
+    let rc_q_ns = out.rousseeuw_croux_q_ns();
+    let mean_ln_r = out.mean_ln_r();
+    let stdev_ln_r = out.stdev_ln_r();
+    let rc_q_ls = out.rousseeuw_croux_q_ls();
+
     let median_r = out.median_r();
+    let median_log_space = out.median_log_space_estimator();
+    let median_rmom = out.median_rmom_estimator();
     let median_rob = out.median_rob();
 
     let mean_rel_diff = calibr_ltncy.abs_rel_diff_fpsecs(mean);
@@ -156,11 +164,14 @@ fn run_and_display(
         "target_latency={target_latency:?}, calibr_ltncy={calibr_ltncy:?}, effort={effort}, batch={batch:?}, samp_size={samp_size}"
     );
     println!(
-        "mean={mean:?}, stdev={stdev:?}, CV={cv:?}, median_r={median_r:?}, median_rob={median_rob:?}"
+        "mean={mean:?}, stdev={stdev:?}, CV={cv:?}, stdev_r={stdev_r:?}, rc_q_ns={rc_q_ns:?}, mean_ln_r={mean_ln_r:.3e}, stdev_ln_r={stdev_ln_r:.3e}, rc_q_ls={rc_q_ls:.3e}"
+    );
+    println!(
+        "median_r={median_r:?}, median_log_space={median_log_space:?}, median_rmom={median_rmom:?}, median_rob={median_rob:?}"
     );
     println!(
         "mean_rel_diff={mean_rel_diff:?}, median_r_rel_diff={median_r_rel_diff:?}, median_rob_rel_diff={median_rob_rel_diff:?}"
     );
     println!("{:?}", out.summary());
-    println!("{elapsed:?}");
+    println!("elapsed_time={elapsed:?}");
 }

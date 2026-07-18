@@ -17,13 +17,13 @@ pub(crate) fn new_hdrhist(hist_high: u64, hist_sigfig: u8) -> Histogram<u64> {
 }
 
 struct CachedStats {
-    rousseeuw_croux_q_ns: Option<f64>,
+    rousseeuw_croux_q_ns: Option<FpSeconds>,
     rousseeuw_croux_q_ls: Option<f64>,
     s_hat: Option<f64>,
 }
 
 impl CachedStats {
-    fn rousseeuw_croux_q_ns(&mut self) -> &mut Option<f64> {
+    fn rousseeuw_croux_q_ns(&mut self) -> &mut Option<FpSeconds> {
         &mut self.rousseeuw_croux_q_ns
     }
 
@@ -332,11 +332,12 @@ impl BenchOut {
 
     #[allow(unused)]
     /// Returns the Rousseeuw-Croux Q statistic computed in natural space.
-    fn pure_rousseeuw_croux_q_ns(&self) -> f64 {
+    fn pure_rousseeuw_croux_q_ns(&self) -> FpSeconds {
         let transf_in = |value: u64| -> u64 { value };
-        let transf_out = |value: u64| -> f64 { value as f64 };
+        let transf_out =
+            |value: u64| -> f64 { value as f64 * self.recording_unit.factor_to_secs() };
 
-        self.rousseeuw_croux_q_general(transf_in, transf_out)
+        self.rousseeuw_croux_q_general(transf_in, transf_out).into()
     }
 
     #[allow(unused)]
@@ -344,21 +345,27 @@ impl BenchOut {
     fn pure_rousseeuw_croux_q_ls(&self) -> f64 {
         let max = self.hist.max() as f64;
         let multiplyer = max / max.ln();
+
+        // Unlike `pure_rousseeuw_croux_q_ns`, there is o need to adjust for `self.recording_unit()` because
+        // the difference of the logs of scaled values is the same as the difference of the logs of the
+        // non-scaled values.
         let transf_in = |value: u64| -> u64 { ((value as f64).ln() * multiplyer).round() as u64 };
         let transf_out = |value: u64| -> f64 { (value as f64) / multiplyer };
 
         self.rousseeuw_croux_q_general(transf_in, transf_out)
     }
 
+    #[doc(hidden)]
     /// Returns the Rousseeuw-Croux Q statistic in natural space.
-    fn rousseeuw_croux_q_ns(&self) -> f64 {
+    pub fn rousseeuw_croux_q_ns(&self) -> FpSeconds {
         self.memoized(CachedStats::rousseeuw_croux_q_ns, || {
             self.pure_rousseeuw_croux_q_ns()
         })
     }
 
+    #[doc(hidden)]
     /// Returns the Rousseeuw-Croux Q statistic in log space.
-    fn rousseeuw_croux_q_ls(&self) -> f64 {
+    pub fn rousseeuw_croux_q_ls(&self) -> f64 {
         self.memoized(CachedStats::rousseeuw_croux_q_ls, || {
             self.pure_rousseeuw_croux_q_ls()
         })
@@ -382,7 +389,8 @@ impl BenchOut {
         median_interp.into()
     }
 
-    fn log_space_median_estimator(&self) -> FpSeconds {
+    #[doc(hidden)]
+    pub fn median_log_space_estimator(&self) -> FpSeconds {
         let k = self.bsz() as f64;
         let m_y_ln = self.median_r().ln();
         let sigma_y = self.rousseeuw_croux_q_ls();
@@ -390,7 +398,8 @@ impl BenchOut {
         (m_y_ln + (sigma_y.powi(2) - sigma2_x) / 2.0).exp().into()
     }
 
-    fn rmom_median_estimator(&self) -> FpSeconds {
+    #[doc(hidden)]
+    pub fn median_rmom_estimator(&self) -> FpSeconds {
         let k = self.bsz() as f64;
         let nu_y = self.median_r();
         let tau_y = self.rousseeuw_croux_q_ns();
@@ -433,9 +442,9 @@ impl BenchOut {
         let s_hat = self.s_hat();
         match self.bsz() {
             1 => self.median_r(),
-            _ if s_hat <= 0.3 => self.rmom_median_estimator(),
-            _ if 0.3 < s_hat && s_hat <= 0.6 => self.log_space_median_estimator(),
-            _ if s_hat > 0.6 => self.rmom_median_estimator(),
+            _ if s_hat <= 0.3 => self.median_rmom_estimator(),
+            _ if 0.3 < s_hat && s_hat <= 0.6 => self.median_log_space_estimator(),
+            _ if s_hat > 0.6 => self.median_rmom_estimator(),
             _ => self.median_r(),
         }
     }
