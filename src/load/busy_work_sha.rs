@@ -2,6 +2,7 @@ use crate::{FpSeconds, RunLength, latency};
 use sha2::{Digest, Sha256};
 use std::{hint::black_box, time::Duration};
 
+#[derive(Debug, Clone, Copy)]
 /// Output from [`BusyWork`] calibration functions.
 pub struct Calibration {
     unit_ltncy: FpSeconds,
