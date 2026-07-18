@@ -38,20 +38,20 @@ impl BusyWork {
     /// See [`calibrate`](Self::calibrate) and [`calibrate_with_budget`](Self::calibrate_with_budget) for how to
     /// determine the `effort` argument to achieve a desired target latency.
     #[inline(always)]
-    pub fn fun(effort: u32) -> impl FnMut() + Clone + use<> {
-        let (buf, mut hasher): ([u8; 64], Sha256) = Self::pre_work();
-        move || Self::work(effort, &buf, &mut hasher)
+    pub fn fun(effort: u32) -> impl Fn() + Clone + use<> {
+        move || Self::work(effort)
     }
 
     #[inline(always)]
     /// Does a significant amount of computation, based on SHA-256 (using the 'sha2' crate).
     /// Its latency is proportional to `effort`.
-    /// Depends on [`Self::pre_work`] being called before it to set-up `buf` and `hasher`.
-    fn work(effort: u32, buf: &[u8; 64], hasher: &mut Sha256) {
+    fn work(effort: u32) {
         for _ in 0..black_box(effort) {
+            let buf = [0u8; 64];
+            let mut hasher = Sha256::new();
             hasher.update(black_box(buf));
+            black_box(hasher);
         }
-        black_box(hasher);
     }
 
     /// Returns a [`Calibration`] object that can be used to estimate the effort required to achieve
@@ -70,29 +70,20 @@ impl BusyWork {
     /// (= accumulated calibration effort).
     /// The total calibration takes longer than `run_length` because a warm-up period is added.
     pub fn calibrate_with_budget(budget: RunLength) -> Calibration {
-        let (buf, mut hasher) = Self::pre_work();
-        Self::warmup(&buf, &mut hasher, budget);
-        Self::calibrate_internal(&buf, &mut hasher, budget)
-    }
-
-    #[inline(always)]
-    /// Does the set-up for [`Self::work`].
-    fn pre_work() -> ([u8; 64], Sha256) {
-        let buf = [0u8; 64];
-        let hasher = Sha256::new();
-        (buf, hasher)
+        Self::warmup(budget);
+        Self::calibrate_internal(budget)
     }
 
     /// Does the warm-up for [`Self::calibrate_with_budget`].
-    fn warmup(buf: &[u8; 64], hasher: &mut Sha256, budget: RunLength) {
-        Self::calibrate_internal(&buf, hasher, budget);
+    fn warmup(budget: RunLength) {
+        Self::calibrate_internal(budget);
     }
 
     /// Core estimation of the mean latency of one unit of `effort`,
     /// using an iterative process. Used by both [`Self::warmup`] and [`Self::calibrate_with_budget`].
     /// `calibration_budget` limits the length of the iterative process by time and/or count
     /// (= accumulated calibration effort).
-    fn calibrate_internal(buf: &[u8; 64], hasher: &mut Sha256, budget: RunLength) -> Calibration {
+    fn calibrate_internal(budget: RunLength) -> Calibration {
         let (budget_count, budget_dur) = budget.count_and_time();
         let budget_fps = FpSeconds::from_duration(budget_dur);
 
@@ -101,7 +92,7 @@ impl BusyWork {
 
         for i in 1.. {
             let iter_effort = 2u32.pow(i - 1);
-            let iter_latency: FpSeconds = latency(|| Self::work(iter_effort, buf, hasher)).into();
+            let iter_latency: FpSeconds = latency(|| Self::work(iter_effort)).into();
 
             acc_latency += iter_latency;
             acc_effort_fp += iter_effort as f64;
@@ -203,7 +194,7 @@ mod validate_latency {
         const EPSILON: f64 = 0.05;
         const SAMP_SIZE: usize = 200;
         let tgt = Duration::from_millis(1);
-        let batch = count_for_acc_ltncy(tgt, ACC_LTNCY); // 1
+        let batch = 10;
         let (tgt_fpsecs, latency_fpsecs) = run(tgt, batch, SAMP_SIZE);
         rel_approx_eq_fpsecs!(tgt_fpsecs, latency_fpsecs, EPSILON);
     }
@@ -214,7 +205,7 @@ mod validate_latency {
         const EPSILON: f64 = 0.05;
         const SAMP_SIZE: usize = 50;
         let tgt = Duration::from_millis(10);
-        let batch = count_for_acc_ltncy(tgt, ACC_LTNCY); // 1
+        let batch = 10;
         let (tgt_fpsecs, latency_fpsecs) = run(tgt, batch, SAMP_SIZE);
         rel_approx_eq_fpsecs!(tgt_fpsecs, latency_fpsecs, EPSILON);
     }
@@ -223,9 +214,9 @@ mod validate_latency {
     #[test]
     fn test_busy_work_ltncy_50_milli() {
         const EPSILON: f64 = 0.05;
-        const SAMP_SIZE: usize = 50;
+        const SAMP_SIZE: usize = 20;
         let tgt = Duration::from_millis(50);
-        let batch = count_for_acc_ltncy(tgt, ACC_LTNCY);
+        let batch = 10;
         let (tgt_fpsecs, latency_fpsecs) = run(tgt, batch, SAMP_SIZE);
         rel_approx_eq_fpsecs!(tgt_fpsecs, latency_fpsecs, EPSILON);
     }
@@ -241,6 +232,7 @@ mod validate_ratio {
     use super::*;
     use crate::{BenchCfg, LatencyUnit, duo, test_support::count_for_acc_ltncy};
     use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
+    use std::time::Instant;
 
     // const ACC_LTNCY: Duration = Duration::from_micros(50);
     const ACC_LTNCY: Duration = Duration::from_micros(10);
@@ -248,6 +240,7 @@ mod validate_ratio {
     fn run(tgt1: Duration, ratio: f64, batch: usize, samp_size: usize) -> (f64, f64) {
         _ = env_logger::try_init();
 
+        let start = Instant::now();
         let (effort2, _) = BusyWork::calibrate().effort_for_latency(tgt1.into());
         let effort1 = (effort2 as f64 * ratio).round() as u32;
         let adjusted_ratio = effort1 as f64 / effort2 as f64;
@@ -276,8 +269,9 @@ mod validate_ratio {
             out.out_f2().median_r()
         );
 
+        let elapsed = start.elapsed();
         println!(
-            "tgt1={tgt1:?}, effort1={effort1}, effort2={effort2}, target_ratio={ratio}, adjusted_ratio={adjusted_ratio}, latency_ratio={latency_ratio}, rel_diff={rel_diff}, adjusted_rel_diff={adjusted_rel_diff}",
+            "tgt1={tgt1:?}, effort1={effort1}, effort2={effort2}, target_ratio={ratio}, adjusted_ratio={adjusted_ratio}, latency_ratio={latency_ratio}, rel_diff={rel_diff}, adjusted_rel_diff={adjusted_rel_diff}, elapsed_time={elapsed:?}",
         );
 
         (adjusted_ratio, latency_ratio)
@@ -333,7 +327,7 @@ mod validate_ratio {
         const EPSILON: f64 = 0.01;
         const SAMP_SIZE: usize = 200;
         let tgt1 = Duration::from_micros(100);
-        let batch = count_for_acc_ltncy(tgt1, ACC_LTNCY);
+        let batch = 10;
         let (adjusted_ratio, latency_ratio) = run(tgt1, RATIO, batch, SAMP_SIZE);
         rel_approx_eq!(adjusted_ratio, latency_ratio, EPSILON);
     }
@@ -344,7 +338,7 @@ mod validate_ratio {
         // const SAMP_SIZE: usize = 200;
         const SAMP_SIZE: usize = 100;
         let tgt1 = Duration::from_millis(1);
-        let batch = count_for_acc_ltncy(tgt1, ACC_LTNCY);
+        let batch = 10;
         let (adjusted_ratio, latency_ratio) = run(tgt1, RATIO, batch, SAMP_SIZE);
         rel_approx_eq!(adjusted_ratio, latency_ratio, EPSILON);
     }
@@ -355,7 +349,7 @@ mod validate_ratio {
         // const SAMP_SIZE: usize = 50;
         const SAMP_SIZE: usize = 40;
         let tgt1 = Duration::from_millis(10);
-        let batch = count_for_acc_ltncy(tgt1, ACC_LTNCY);
+        let batch = 10;
         let (adjusted_ratio, latency_ratio) = run(tgt1, RATIO, batch, SAMP_SIZE);
         rel_approx_eq!(adjusted_ratio, latency_ratio, EPSILON);
     }
