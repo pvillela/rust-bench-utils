@@ -17,7 +17,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     } = args;
 
     let base_latency = Duration::from_secs_f64(latency_unit.factor_to_secs() * base_median);
-    let (base_effort, _) = BusyWork::calibrate(base_latency);
+    let (base_effort, _) = BusyWork::calibrate().effort_for_latency(base_latency.into());
 
     eprintln!("base_latency={base_latency:?}");
     eprintln!("base_effort={}", base_effort);

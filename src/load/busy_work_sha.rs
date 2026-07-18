@@ -2,6 +2,27 @@ use crate::{FpSeconds, RunLength, latency};
 use sha2::{Digest, Sha256};
 use std::{hint::black_box, time::Duration};
 
+/// Output from [`BusyWork`] calibration functions.
+pub struct Calibration {
+    unit_ltncy: FpSeconds,
+}
+
+impl Calibration {
+    /// Returns the calibrated latency corresponding to the `effort` argument.
+    pub fn latency_for_effort(&self, effort: u32) -> FpSeconds {
+        self.unit_ltncy * effort as f64
+    }
+
+    /// Returns a pair whose second component is the closest achievable mean latency and whose first component
+    /// is the effort corresponding to the second component.
+    pub fn effort_for_latency(&self, latency: FpSeconds) -> (u32, FpSeconds) {
+        let ratio = latency / self.unit_ltncy;
+        let effort = ratio.round().max(1.0);
+        let calibr_ltncy = self.unit_ltncy * effort;
+        (effort as u32, calibr_ltncy)
+    }
+}
+
 #[derive(Clone, Copy)]
 /// Produces a closure which does a significant amount of computation, useful as a synthetic workload to support
 /// the validation of benchmarking frameworks.
@@ -33,31 +54,25 @@ impl BusyWork {
         black_box(hasher);
     }
 
-    /// Estimates the `effort` required for the resulting closure to have the `target_latency`, using
-    /// an iterative process.
-    ///
-    /// The first component of the returned tuple is the effort. The second component is the measured
-    /// latency using the returned effort.
+    /// Returns a [`Calibration`] object that can be used to estimate the effort required to achieve
+    /// a desired mean latency.
     ///
     /// Calls [`calibrate_with_budget`](Self::calibrate_with_budget) using a default budget.
-    pub fn calibrate(target_latency: Duration) -> (u32, FpSeconds) {
-        let budget: RunLength = RunLength::Time(Duration::from_millis(1).max(target_latency));
-        Self::calibrate_with_budget(target_latency, budget)
+    pub fn calibrate() -> Calibration {
+        let budget: RunLength = RunLength::Time(Duration::from_millis(1));
+        Self::calibrate_with_budget(budget)
     }
 
-    /// Estimates the `effort` required for the resulting closure to have the `target_latency`, using
-    /// an iterative process.
+    /// Returns a [`Calibration`] object that can be used to estimate the effort required to achieve
+    /// a desired mean latency, using an iterative process.
+    ///
     /// `calibration_budget` limits the length of the iterative process by time and/or count
     /// (= accumulated calibration effort).
-    ///
-    /// The first component of the returned tuple is the effort. The second component is the measured
-    /// latency using the returned effort.
-    ///
     /// The total calibration takes longer than `run_length` because a warm-up period is added.
-    pub fn calibrate_with_budget(target_latency: Duration, budget: RunLength) -> (u32, FpSeconds) {
+    pub fn calibrate_with_budget(budget: RunLength) -> Calibration {
         let (buf, mut hasher) = Self::pre_work();
-        Self::warmup(&buf, &mut hasher, target_latency, budget);
-        Self::calibrate_internal(&buf, &mut hasher, target_latency, budget)
+        Self::warmup(&buf, &mut hasher, budget);
+        Self::calibrate_internal(&buf, &mut hasher, budget)
     }
 
     #[inline(always)]
@@ -69,21 +84,15 @@ impl BusyWork {
     }
 
     /// Does the warm-up for [`Self::calibrate_with_budget`].
-    fn warmup(buf: &[u8; 64], hasher: &mut Sha256, target_latency: Duration, budget: RunLength) {
-        Self::calibrate_internal(&buf, hasher, target_latency, budget);
+    fn warmup(buf: &[u8; 64], hasher: &mut Sha256, budget: RunLength) {
+        Self::calibrate_internal(&buf, hasher, budget);
     }
 
-    /// Core estimation of the `effort` required for the resulting closure to have the `target_latency`,
+    /// Core estimation of the mean latency of one unit of `effort`,
     /// using an iterative process. Used by both [`Self::warmup`] and [`Self::calibrate_with_budget`].
     /// `calibration_budget` limits the length of the iterative process by time and/or count
     /// (= accumulated calibration effort).
-    fn calibrate_internal(
-        buf: &[u8; 64],
-        hasher: &mut Sha256,
-        target_latency: Duration,
-        budget: RunLength,
-    ) -> (u32, FpSeconds) {
-        let target_fps = FpSeconds::from_duration(target_latency);
+    fn calibrate_internal(buf: &[u8; 64], hasher: &mut Sha256, budget: RunLength) -> Calibration {
         let (budget_count, budget_dur) = budget.count_and_time();
         let budget_fps = FpSeconds::from_duration(budget_dur);
 
@@ -101,20 +110,16 @@ impl BusyWork {
                 || acc_latency >= budget_fps * 2 / 3
                 || acc_effort_fp >= budget_count as f64 * (2.0 / 3.0)
             {
-                // Estimate of target effort based on latest iteration.
-                let iter_target_effort = target_fps * iter_effort as f64 / iter_latency;
+                // Estimate of unit latency based on latest iteration.
+                let iter_unit_ltncy = iter_latency / iter_effort as f64;
 
-                // Estimate of target effort based on weighted average of the estimated target efforts
-                // for all iterations.
-                let acc_target_effort = target_fps * acc_effort_fp / acc_latency;
+                // Estimate of unit latency based on accumulated effort and latency for all iterations.
+                let acc_unit_ltncy = acc_latency / acc_effort_fp;
 
                 // The last iteration should have been the most efficient due to previous warming;
-                // if that's not the case, returns the weighted average estimated target effort.
-                let effort_fp = iter_target_effort.min(acc_target_effort);
-                let effort = effort_fp.round() as u32;
-                let calibr_ltncy = target_fps / effort as f64 * effort_fp;
-
-                return (effort, calibr_ltncy);
+                // if that's not the case, return the accumulated estimate.
+                let unit_ltncy = iter_unit_ltncy.min(acc_unit_ltncy.as_f64()).into();
+                return Calibration { unit_ltncy };
             }
         }
 
@@ -137,7 +142,7 @@ mod validate_latency {
         _ = env_logger::try_init();
 
         let start = Instant::now();
-        let (effort, tgt_fpsecs) = BusyWork::calibrate(tgt);
+        let (effort, tgt_fpsecs) = BusyWork::calibrate().effort_for_latency(tgt.into());
         let f = BusyWork::fun(effort);
 
         let cfg = BenchCfg::default()
@@ -243,7 +248,7 @@ mod validate_ratio {
     fn run(tgt1: Duration, ratio: f64, batch: usize, samp_size: usize) -> (f64, f64) {
         _ = env_logger::try_init();
 
-        let (effort2, _) = BusyWork::calibrate(tgt1);
+        let (effort2, _) = BusyWork::calibrate().effort_for_latency(tgt1.into());
         let effort1 = (effort2 as f64 * ratio).round() as u32;
         let adjusted_ratio = effort1 as f64 / effort2 as f64;
         let f1 = BusyWork::fun(effort1);

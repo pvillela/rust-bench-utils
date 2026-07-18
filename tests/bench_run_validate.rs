@@ -132,7 +132,8 @@ struct Fns1 {
 impl Fns1 {
     fn new(base_target_latency: Duration) -> Self {
         _ = env_logger::try_init();
-        let (effort, calibr_ltncy) = BusyWork::calibrate(base_target_latency);
+        let (effort, calibr_ltncy) =
+            BusyWork::calibrate().effort_for_latency(base_target_latency.into());
         debug!("Fns1::new >>> effort={effort}");
         Self {
             effort,
@@ -168,7 +169,8 @@ struct Fns2 {
 
 impl Fns2 {
     fn new(base_target_latency: Duration) -> Self {
-        let (effort0, calibr_ltncy0) = BusyWork::calibrate(base_target_latency);
+        let (effort0, calibr_ltncy0) =
+            BusyWork::calibrate().effort_for_latency(base_target_latency.into());
         Self {
             effort0,
             calibr_ltncy0,

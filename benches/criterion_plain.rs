@@ -20,7 +20,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     eprintln!("base_latency={base_latency:?}");
 
-    let (effort, _) = BusyWork::calibrate(base_latency);
+    let (effort, _) = BusyWork::calibrate().effort_for_latency(base_latency.into());
     let mut f = BusyWork::fun(effort);
 
     for i in 1..=nrepeats {
