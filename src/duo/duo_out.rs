@@ -77,6 +77,23 @@ impl DuoOut {
         self.comp().mean_diff_ln_f1_f2()
     }
 
+    /// Difference between the robust mean estimates for `f1` and `f2`, respectively, in [`FpSeconds`].
+    pub fn mean_diff_f1_f2_rob(&self) -> FpSeconds {
+        self.comp().mean_diff_f1_f2_rob()
+    }
+
+    /// Ratio between the robust mean estimates for `f1` and `f2`, respectively.
+    ///
+    /// Returns `f64::INFINITY` if the mean for `f2` is zero, and `f64::NAN` if both
+    /// means are zero.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.out_f1().n() == 0` or `self.out_f2().n() == 0`.
+    pub fn mean_ratio_f1_f2_rob(&self) -> f64 {
+        self.comp().mean_ratio_f1_f2_rob()
+    }
+
     /// Welch's t statistic for the hypothesis that
     /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm, in the recording unit),
     /// or equivalently, `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.

@@ -311,8 +311,10 @@ impl BenchOut {
             let mid_i = transf_in(self.hist.median_equivalent(v));
             let count_i: u64 = iv_i.count_at_value();
             if count_i > 1 {
+                // Within-bin pairs: C(count_i, 2) zero differences, not count_i - 1.
+                let n_zero_pairs = count_i * (count_i - 1) / 2;
                 rc_hist
-                    .record_n(0, count_i - 1)
+                    .record_n(0, n_zero_pairs)
                     .expect("shouldn't happen as histogram is sized properly");
             }
             for iv_j in self.hist.iter_recorded().skip(i + 1) {
@@ -326,8 +328,17 @@ impl BenchOut {
                     .expect("shouldn't happen as histogram is sized properly");
             }
         }
-        let quartile = rc_hist.value_at_quantile(0.25);
-        transf_out(quartile) * self.rousseeuw_croux_d()
+        // Q_n is the r-th smallest of the C(g, 2) pairwise absolute differences, with
+        // h = floor(g/2) + 1 and r = C(h, 2) (Rousseeuw-Croux); this is the rank that
+        // `rousseeuw_croux_d` is calibrated against, so look it up by exact rank rather
+        // than by an arbitrary quantile.
+        let g = self.n_r();
+        let h = g / 2 + 1;
+        let r = h * (h - 1) / 2;
+        let total_pairs = g * (g - 1) / 2;
+        let rank_quantile = r as f64 / total_pairs as f64;
+        let rth_smallest = rc_hist.value_at_quantile(rank_quantile);
+        transf_out(rth_smallest) * self.rousseeuw_croux_d()
     }
 
     #[allow(unused)]
@@ -373,6 +384,30 @@ impl BenchOut {
 
     //=== Estimators of population mean ===
 
+    #[doc(hidden)]
+    /// Log-space, batching-bias-corrected estimator of the population mean, `exp(M + sigma_y^2 / 2)`,
+    /// where `M = median(ln Y)` and `sigma_y` is the Rousseeuw-Croux Q statistic in log space.
+    ///
+    /// Unlike the median estimators, this needs no explicit `k` term: the Fenton-Wilkinson
+    /// correction folded into `sigma_y` already accounts for batching, so the formula is valid,
+    /// unmodified, for every batch size.
+    pub fn mean_log_space_estimator(&self) -> FpSeconds {
+        let m_y_ln = self.median_r().ln();
+        let sigma_y = self.rousseeuw_croux_q_ls();
+        (m_y_ln + sigma_y.powi(2) / 2.0).exp().into()
+    }
+
+    /// Batching-bias-corrected robust estimator of the population mean.
+    ///
+    /// This is [`Self::mean_log_space_estimator`], which is the robust primary estimator of the
+    /// mean for every batch size and every degree of skew, under the assumption -- the default
+    /// posture for latency benchmarking -- that the data may be contaminated by outliers (e.g.
+    /// GC pauses, OS interrupts). Unlike [`Self::median_rob`], this estimator does not switch
+    /// between alternatives based on the dispersion of the recorded values.
+    pub fn mean_rob(&self) -> FpSeconds {
+        self.mean_log_space_estimator()
+    }
+
     //=== Estimators of population median ===
 
     #[doc(hidden)]
@@ -394,7 +429,11 @@ impl BenchOut {
 
     fn pure_s_hat(&self) -> f64 {
         const INV_PHI_0_75: f64 = 0.6745; // Inverse normal CDF at 0.75.
-        let m = self.median_r().as_f64();
+        // `m` is `M = median(ln Y)`, i.e. the log of the median expressed in recording units --
+        // the same log space as `mid.ln()` below (log of a raw recording-unit integer). Using
+        // the natural-scale median in seconds here (un-logged) would put `m` many orders of
+        // magnitude away from `mid.ln()`, making every `abs_diff` below dominated by `m` alone.
+        let m = (self.recording_unit.value_from_fpsecs(self.median_r()) as f64).ln();
         let max = self.hist.max() as f64;
         if max.ln() == m {
             return 0.0;
@@ -1027,5 +1066,102 @@ mod test {
         assert_eq!(out.n_r(), 2);
         out.reset();
         assert_eq!(out.n_r(), 0);
+    }
+
+    /// Batches a raw lognormal sample of individual latencies into `n / k` group means, following
+    /// the reference's `Y_i = mean(X_{(i-1)k+1}, ..., X_{ik})` construction.
+    fn batch_lognormal_samp(mu: f64, sigma: f64, k: usize, g: usize) -> Vec<FpSeconds> {
+        let raw: Vec<FpSeconds> = lognormal_samp(mu, sigma, k * g).collect();
+        raw.chunks(k)
+            .map(|chunk| chunk.iter().copied().sum::<FpSeconds>() / k as f64)
+            .collect()
+    }
+
+    #[test]
+    fn test_s_hat_well_scaled() {
+        // Regression test for the `pure_s_hat` center bug: `m` must be `ln(median in recording
+        // units)`, in the same log space as `mid.ln()`, not the un-logged natural-scale median in
+        // seconds. Before the fix, mixing those scales produced `s_hat` values in the tens
+        // (dominated by the un-logged `m` term) instead of the well-scaled dispersion estimate
+        // (order 0.1-1) that `median_rob`'s `Ŝ` bands (§1.5 of the reference) are calibrated to.
+        const K: usize = 16;
+        const G: usize = 500;
+        let sigma = 0.5_f64;
+        let batched = batch_lognormal_samp(0.0, sigma, K, G);
+
+        let cfg = BenchCfg::default();
+        let mut out = BenchOut::new(&cfg, Some(K));
+        out.record_from_iter(batched.into_iter());
+
+        let s_hat = out.s_hat();
+        assert!(
+            (0.0..1.0).contains(&s_hat),
+            "s_hat should be a small, well-scaled dispersion estimate; got {s_hat}"
+        );
+    }
+
+    #[test]
+    fn test_median_rob_selects_matching_band() {
+        // Regression test for the `pure_s_hat` center bug (see `test_s_hat_well_scaled`): before
+        // the fix, the inflated `s_hat` (tens instead of tenths) meant `median_rob` fell through
+        // to `median_rmom_estimator` for every k > 1, regardless of the sample's actual
+        // dispersion. Pick (sigma, k) that lands `s_hat` in the mildly-skewed band
+        // (0.3 < Ŝ <= 0.6; §1.5 of the reference) and confirm `median_rob` now actually selects
+        // `median_log_space_estimator` there, instead of always defaulting to RMoM.
+        const K: usize = 24;
+        const G: usize = 2_000;
+        let sigma = 1.5_f64;
+        let batched = batch_lognormal_samp(0.0, sigma, K, G);
+
+        let cfg = BenchCfg::default();
+        let mut out = BenchOut::new(&cfg, Some(K));
+        out.record_from_iter(batched.into_iter());
+
+        let s_hat = out.s_hat();
+        assert!(
+            (0.3..=0.6).contains(&s_hat),
+            "expected this (sigma, k) combination to land in the mildly-skewed Ŝ band; got s_hat={s_hat}"
+        );
+
+        let median_rob = out.median_rob();
+        let median_log_space = out.median_log_space_estimator();
+        assert_eq!(
+            median_rob, median_log_space,
+            "median_rob should select median_log_space_estimator when 0.3 < s_hat <= 0.6"
+        );
+    }
+
+    #[test]
+    // cargo test --package bench_utils --lib --all-features -- bench_out::test::test_mean_rob_and_median_rob_batched --exact --nocapture --include-ignored
+    fn test_mean_rob_and_median_rob_batched() {
+        const EPSILON: f64 = 0.05; // was 0.1
+        const K: usize = 128; // was 16
+        const G: usize = 2_000;
+        let mu = 0.0_f64;
+        let sigma = 0.5_f64;
+        let batched = batch_lognormal_samp(mu, sigma, K, G);
+
+        let cfg = BenchCfg::default();
+        let mut out = BenchOut::new(&cfg, Some(K));
+        out.record_from_iter(batched.into_iter());
+
+        let true_mean = (mu + sigma.powi(2) / 2.0).exp();
+        let true_median = mu.exp();
+
+        let mean_log_space = out.mean_log_space_estimator().as_f64();
+        let mean_rob = out.mean_rob().as_f64();
+        let median_log_space = out.median_log_space_estimator().as_f64();
+        let median_rmom = out.median_rmom_estimator().as_f64();
+        let median_rob = out.median_rob().as_f64();
+
+        assert!(mean_log_space.is_finite());
+        assert!(median_log_space.is_finite());
+        assert!(median_rmom.is_finite());
+
+        // mean_rob is defined as mean_log_space_estimator for every k.
+        approx_eq!(mean_log_space, mean_rob, 1e-9);
+
+        rel_approx_eq!(true_mean, mean_rob, EPSILON);
+        rel_approx_eq!(true_median, median_rob, EPSILON);
     }
 }

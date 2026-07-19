@@ -102,6 +102,23 @@ impl<'a> Comp<'a> {
         self.0.mean_ln_r() - self.1.mean_ln_r()
     }
 
+    /// Difference between the robust mean estimates for `f1` and `f2`, respectively, in [`FpSeconds`].
+    pub fn mean_diff_f1_f2_rob(&self) -> FpSeconds {
+        self.0.mean_rob() - self.1.mean_rob()
+    }
+
+    /// Ratio between the robust mean estimates for `f1` and `f2`, respectively.
+    ///
+    /// Returns `f64::INFINITY` if the mean for `f2` is zero, and `f64::NAN` if both
+    /// means are zero.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.out_f1().n() == 0` or `self.out_f2().n() == 0`.
+    pub fn mean_ratio_f1_f2_rob(&self) -> f64 {
+        self.0.mean_rob().as_f64() / self.1.mean_rob().as_f64()
+    }
+
     fn moments_ln_f1(&self) -> SampleMoments {
         SampleMoments::new(self.0.n_nz, self.0.sum_ln, self.0.sum2_ln)
     }

@@ -153,9 +153,13 @@ fn run_and_display(
     let median_rmom = out.median_rmom_estimator();
     let median_rob = out.median_rob();
 
+    let mean_log_space = out.mean_log_space_estimator();
+    let mean_rob = out.mean_rob();
+
     let mean_rel_diff = calibr_ltncy.abs_rel_diff_fpsecs(mean);
     let median_r_rel_diff = calibr_ltncy.abs_rel_diff_fpsecs(median_r);
     let median_rob_rel_diff = calibr_ltncy.abs_rel_diff_fpsecs(median_rob);
+    let mean_rob_rel_diff = calibr_ltncy.abs_rel_diff_fpsecs(mean_rob);
 
     let elapsed = start.elapsed();
 
@@ -166,11 +170,12 @@ fn run_and_display(
     println!(
         "mean={mean:?}, stdev={stdev:?}, CV={cv:?}, stdev_r={stdev_r:?}, rc_q_ns={rc_q_ns:?}, mean_ln_r={mean_ln_r:.3e}, stdev_ln_r={stdev_ln_r:.3e}, rc_q_ls={rc_q_ls:.3e}"
     );
+    println!("mean_log_space={mean_log_space:?}, mean_rob={mean_rob:?}");
     println!(
         "median_r={median_r:?}, median_log_space={median_log_space:?}, median_rmom={median_rmom:?}, median_rob={median_rob:?}"
     );
     println!(
-        "mean_rel_diff={mean_rel_diff:?}, median_r_rel_diff={median_r_rel_diff:?}, median_rob_rel_diff={median_rob_rel_diff:?}"
+        "mean_rel_diff={mean_rel_diff:?}, mean_rob_rel_diff={mean_rob_rel_diff:?}, median_r_rel_diff={median_r_rel_diff:?}, median_rob_rel_diff={median_rob_rel_diff:?}"
     );
     println!("{:?}", out.summary());
     println!("elapsed_time={elapsed:?}");
