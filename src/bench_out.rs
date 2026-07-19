@@ -375,20 +375,6 @@ impl BenchOut {
 
     //=== Estimators of population median ===
 
-    #[allow(unused)]
-    fn simple_median(&self) -> FpSeconds {
-        const HI_BSZ: usize = 100;
-        let median_1 = self.mean_ln_r().exp();
-        let median_hi_bsz =
-            self.median_r() / (1.0 + self.stdev().powi(2) / self.median_r().powi(2)).sqrt();
-        let clipped_bsz = self.bsz().min(HI_BSZ);
-        let median_interp = ((median_1.ln() * (HI_BSZ - clipped_bsz) as f64
-            + median_hi_bsz.ln() * (clipped_bsz - 1) as f64)
-            / (HI_BSZ - 1) as f64)
-            .exp();
-        median_interp.into()
-    }
-
     #[doc(hidden)]
     pub fn median_log_space_estimator(&self) -> FpSeconds {
         let k = self.bsz() as f64;
