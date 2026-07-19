@@ -3,7 +3,7 @@
 //! Gated by feature **"_test_support"**.
 
 use crate::{BenchCfg, BenchOut, FpSeconds};
-use basic_stats::{core::SampleMoments, normal::normal_detm_samp};
+use basic_stats::{core::SampleMoments, normal::normal_rand_samp};
 use std::{io::Write, sync::LazyLock, time::Duration};
 
 /// Low log-standard-deviation value for test sample generation.
@@ -23,9 +23,9 @@ fn jitter(v: f64, i: i64, n_jitter: i64, epsilon: f64) -> f64 {
     v + delta
 }
 
-/// Generates a deterministic lognormal [`FpSeconds`] sample with optional jitter.
+/// Generates a reproducible random lognormal [`FpSeconds`] sample with optional jitter.
 ///
-/// First generates a normal sample from `Normal(mu, sigma)` using a deterministic method,
+/// First generates a normal sample from `Normal(mu, sigma)` using a fixed-seed random method,
 /// then exponentiates each value and casts to `u64`. A small epsilon jitter can be added
 /// to deterministically simulate randomness in a simple way
 /// (can also break ties from casting to `u64`).
@@ -44,14 +44,14 @@ pub fn lognormal_samp_jittered(
     n_jitter: i64,
     jitter_epsilon: f64,
 ) -> impl Iterator<Item = FpSeconds> {
-    let normal_samp = normal_detm_samp(mu, sigma, samp_size).unwrap();
+    let normal_samp = normal_rand_samp(mu, sigma, samp_size).unwrap();
     normal_samp
         .enumerate()
         .map(move |(i, v)| jitter(v, i as i64, n_jitter, jitter_epsilon))
         .map(|x| FpSeconds(x.exp()))
 }
 
-/// Generates a deterministic lognormal [`FpSeconds`] sample without jitter.
+/// Generates a reproducible random lognormal [`FpSeconds`] sample without jitter.
 ///
 /// Equivalent to [`lognormal_samp_jittered`] with `n_jitter=3` and `jitter_epsilon=0.0`.
 ///

@@ -749,7 +749,7 @@ mod test {
     use basic_stats::{
         approx_eq,
         core::{AcceptedHyp, PositionWrtCi},
-        normal::{normal_detm_samp, student_1samp_df, student_1samp_p},
+        normal::{normal_rand_samp, student_1samp_df, student_1samp_p},
         rel_approx_eq,
     };
     use statrs::distribution::{ContinuousCDF, Normal};
@@ -842,7 +842,11 @@ mod test {
 
     #[test]
     fn test_descriptive_stats() {
-        const EPSILON: f64 = 0.001;
+        // Descriptive stats are computed from a genuinely random sample (see `normal_rand_samp`
+        // in `basic_stats`), so tail percentiles in particular carry real sampling noise around
+        // their theoretical values; 0.001 was tight enough only for the previous low-discrepancy
+        // (non-random) generator.
+        const EPSILON: f64 = 0.005;
 
         // in ln of microseconds
         let mu_micro = 8.;
@@ -930,7 +934,7 @@ mod test {
         let mut out = BenchOut::new(&cfg, None);
         out.record_from_iter(lognormal_samp);
 
-        let normal_samp = normal_detm_samp(mu, sigma, samp_size).unwrap();
+        let normal_samp = normal_rand_samp(mu, sigma, samp_size).unwrap();
         let moments_ln = SampleMoments::from_iterator(normal_samp);
 
         assert_eq!(out.recording_unit(), LatencyUnit::NANO);
@@ -1134,8 +1138,8 @@ mod test {
     #[test]
     // cargo test --package bench_utils --lib --all-features -- bench_out::test::test_mean_rob_and_median_rob_batched --exact --nocapture --include-ignored
     fn test_mean_rob_and_median_rob_batched() {
-        const EPSILON: f64 = 0.05; // was 0.1
-        const K: usize = 128; // was 16
+        const EPSILON: f64 = 0.01;
+        const K: usize = 16;
         const G: usize = 2_000;
         let mu = 0.0_f64;
         let sigma = 0.5_f64;

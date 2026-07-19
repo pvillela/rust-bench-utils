@@ -185,8 +185,8 @@ impl FnsSrc<2> for Fns2 {
     }
 
     fn f2(&self) -> impl FnMut() {
-        let mut f2a = BusyWork::fun(self.effort0 - self.effort_delta);
-        let mut f2b = BusyWork::fun(self.effort_delta);
+        let f2a = BusyWork::fun(self.effort0 - self.effort_delta);
+        let f2b = BusyWork::fun(self.effort_delta);
         move || {
             f2a();
             f2b()
