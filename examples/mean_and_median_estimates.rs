@@ -143,10 +143,20 @@ fn run_and_display(
     let stdev = out.stdev();
     let cv = stdev / mean;
     let stdev_r = out.stdev_r();
+    // `rc_q_ns`/`rc_q_ls` are robust estimators of the *recorded-scale* dispersion (`tau_Y`/
+    // `sigma_Y`, per reference `Fable-edited-Optimum_estimators_of_mean_and_median.md`
+    // §3.3-3.4), i.e. of `stdev_r`/`stdev_ln_r`, not of the per-execution `stdev` (which is
+    // `stdev_r * sqrt(batch size)` and so is not the right thing to sanity-check them against).
+    // `rc_q_*_over_stdev_r_ln_r` should be roughly of order 1 for uncontaminated data; a robust
+    // estimator that is *much* smaller than `stdev_r`/`stdev_ln_r` on contaminated data is
+    // expected -- that's the estimator correctly ignoring the outlier tail that inflates the
+    // non-robust `stdev_r`/`stdev_ln_r`.
     let rc_q_ns = out.rousseeuw_croux_q_ns();
+    let rc_q_ns_over_stdev_r = rc_q_ns / stdev_r;
     let mean_ln_r = out.mean_ln_r();
     let stdev_ln_r = out.stdev_ln_r();
     let rc_q_ls = out.rousseeuw_croux_q_ls();
+    let rc_q_ls_over_stdev_ln_r = rc_q_ls / stdev_ln_r;
 
     let median_r = out.median_r();
     let median_log_space = out.median_log_space_estimator();
@@ -168,7 +178,7 @@ fn run_and_display(
         "target_latency={target_latency:?}, calibr_ltncy={calibr_ltncy:?}, effort={effort}, batch={batch:?}, samp_size={samp_size}"
     );
     println!(
-        "mean={mean:?}, stdev={stdev:?}, CV={cv:?}, stdev_r={stdev_r:?}, rc_q_ns={rc_q_ns:?}, mean_ln_r={mean_ln_r:.3e}, stdev_ln_r={stdev_ln_r:.3e}, rc_q_ls={rc_q_ls:.3e}"
+        "mean={mean:?}, stdev={stdev:?}, CV={cv:?}, stdev_r={stdev_r:?}, rc_q_ns={rc_q_ns:?}, rc_q_ns/stdev_r={rc_q_ns_over_stdev_r:.3}, mean_ln_r={mean_ln_r:.3e}, stdev_ln_r={stdev_ln_r:.3e}, rc_q_ls={rc_q_ls:.3e}, rc_q_ls/stdev_ln_r={rc_q_ls_over_stdev_ln_r:.3}"
     );
     println!("mean_log_space={mean_log_space:?}, mean_rob={mean_rob:?}");
     println!(

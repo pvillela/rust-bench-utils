@@ -311,10 +311,22 @@ impl BenchOut {
             let mid_i = transf_in(self.hist.median_equivalent(v));
             let count_i: u64 = iv_i.count_at_value();
             if count_i > 1 {
-                // Within-bin pairs: C(count_i, 2) zero differences, not count_i - 1.
-                let n_zero_pairs = count_i * (count_i - 1) / 2;
+                // Within-bin pairs: C(count_i, 2) pairs, not count_i - 1. Their true
+                // (pre-quantization) difference is unknown but bounded by the bucket's
+                // width -- treating it as exactly 0 (a literal reading of the Rousseeuw-Croux
+                // histogram recipe) is only safe when bucket width is negligible relative to
+                // genuine dispersion. For real latency data with a tight mode, a single bucket
+                // can hold enough of the sample that this zero-mass alone reaches the target
+                // rank, collapsing Q_n to a misleading exact zero. Approximate instead by
+                // E[|U1-U2|] for two points i.i.d. uniform on the bucket's width, i.e. width/3.
+                // The width is computed in the transformed space (via `transf_in` on both
+                // bucket edges) so this is correct for the nonlinear log-space transform too.
+                let lo = transf_in(self.hist.lowest_equivalent(v));
+                let hi = transf_in(self.hist.next_non_equivalent(v));
+                let within_bucket_diff = hi.saturating_sub(lo) / 3;
+                let n_within_bucket_pairs = count_i * (count_i - 1) / 2;
                 rc_hist
-                    .record_n(0, n_zero_pairs)
+                    .record_n(within_bucket_diff, n_within_bucket_pairs)
                     .expect("shouldn't happen as histogram is sized properly");
             }
             for iv_j in self.hist.iter_recorded().skip(i + 1) {
@@ -1070,6 +1082,65 @@ mod test {
         assert_eq!(out.n_r(), 2);
         out.reset();
         assert_eq!(out.n_r(), 0);
+    }
+
+    #[test]
+    fn test_rousseeuw_croux_q_not_zero_for_tight_mode_with_tail() {
+        // Regression test for `rousseeuw_croux_q_general` collapsing to a literal, misleading 0:
+        // a "tight mode + long tail" sample -- common for real latency data -- can put enough of
+        // the sample into a single HDR bucket that its own C(count_i,2) same-bucket pairs alone
+        // exceed the target rank, so `value_at_quantile` used to return exactly 0 for both natural
+        // and log space before this bucket collapsed into the smallest recorded (nonzero) value.
+        //
+        // 480 identical values (a dominant mode) + 20 larger ones (a tail) reproduces this: with
+        // g=500, target rank r=C(251,2)=31375, and C(480,2)=114960 >> r, so the old code returned
+        // exactly 0 for both `rousseeuw_croux_q_ns` and `rousseeuw_croux_q_ls`.
+        let cfg = BenchCfg::default();
+        let mut out = BenchOut::new(&cfg, None);
+        let mode = std::iter::repeat_n(FpSeconds::from_millis(1), 480);
+        let tail = std::iter::repeat_n(FpSeconds::from_millis(2), 20);
+        out.record_from_iter(mode.chain(tail));
+
+        assert_eq!(out.n_r(), 500);
+        assert!(
+            out.rousseeuw_croux_q_ns() > FpSeconds::ZERO,
+            "rousseeuw_croux_q_ns should not collapse to exactly zero for a tight-mode+tail sample"
+        );
+        assert!(
+            out.rousseeuw_croux_q_ls() > 0.0,
+            "rousseeuw_croux_q_ls should not collapse to exactly zero for a tight-mode+tail sample"
+        );
+    }
+
+    #[test]
+    fn test_rousseeuw_croux_q_ls_tracks_stdev_ln_r_for_clean_sample() {
+        // Sanity/non-degenerate-reading guard for `rousseeuw_croux_q_general`: on a clean
+        // (uncontaminated) lognormal sample, `ln Y` is exactly normal, so the non-robust
+        // `stdev_ln_r` and the robust `rousseeuw_croux_q_ls` should closely agree -- unlike on
+        // contaminated data, there's no reason for the robust estimator to read differently here.
+        // `sigma` is deliberately tight relative to the HDR histogram's bucket width so that a
+        // coarse resolution (e.g. the pre-fix `DEFAULT_SIGFIG = 3`, or worse) pushes many samples
+        // into the same few buckets; a badly under-resolved histogram would then either pin `Q_n`
+        // toward the bucket-width fallback used for tied pairs (reading too small) or, if the
+        // fallback itself dwarfs the true dispersion, read too large -- either way, far from
+        // `stdev_ln_r`. At the current `DEFAULT_SIGFIG` this reads within ~10% of `stdev_ln_r`;
+        // this test only asserts the much looser bound needed to catch a gross regression.
+        const G: usize = 300;
+        let sigma = 0.0002_f64;
+        let samp: Vec<FpSeconds> = lognormal_samp(0.0, sigma, G).collect();
+
+        let cfg = BenchCfg::default();
+        let mut out = BenchOut::new(&cfg, None);
+        out.record_from_iter(samp.into_iter());
+
+        let stdev_ln_r = out.stdev_ln_r();
+        let rc_q_ls = out.rousseeuw_croux_q_ls();
+        let ratio = rc_q_ls / stdev_ln_r;
+        assert!(
+            (0.3..3.0).contains(&ratio),
+            "rousseeuw_croux_q_ls ({rc_q_ls}) should be within a loose factor of stdev_ln_r \
+             ({stdev_ln_r}) for a clean, uncontaminated sample; ratio={ratio}"
+        );
     }
 
     /// Batches a raw lognormal sample of individual latencies into `n / k` group means, following

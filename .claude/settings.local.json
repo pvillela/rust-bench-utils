@@ -3,7 +3,9 @@
   "permissions": {
     "allow": [
       "Bash(claude --version)",
-      "Bash(git diff *)"
+      "Bash(git diff *)",
+      "Read(//home/pvillela/.local/share/claude/versions/**)",
+      "Bash(bash /home/pvillela/.claude/statusline-command.sh)"
     ]
   }
 }

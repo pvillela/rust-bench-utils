@@ -27,7 +27,12 @@ impl BenchCfg {
     /// Default unit for recording latencies.
     pub const DEFAULT_RECORDING_UNIT: LatencyUnit = LatencyUnit::NANO;
     /// Default number of significant decimal digits for the HDR histogram.
-    pub const DEFAULT_SIGFIG: u8 = 3;
+    ///
+    /// `4` (rather than the coarser `3`) keeps histogram buckets fine enough, relative to typical
+    /// latency dispersion, that the Rousseeuw-Croux `Q_n` robust scale estimators
+    /// ([`crate::BenchOut::rousseeuw_croux_q_ns`]/`_ls`) don't collapse toward the bucket-width
+    /// quantization floor for tight-mode latency data.
+    pub const DEFAULT_SIGFIG: u8 = 4;
 
     /// The number of milliseconds used to "warm-up" the benchmark.
     pub fn warmup_millis(&self) -> u64 {
