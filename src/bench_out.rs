@@ -145,15 +145,18 @@ impl BenchOut {
             .record_n(mean_elapsed_u64, count as u64)
             .expect("can't happen: histogram is auto-resizable");
 
-        let total_elapsed_f64 = (mean_latency * count).as_f64();
-        self.sum += total_elapsed_f64;
-        self.sum2 += total_elapsed_f64.powi(2);
+        // The pair represents `count` observations of value `mean_latency` (matching the
+        // histogram's `record_n` above), so each sum accumulates `count` per-observation terms.
+        let count_f64 = count as f64;
+        let mean_elapsed_f64 = mean_latency.as_f64();
+        self.sum += mean_elapsed_f64 * count_f64;
+        self.sum2 += mean_elapsed_f64.powi(2) * count_f64;
 
-        if latency_with_count.0 > FpSeconds::ZERO {
-            let ln = total_elapsed_f64.ln();
-            self.n_nz += 1;
-            self.sum_ln += ln;
-            self.sum2_ln += ln.powi(2);
+        if mean_latency > FpSeconds::ZERO && count > 0 {
+            let ln = mean_elapsed_f64.ln();
+            self.n_nz += count as u64;
+            self.sum_ln += ln * count_f64;
+            self.sum2_ln += ln.powi(2) * count_f64;
         }
     }
 
@@ -349,7 +352,11 @@ impl BenchOut {
         let r = h * (h - 1) / 2;
         let total_pairs = g * (g - 1) / 2;
         let rank_quantile = r as f64 / total_pairs as f64;
-        let rth_smallest = rc_hist.value_at_quantile(rank_quantile);
+        // `value_at_quantile` returns the *top* of the bucket holding the target rank
+        // (`highest_equivalent`); read out the bucket midpoint instead, consistent with the
+        // `median_equivalent` convention used on the inputs above. (No-op for values in the
+        // histogram's unit-resolution range, where buckets are exact.)
+        let rth_smallest = rc_hist.median_equivalent(rc_hist.value_at_quantile(rank_quantile));
         transf_out(rth_smallest) * self.rousseeuw_croux_d()
     }
 
@@ -850,6 +857,35 @@ mod test {
         // HDR histogram has slight quantization; compare approximately
         rel_approx_eq_fpsecs!(pairs[0].0, FpSeconds::from_millis(1), EPSILON);
         rel_approx_eq_fpsecs!(pairs[1].0, FpSeconds::from_millis(2), EPSILON);
+    }
+
+    #[test]
+    fn test_record_with_counts_moments_match_expanded() {
+        const EPSILON: f64 = 1e-12;
+        let cfg = BenchCfg::default();
+        let pairs = [
+            (FpSeconds::from_millis(1), 3),
+            (FpSeconds::from_millis(2), 1),
+            (FpSeconds::from_millis(4), 5),
+            (FpSeconds::from_millis(8), 2),
+        ];
+
+        let mut out_counts = BenchOut::new(&cfg, None);
+        out_counts.record_from_iter_with_counts(pairs.into_iter());
+
+        let mut out_expanded = BenchOut::new(&cfg, None);
+        out_expanded.record_from_iter(
+            pairs
+                .into_iter()
+                .flat_map(|(v, count)| iter::repeat_n(v, count)),
+        );
+
+        assert_eq!(out_counts.n_r(), out_expanded.n_r());
+        assert_eq!(out_counts.n_nz(), out_expanded.n_nz());
+        rel_approx_eq!(out_counts.mean().0, out_expanded.mean().0, EPSILON);
+        rel_approx_eq!(out_counts.stdev_r().0, out_expanded.stdev_r().0, EPSILON);
+        rel_approx_eq!(out_counts.mean_ln_r(), out_expanded.mean_ln_r(), EPSILON);
+        rel_approx_eq!(out_counts.stdev_ln_r(), out_expanded.stdev_ln_r(), EPSILON);
     }
 
     #[test]
