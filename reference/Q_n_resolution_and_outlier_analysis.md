@@ -80,17 +80,24 @@ The hdrhistogram API names four quantities on this grid; §1.4 relies on all of 
   values collapsing into `v`'s slot — i.e. `next_non_equivalent(v) - lowest_equivalent(v)`. It
   equals `2^(n + unit_magnitude)` for `v`'s bucket `n`, so it doubles from each bucket to the next.
 
-Sub-bucket `m` of bucket `n` has low edge `value_from_loc(n, m) = m · 2^(n + unit_magnitude)`
-(`lib.rs:1599-1606`) and width `2^(n + unit_magnitude)`. Adding the width and subtracting one gives
-the top (inclusive) edge:
+Three quantities fix the grid, and the fourth follows from them:
 
-- **High point of sub-bucket `m` within bucket `n`:**
+- **Width of a sub-bucket in bucket `n`** — the same for every sub-bucket of that bucket, so it
+  does not depend on `m`; this is the `equivalent_range` defined above:
+  `W(n) = 2^(n + unit_magnitude)`
+- **Low point of sub-bucket `m` within bucket `n`**, inclusive (the crate computes it as
+  `value_from_loc`, `lib.rs:1599-1606`):
+  `L(n, m) = m · 2^(n + unit_magnitude)`
+- **High point of sub-bucket `m` within bucket `n`**, inclusive — its low point plus its width,
+  minus one, i.e. `L(n, m) + W(n) − 1`:
   `H(n, m) = (m + 1) · 2^(n + unit_magnitude) − 1`
 - **High point of bucket `n`** (its overall top edge, i.e. `H(n, sub_bucket_count − 1)`):
   `H(n) = sub_bucket_count · 2^(n + unit_magnitude) − 1`
 
-These are exact integer formulas, not approximations: `highest_equivalent(v)` is precisely `H(n, m)`
-for the bucket and sub-bucket `v` falls into, since
+These are exact integer formulas, not approximations. Let `n` and `m` be the bucket and sub-bucket
+`v` falls into. Then `lowest_equivalent(v)` is precisely `L(n, m)` — the API resolves `v` to those
+two indices and returns `value_from_loc` of them (`lib.rs:1464-1468`), which *is* the low-point
+formula. And `highest_equivalent(v)` is precisely `H(n, m)`, since
 `highest_equivalent(v) = next_non_equivalent(v) - 1 = lowest_equivalent(v) + equivalent_range(v) - 1`
 (`lib.rs:1475-1503`) reduces algebraically to the same expression.
 
@@ -111,15 +118,15 @@ the next one; that rounding is what makes the per-`sigfig` gain uneven, as shown
 
 Two different quantities are easy to conflate here, so state both:
 
-**Absolute** sub-bucket width is `2^(n + unit_magnitude)` — smallest in bucket 0 and doubling with
-every bucket. This is the only sense in which bucket 0 is the "finest-resolution" bucket.
+**Absolute** sub-bucket width is `W(n)` — smallest in bucket 0 and doubling with every bucket.
+This is the only sense in which bucket 0 is the "finest-resolution" bucket.
 
 **Relative** sub-bucket width — width as a fraction of the value held, and the quantity `sigfig`
-actually controls — is *independent of the bucket*. Taking the sub-bucket's low edge
-`v = m · 2^(n + unit_magnitude)` as the reference value, the exponent cancels:
+actually controls — is *independent of the bucket*. Taking the sub-bucket's low edge `L(n, m)` as
+the reference value, the exponent cancels:
 
 ```
-2^(n + unit_magnitude) / v  =  2^(n + unit_magnitude) / (m · 2^(n + unit_magnitude))  =  1/m
+W(n) / L(n, m)  =  2^(n + unit_magnitude) / (m · 2^(n + unit_magnitude))  =  1/m
 ```
 
 Relative width depends only on the sub-bucket index `m`, never on `n`. Over the populated index
@@ -159,7 +166,8 @@ histogram via `Histogram::<u64>::new_with_max(hist_high, hist_sigfig)`, and `new
 sigfig)` is defined as `new_with_bounds(1, high, sigfig)` (`lib.rs:712-714`) — so `low = 1` and
 `unit_magnitude = floor(log2(1)) = 0`. Every formula collapses accordingly:
 
-- `equivalent_range` in bucket `n` = `2^n`
+- `W(n) = 2^n` (the `equivalent_range` in bucket `n`)
+- `L(n, m) = m · 2^n`
 - `H(n, m) = (m + 1) · 2^n − 1`
 - `H(n) = sub_bucket_count · 2^n − 1`
 
