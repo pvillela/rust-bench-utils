@@ -102,3 +102,13 @@ Additional scripts (invoke only when explicitly requested):
 - `./validate1.sh` / `./validate-integr-repeat.sh` / `./validate-unit-repeat.sh` — targeted/repeated re-runs of individual `_bench`-gated tests (discovered via `list_bench_tests` examples), useful for chasing down flaky validation failures
 - `./coverage-add-validations.sh` — like `./coverage.sh` but includes `_bench`-gated tests in the coverage run
 - `./exec-omp.sh` / `./exec-herdr.sh` / `./exec-zellij.sh` — convenience launchers
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as markdown files under `.scratch/<feature-slug>/` in this repo. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root (neither exists yet; created lazily). See `docs/agents/domain.md`.
