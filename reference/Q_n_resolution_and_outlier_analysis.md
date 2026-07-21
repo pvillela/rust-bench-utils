@@ -25,19 +25,121 @@
 
 ### 1.1 Theory: HDR bucket resolution as a function of `sigfig`
 
-An `hdrhistogram` (crate `hdrhistogram` 7.5.4, `Histogram::new_with_bounds`,
-`hdrhistogram-7.5.4/src/lib.rs:758-772`) computes its sub-bucket count from `sigfig` as:
+This section establishes what `sigfig` actually buys: the precision with which an hdrhistogram
+(crate `hdrhistogram` 7.5.4) can tell two nearby values apart, expressed as a fraction of their
+magnitude. The bucket grid defined here is what §1.2's tie-fraction analysis and §1.4's
+readout-rounding bound are both stated in terms of.
+
+#### The bucket/sub-bucket scheme
+
+An hdrhistogram records every value into one slot of a two-level structure. Two indices name a
+slot, and both are used throughout this document:
+
+- **Buckets**, indexed `n = 0, 1, 2, ...`, form an ever-widening sequence: bucket `n` covers a
+  value range exactly `2×` as wide as bucket `n - 1`. Bucket 0 anchors the scheme, having no
+  predecessor to widen from.
+- **Sub-buckets**, indexed `m`, subdivide each bucket into `sub_bucket_count` equal-width slots.
+  `sub_bucket_count` is fixed once at construction from `sigfig` (below) and is the *same for every
+  bucket* — it is not recomputed per bucket. All values landing in one sub-bucket become
+  indistinguishable: they increment a single shared count. This is the histogram's only source of
+  quantization error.
+- **For `n ≥ 1`, only the top half of a bucket's sub-buckets is populated** — `m` from
+  `sub_bucket_half_count` to `sub_bucket_count - 1`, where `sub_bucket_half_count =
+  sub_bucket_count / 2` (`hdrhistogram-7.5.4/src/lib.rs:784`). Lower indices would cover values that
+  bucket `n - 1` already covers at twice the precision, so the histogram routes such values there
+  instead and bucket `n`'s bottom half never receives anything. **Bucket 0 is the exception**: with
+  no bucket `-1` beneath it, it uses the full index range `m = 0, ..., sub_bucket_count - 1`.
+
+Two construction-time scalars complete the picture:
+
+- **`lowestDiscernibleValue`** — the crate's API calls it `low`, the first argument to
+  `Histogram::new_with_bounds(low, high, sigfig)` (`lib.rs:736`): the smallest value the histogram
+  is required to distinguish from 0. It fixes the finest *absolute* step the histogram can take.
+- **`unit_magnitude` = `floor(log2(low))`** (`lib.rs:760`): the exponent offset appearing in every
+  formula below. It sets a *floor* on quantization — values differing only in their low
+  `unit_magnitude` bits are never distinguished, anywhere in the histogram. That floor is not the
+  main reason values share a sub-bucket, though: a sub-bucket in bucket `n` spans
+  `2^(n + unit_magnitude)` values (its `equivalent_range`, below), so sharing grows with the bucket
+  index and `unit_magnitude` is merely the `n = 0` case. Note that `sigfig` does not appear in that
+  width — it acts one level up, by fixing *which* bucket a given value lands in: a larger
+  `sub_bucket_count` places that value in a lower-indexed bucket, and hence in a narrower
+  sub-bucket. `unit_magnitude` itself vanishes in this crate, where `low = 1` gives
+  `unit_magnitude = 0` (see the specialization closing this section).
+
+#### Bucket and sub-bucket boundaries
+
+The hdrhistogram API names four quantities on this grid; §1.4 relies on all of them:
+
+- **`lowest_equivalent(v)`** (`lib.rs:1464-1468`): the smallest value recorded into the same slot
+  (same `n` and `m`) as `v` — the low, inclusive edge of `v`'s equivalent range.
+- **`highest_equivalent(v)`** (`lib.rs:1475-1481`): the largest value recorded into that same slot —
+  the high, inclusive edge. This is the "high point" the formulas below compute.
+- **`next_non_equivalent(v)`** (`lib.rs:1500-1503`): the smallest value landing in a *different*
+  slot — one unit past the top of `v`'s range, so `highest_equivalent(v) = next_non_equivalent(v) - 1`.
+- **`equivalent_range(v)`** (`lib.rs:1508-1511`): the width, in raw value units, of the range of
+  values collapsing into `v`'s slot — i.e. `next_non_equivalent(v) - lowest_equivalent(v)`. It
+  equals `2^(n + unit_magnitude)` for `v`'s bucket `n`, so it doubles from each bucket to the next.
+
+Sub-bucket `m` of bucket `n` has low edge `value_from_loc(n, m) = m · 2^(n + unit_magnitude)`
+(`lib.rs:1599-1606`) and width `2^(n + unit_magnitude)`. Adding the width and subtracting one gives
+the top (inclusive) edge:
+
+- **High point of sub-bucket `m` within bucket `n`:**
+  `H(n, m) = (m + 1) · 2^(n + unit_magnitude) − 1`
+- **High point of bucket `n`** (its overall top edge, i.e. `H(n, sub_bucket_count − 1)`):
+  `H(n) = sub_bucket_count · 2^(n + unit_magnitude) − 1`
+
+These are exact integer formulas, not approximations: `highest_equivalent(v)` is precisely `H(n, m)`
+for the bucket and sub-bucket `v` falls into, since
+`highest_equivalent(v) = next_non_equivalent(v) - 1 = lowest_equivalent(v) + equivalent_range(v) - 1`
+(`lib.rs:1475-1503`) reduces algebraically to the same expression.
+
+#### How `sigfig` fixes `sub_bucket_count`
 
 ```
-largest              = 2 * 10^sigfig
-sub_bucket_count      = 2 ^ ceil(log2(largest))
+largest                     = 2 * 10^sigfig
+sub_bucket_count_magnitude  = ceil(log2(largest))
+sub_bucket_count            = 2 ^ sub_bucket_count_magnitude
 ```
 
-Each unit increase in a bucket's `sub_bucket_count` roughly halves the relative width of the
-finest-resolution bucket (`~1/sub_bucket_count` to `~2/sub_bucket_count`, depending on where a
-value falls within its power-of-two bucket range). Concretely:
+(`lib.rs:758`, `770-772`.) `largest` is the largest value to which the histogram guarantees
+single-unit resolution — the direct encoding of "`sigfig` significant decimal digits". Because
+`sub_bucket_count` must be a power of two for direct indexing, it is `largest` **rounded up** to
+the next one; that rounding is what makes the per-`sigfig` gain uneven, as shown below.
 
-| `sigfig` | `largest = 2·10^sigfig` | `ceil(log2(largest))` | `sub_bucket_count` | relative bucket width |
+#### What this means for resolution
+
+Two different quantities are easy to conflate here, so state both:
+
+**Absolute** sub-bucket width is `2^(n + unit_magnitude)` — smallest in bucket 0 and doubling with
+every bucket. This is the only sense in which bucket 0 is the "finest-resolution" bucket.
+
+**Relative** sub-bucket width — width as a fraction of the value held, and the quantity `sigfig`
+actually controls — is *independent of the bucket*. Taking the sub-bucket's low edge
+`v = m · 2^(n + unit_magnitude)` as the reference value, the exponent cancels:
+
+```
+2^(n + unit_magnitude) / v  =  2^(n + unit_magnitude) / (m · 2^(n + unit_magnitude))  =  1/m
+```
+
+Relative width depends only on the sub-bucket index `m`, never on `n`. Over the populated index
+range of any bucket `n ≥ 1` (`m` from `sub_bucket_half_count` to `sub_bucket_count - 1`), `1/m`
+therefore sweeps exactly `~2/sub_bucket_count` down to `~1/sub_bucket_count` — the same band in
+every bucket, and the same band bucket 0 covers over its own top half. This is why one `sigfig`
+dial sets a single relative precision across the histogram's *entire* dynamic range rather than
+just near its smallest values: going from bucket `n` to `n + 1` doubles a sub-bucket's absolute
+width and the value it sits at in equal measure, leaving the ratio fixed. Each unit increase in
+`sub_bucket_count_magnitude` — i.e. each *doubling* of `sub_bucket_count` — halves that band.
+(`sub_bucket_count` is always a power of two, so a "unit increase in `sub_bucket_count`" is not a
+meaningful step; the magnitude is the dial.) This band is what "resolution" means for the rest of
+this document: how finely two nearby latencies can be told apart, as a fraction of their magnitude.
+
+The one region outside the band is **bucket 0's bottom half** (`m` from `1` to
+`sub_bucket_half_count - 1`), which no higher bucket duplicates: there `1/m` grows without bound,
+reaching 100% at `m = 1`. Bounding that region is exactly what `lowestDiscernibleValue` is for —
+values below it get no resolution guarantee. Concretely:
+
+| `sigfig` | `largest = 2·10^sigfig` | `sub_bucket_count_magnitude` | `sub_bucket_count` | relative sub-bucket width (any bucket, populated range) |
 |---|---|---|---|---|
 | 3 | 2,000 | 11 | 2,048 | ~4.9e-4 – 9.8e-4 (~0.05–0.1%) |
 | 4 | 20,000 | 15 | 32,768 | ~3.1e-5 – 6.1e-5 (~0.003–0.006%) |
@@ -48,6 +150,24 @@ Because `sub_bucket_count` is rounded up to the next power of two, the resolutio
 while going 4→5 is only an **8× gain** (`262144 / 32768 = 8`). In other words, the jump from 3 to 4
 buys *more* headroom than the jump from 4 to 5 does — a first hint that 4 already captures most of
 the low-hanging benefit.
+
+#### Specialization to this crate: `unit_magnitude = 0`
+
+The formulas above carry `unit_magnitude` symbolically because that is what the hdrhistogram source
+does, but it is always **zero** here. `new_hdrhist` (`src/bench_out.rs:11-17`) builds every
+histogram via `Histogram::<u64>::new_with_max(hist_high, hist_sigfig)`, and `new_with_max(high,
+sigfig)` is defined as `new_with_bounds(1, high, sigfig)` (`lib.rs:712-714`) — so `low = 1` and
+`unit_magnitude = floor(log2(1)) = 0`. Every formula collapses accordingly:
+
+- `equivalent_range` in bucket `n` = `2^n`
+- `H(n, m) = (m + 1) · 2^n − 1`
+- `H(n) = sub_bucket_count · 2^n − 1`
+
+In particular, bucket 0 has an equivalent range of `2^0 = 1`: single-unit resolution for every value
+below `sub_bucket_count` (32,768 recording units at `sigfig = 4`). This is the fact §1.4 depends on
+when it bounds the `value_at_quantile` readout bias to zero in the "unit-resolution range".
+`BenchOut`'s histograms are constructed with `high = 20_000_000` recording units
+(`src/bench_out.rs:83`).
 
 ### 1.2 Empirical validation: sigfig 3 vs 4 vs 5 on identical samples
 
@@ -137,21 +257,24 @@ While validating the above, the readout side of the `Q_n` computation was also c
 hdrhistogram 7.5.4 source. For any quantile > 0, `Histogram::value_at_quantile`
 (`hdrhistogram-7.5.4/src/lib.rs:1340-1369`) computes `count_at_quantile = ceil(quantile ·
 total_count)`, walks the counts array to the first slot whose cumulative count reaches it, and
-returns **`highest_equivalent`** of that slot's value — the *top* edge of the bucket's equivalent
-range (`next_non_equivalent − 1`, `lib.rs:1475-1481`) — not the bucket midpoint.
+returns **`highest_equivalent`** of that slot's value — the *top* edge of that slot's equivalent
+range (`next_non_equivalent − 1`, `lib.rs:1475-1481`) — not the slot's midpoint. (The slot here is
+a single sub-bucket, §1.1; its width is one `equivalent_range`, not a whole bucket's span.)
 
 `rousseeuw_croux_q_general` records its pairwise differences from `median_equivalent` (midpoint)
-inputs, so a top-of-bucket readout carries a slight systematic upward bias. Two qualifications
+inputs, so a top-of-slot readout carries a slight systematic upward bias. Two qualifications
 bound it:
 
 - **Zero bias in the unit-resolution range.** `equivalent_range = 2^(unit_magnitude +
-  bucket_index)` (`lib.rs:1508-1511`), which is 1 for values below `sub_bucket_count` (32,768
-  units at sigfig 4), where `highest_equivalent(v) = v` exactly. This covers small pairwise
+  bucket_index)` (`lib.rs:1508-1511`) — here simply `2^bucket_index`, since `unit_magnitude = 0` in
+  this crate (§1.1) — which is 1 throughout bucket 0, i.e. for values below `sub_bucket_count`
+  (32,768 units at sigfig 4), where `highest_equivalent(v) = v` exactly. This covers small pairwise
   differences, including most of the `width/3` tied-pair fallback mass.
-- **Above that range**, the bias is at most one bucket width relative to the bucket's bottom edge,
-  ~half a bucket relative to its midpoint — i.e. ≤ ~0.003–0.006% of the Q value at `sigfig=4`,
-  orders of magnitude below `Q_n`'s own sampling noise at these sample sizes. It cannot explain
-  any effect discussed in this document.
+- **Above that range**, the bias is at most one sub-bucket width (one `equivalent_range`) relative
+  to the sub-bucket's bottom edge, ~half a sub-bucket relative to its midpoint — i.e.
+  ≤ ~0.003–0.006% of the Q value at `sigfig=4`, matching the relative sub-bucket width tabulated in
+  §1.1 and orders of magnitude below `Q_n`'s own sampling noise at these sample sizes. It cannot
+  explain any effect discussed in this document.
 
 `rousseeuw_croux_q_general` now wraps the readout as
 `rc_hist.median_equivalent(rc_hist.value_at_quantile(rank_quantile))`, making the output
