@@ -307,13 +307,28 @@ impl BenchOut {
         transf_out: impl Fn(u64) -> f64,
     ) -> f64 {
         let mut rc_hist = Histogram::new_from(&self.hist);
-        for (i, iv_i) in self.hist.iter_recorded().enumerate() {
-            let v = iv_i.value_iterated_to();
-            if v == 0 {
-                continue;
-            }
-            let mid_i = transf_in(self.hist.median_equivalent(v));
-            let count_i: u64 = iv_i.count_at_value();
+
+        // Materialize the recorded entries once. Re-deriving `iter_recorded()` inside the
+        // pairwise loop below (i.e. `self.hist.iter_recorded().skip(i + 1)`) would rebuild the
+        // whole histogram iterator from scratch on every outer step; since that iterator walks
+        // the underlying bucket array -- not just the recorded entries -- up to the position of
+        // the highest recorded value, this turned an intended O(m^2) pairwise comparison (m =
+        // number of distinct recorded values) into something closer to O(m * bucket_depth),
+        // which dominates runtime for large samples.
+        let entries: Vec<(u64, u64, u64)> = self
+            .hist
+            .iter_recorded()
+            .filter_map(|iv| {
+                let v = iv.value_iterated_to();
+                if v == 0 {
+                    return None;
+                }
+                let mid = transf_in(self.hist.median_equivalent(v));
+                Some((mid, iv.count_at_value(), v))
+            })
+            .collect();
+
+        for (i, &(mid_i, count_i, v_i)) in entries.iter().enumerate() {
             if count_i > 1 {
                 // Within-bin pairs: C(count_i, 2) pairs, not count_i - 1. Their true
                 // (pre-quantization) difference is unknown but bounded by the bucket's
@@ -325,18 +340,15 @@ impl BenchOut {
                 // E[|U1-U2|] for two points i.i.d. uniform on the bucket's width, i.e. width/3.
                 // The width is computed in the transformed space (via `transf_in` on both
                 // bucket edges) so this is correct for the nonlinear log-space transform too.
-                let lo = transf_in(self.hist.lowest_equivalent(v));
-                let hi = transf_in(self.hist.next_non_equivalent(v));
+                let lo = transf_in(self.hist.lowest_equivalent(v_i));
+                let hi = transf_in(self.hist.next_non_equivalent(v_i));
                 let within_bucket_diff = hi.saturating_sub(lo) / 3;
                 let n_within_bucket_pairs = count_i * (count_i - 1) / 2;
                 rc_hist
                     .record_n(within_bucket_diff, n_within_bucket_pairs)
                     .expect("shouldn't happen as histogram is sized properly");
             }
-            for iv_j in self.hist.iter_recorded().skip(i + 1) {
-                let v = iv_j.value_iterated_to();
-                let mid_j = transf_in(self.hist.median_equivalent(v));
-                let count_j = iv_j.count_at_value();
+            for &(mid_j, count_j, _) in &entries[i + 1..] {
                 let abs_diff = mid_i.abs_diff(mid_j);
                 let count = count_i * count_j;
                 rc_hist
