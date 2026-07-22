@@ -77,10 +77,11 @@ pub struct BenchOut {
 }
 
 impl BenchOut {
-    #[doc(hidden)]
     /// Creates a new empty instance based on `cfg`.
     pub fn new(cfg: &BenchCfg, batch: Option<usize>) -> Self {
-        let hist = new_hdrhist(20 * 1000 * 1000, cfg.sigfig());
+        let high_latency = FpSeconds::from_secs(10);
+        let hist_high = cfg.recording_unit().value_from_fpsecs(high_latency);
+        let hist = new_hdrhist(hist_high, cfg.sigfig());
         let sum = 0.;
         let sum2 = 0.;
         let n_nz = 0;
