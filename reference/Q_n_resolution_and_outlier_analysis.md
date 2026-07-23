@@ -146,7 +146,7 @@ The one region outside the band is **bucket 0's bottom half** (`m` from `1` to
 reaching 100% at `m = 1`. Bounding that region is exactly what `lowestDiscernibleValue` is for —
 values below it get no resolution guarantee. Concretely:
 
-| `sigfig` | `largest = 2·10^sigfig` | `sub_bucket_count_magnitude` | `sub_bucket_count` | relative sub-bucket width (any bucket, populated range) |
+| `sigfig` | `largest = 2·10^sigfig` | `sub_bucket_count_magnitude` | `sub_bucket_count` | relative sub-bucket width (`n ≥ 1` and bucket 0's top half) |
 |---|---|---|---|---|
 | 3 | 2,000 | 11 | 2,048 | ~4.9e-4 – 9.8e-4 (~0.05–0.1%) |
 | 4 | 20,000 | 15 | 32,768 | ~3.1e-5 – 6.1e-5 (~0.003–0.006%) |
