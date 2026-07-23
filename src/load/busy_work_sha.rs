@@ -231,7 +231,7 @@ mod validate_latency {
 /// `effort` attributes. Checking is based on the cumulative latencies over a number of `repeats`.
 mod validate_ratio {
     use super::*;
-    use crate::{BenchCfg, LatencyUnit, duo, test_support::count_for_acc_ltncy};
+    use crate::{BenchCfg, duo, test_support::count_for_acc_ltncy};
     use basic_stats::{dev_utils::ApproxEq, rel_approx_eq};
     use std::time::Instant;
 
@@ -248,9 +248,7 @@ mod validate_ratio {
         let f1 = BusyWork::fun(effort1);
         let f2 = BusyWork::fun(effort2);
 
-        let cfg = BenchCfg::default()
-            .with_recording_unit(LatencyUnit::sub_sec(11))
-            .with_warmup_millis(100);
+        let cfg = BenchCfg::default().with_warmup_millis(100);
 
         let out = duo::bench_run_arg_cfg(
             &cfg,

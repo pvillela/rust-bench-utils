@@ -6,7 +6,7 @@
 //! ```
 
 use bench_utils::{
-    BenchCfg, LatencyUnit, RunLength, bench_run_arg_cfg,
+    BenchCfg, RunLength, bench_run_arg_cfg,
     load::{BusyWork, Calibration},
     test_support::AbsRelDiffFpSecs,
 };
@@ -134,9 +134,7 @@ fn run_and_display(
     let run_length = RunLength::Count(bsz * samp_size);
     let (effort, calibr_ltncy) = calibration.effort_for_latency(target_latency.into());
     let f = BusyWork::fun(effort);
-    let cfg = BenchCfg::default()
-        .with_recording_unit(LatencyUnit::sub_sec(12))
-        .with_warmup_millis(100);
+    let cfg = BenchCfg::default().with_warmup_millis(100);
     let out = bench_run_arg_cfg(&cfg, f, run_length, batch);
 
     let mean = out.mean();

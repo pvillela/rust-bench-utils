@@ -119,7 +119,7 @@ fn run<const K: usize, R, Src>(
 
 const BASE_WARMUP_MILLIS: u64 = 100;
 const BASE_STATUS_MILLIS: u64 = 10;
-const DEFAULT_REC_UNIT: LatencyUnit = LatencyUnit::NANO;
+const DEFAULT_REC_UNIT: LatencyUnit = BenchCfg::DEFAULT_RECORDING_UNIT;
 const DEFAULT_ACC_LTNCY: Duration = Duration::from_millis(1);
 const DEFAULT_RUN_TIME: Duration = Duration::from_millis(100);
 
@@ -245,11 +245,10 @@ mod no_status1 {
     fn test_nanos_1b() {
         const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 100;
-        let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(1);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             target_latency,
             SAMP_SIZE,
@@ -262,12 +261,11 @@ mod no_status1 {
     #[test]
     fn test_nanos_10() {
         const EPSILON: f64 = 0.10;
-        let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(10);
         let samp_size = 100_000; // samp_size >= 1_000_000 makes test's validation stage extremely slow
         let batch = None;
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             target_latency,
             samp_size,
@@ -281,11 +279,10 @@ mod no_status1 {
     fn test_nanos_10b() {
         const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 100;
-        let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(10);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             target_latency,
             SAMP_SIZE,
@@ -298,12 +295,11 @@ mod no_status1 {
     #[test]
     fn test_nanos_100() {
         const EPSILON: f64 = 0.02;
-        let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(100);
         let samp_size = 100_000; // samp_size >= 1_000_000 makes test's validation stage extremely slow
         let batch = None;
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             target_latency,
             samp_size,
@@ -317,11 +313,10 @@ mod no_status1 {
     fn test_nanos_100b() {
         const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 100;
-        let rec_unit = LatencyUnit::sub_sec(10);
         let target_latency = Duration::from_nanos(50);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             target_latency,
             SAMP_SIZE,
@@ -504,11 +499,10 @@ mod with_status1 {
     fn test_nanos_1b() {
         const EPSILON: f64 = 0.15;
         const SAMP_SIZE: usize = 100;
-        let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(1);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
             target_latency,
@@ -522,12 +516,11 @@ mod with_status1 {
     #[test]
     fn test_nanos_10() {
         const EPSILON: f64 = 0.25;
-        let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(10);
         let samp_size = 100_000; // samp_size >= 1_000_000 makes test's validation stage extremely slow
         let batch = None;
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
             target_latency,
@@ -542,11 +535,10 @@ mod with_status1 {
     fn test_nanos_10b() {
         const EPSILON: f64 = 0.05;
         const SAMP_SIZE: usize = 100;
-        let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(10);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
             target_latency,
@@ -560,12 +552,11 @@ mod with_status1 {
     #[test]
     fn test_nanos_100() {
         const EPSILON: f64 = 0.02;
-        let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(100);
         let samp_size = 100_000; // samp_size >= 1_000_000 makes test's validation stage extremely slow
         let batch = None;
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
             target_latency,
@@ -580,11 +571,10 @@ mod with_status1 {
     fn test_nanos_100b() {
         const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 100;
-        let rec_unit = LatencyUnit::sub_sec(10);
         let target_latency = Duration::from_nanos(50);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
             target_latency,
@@ -775,11 +765,10 @@ mod no_status2 {
     fn test_nanos_1b() {
         const EPSILON: f64 = 0.80;
         const SAMP_SIZE: usize = 200;
-        let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(1);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             target_latency,
             SAMP_SIZE,
@@ -792,12 +781,11 @@ mod no_status2 {
     #[test]
     fn test_nanos_10() {
         const EPSILON: f64 = 0.15;
-        let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(10);
         let samp_size = 100_000; // samp_size >= 1_000_000 makes test's validation stage extremely slow
         let batch = None;
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             target_latency,
             samp_size,
@@ -811,11 +799,10 @@ mod no_status2 {
     fn test_nanos_10b() {
         const EPSILON: f64 = 0.10;
         const SAMP_SIZE: usize = 100;
-        let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(10);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             target_latency,
             SAMP_SIZE,
@@ -828,12 +815,11 @@ mod no_status2 {
     #[test]
     fn test_nanos_100() {
         const EPSILON: f64 = 0.02;
-        let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(100);
         let samp_size = 100_000; // samp_size >= 1_000_000 makes test's validation stage extremely slow
         let batch = None;
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             target_latency,
             samp_size,
@@ -847,11 +833,10 @@ mod no_status2 {
     fn test_nanos_100b() {
         const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 100;
-        let rec_unit = LatencyUnit::sub_sec(10);
         let target_latency = Duration::from_nanos(50);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             target_latency,
             SAMP_SIZE,
@@ -1034,11 +1019,10 @@ mod with_status2 {
     fn test_nanos_1b() {
         const EPSILON: f64 = 0.85;
         const SAMP_SIZE: usize = 100;
-        let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(1);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
             target_latency,
@@ -1052,12 +1036,11 @@ mod with_status2 {
     #[test]
     fn test_nanos_10() {
         const EPSILON: f64 = 0.25;
-        let rec_unit = LatencyUnit::sub_sec(12);
         let target_latency = Duration::from_nanos(10);
         let samp_size = 100_000; // samp_size >= 1_000_000 makes test's validation stage extremely slow
         let batch = None;
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
             target_latency,
@@ -1072,11 +1055,10 @@ mod with_status2 {
     fn test_nanos_10b() {
         const EPSILON: f64 = 0.15;
         const SAMP_SIZE: usize = 100;
-        let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(10);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
             target_latency,
@@ -1090,12 +1072,11 @@ mod with_status2 {
     #[test]
     fn test_nanos_100() {
         const EPSILON: f64 = 0.02;
-        let rec_unit = LatencyUnit::sub_sec(11);
         let target_latency = Duration::from_nanos(100);
         let samp_size = 100_000; // samp_size >= 1_000_000 makes test's validation stage extremely slow
         let batch = None;
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
             target_latency,
@@ -1110,11 +1091,10 @@ mod with_status2 {
     fn test_nanos_100b() {
         const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 200;
-        let rec_unit = LatencyUnit::sub_sec(10);
         let target_latency = Duration::from_nanos(50);
         let batch = batch_opt_for_acc_ltncy(target_latency, DEFAULT_ACC_LTNCY);
         run_bench(
-            rec_unit,
+            DEFAULT_REC_UNIT,
             BASE_WARMUP_MILLIS,
             BASE_STATUS_MILLIS,
             target_latency,
