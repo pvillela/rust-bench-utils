@@ -25,7 +25,7 @@ impl BenchCfg {
     /// Default status reporting interval in milliseconds.
     pub const DEFAULT_STATUS_MILLIS: u64 = 1000;
     /// Default unit for recording latencies.
-    pub const DEFAULT_RECORDING_UNIT: LatencyUnit = LatencyUnit::NANO;
+    pub const DEFAULT_RECORDING_UNIT: LatencyUnit = LatencyUnit::sub_sec(11);
     /// Default number of significant decimal digits for the HDR histogram.
     ///
     /// `4` (rather than the coarser `3`) keeps histogram buckets fine enough, relative to typical
