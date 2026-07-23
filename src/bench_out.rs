@@ -1,6 +1,12 @@
 //! Module defining the key data structure produced by [`crate::bench_run`].
 
-use crate::{BenchCfg, FpSeconds, LatencyUnit, SummaryStats, dev_support::memoized_fn, multi};
+use crate::{
+    BenchCfg, FpSeconds, LatencyUnit, SummaryStats,
+    dev_support::{
+        BootDist, DEFAULT_BOOTSTRAP_SEED, SplitMix64, bc_ci, bc_dist, bca_ci, bca_dist, memoized_fn,
+    },
+    multi,
+};
 use basic_stats::{
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments, sample_mean, sample_stdev},
     normal::{student_1samp_ci, student_1samp_p, student_1samp_t, student_1samp_test},
@@ -20,6 +26,10 @@ struct CachedStats {
     rousseeuw_croux_q_ns: Option<FpSeconds>,
     rousseeuw_croux_q_ls: Option<f64>,
     s_hat: Option<f64>,
+    /// Cached BC bootstrap distribution for the robust-median CI (alpha-independent).
+    median_ci_dist: Option<BootDist>,
+    /// Cached BCa bootstrap distribution for the robust-mean CI (alpha-independent).
+    mean_ci_dist: Option<BootDist>,
 }
 
 impl CachedStats {
@@ -34,6 +44,14 @@ impl CachedStats {
     fn s_hat(&mut self) -> &mut Option<f64> {
         &mut self.s_hat
     }
+
+    fn median_ci_dist(&mut self) -> &mut Option<BootDist> {
+        &mut self.median_ci_dist
+    }
+
+    fn mean_ci_dist(&mut self) -> &mut Option<BootDist> {
+        &mut self.mean_ci_dist
+    }
 }
 
 impl Default for CachedStats {
@@ -42,8 +60,73 @@ impl Default for CachedStats {
             rousseeuw_croux_q_ns: None,
             rousseeuw_croux_q_ls: None,
             s_hat: None,
+            median_ci_dist: None,
+            mean_ci_dist: None,
         }
     }
+}
+
+/// Severity of the naive-mean-vs-robust-mean disagreement reported by [`BenchOut::mean_check`].
+///
+/// The bands are keyed on the signed relative gap `(naive_mean - mean_rob) / mean_rob`; a
+/// non-positive gap (no right-tail contamination) is always [`MeanVerdict::Insignificant`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MeanVerdict {
+    /// Gap below [`MEAN_CHECK_MILD_THRESHOLD`]: naive mean is trustworthy.
+    Insignificant,
+    /// Gap in `[MEAN_CHECK_MILD_THRESHOLD, MEAN_CHECK_SIGNIFICANT_THRESHOLD)`: possible contamination.
+    Mild,
+    /// Gap at or above [`MEAN_CHECK_SIGNIFICANT_THRESHOLD`]: the naive mean is likely contaminated.
+    Significant,
+}
+
+/// Lower bound of the [`MeanVerdict::Mild`] band for the mean-disagreement relative gap.
+///
+/// Starting default (5%); to be validated/tuned against simulation data.
+pub const MEAN_CHECK_MILD_THRESHOLD: f64 = 0.05;
+/// Lower bound of the [`MeanVerdict::Significant`] band for the mean-disagreement relative gap.
+///
+/// Starting default (15%); to be validated/tuned against simulation data.
+pub const MEAN_CHECK_SIGNIFICANT_THRESHOLD: f64 = 0.15;
+
+/// Default number of bootstrap resamples for the BC median CI ([`BenchOut::median_rob_ci`]).
+///
+/// Separate from [`DEFAULT_MEAN_CI_RESAMPLES`] so the median (BC) and mean (BCa) intervals can be
+/// tuned independently; the median CI's BC method has no jackknife, so its cost is `O(resamples)`.
+pub const DEFAULT_MEDIAN_CI_RESAMPLES: usize = 1000;
+
+/// Default number of bootstrap resamples for the BCa mean CIs ([`BenchOut::mean_rob_ci`],
+/// [`crate::Comp::ratio_means_boot_ci`]).
+///
+/// Separate from [`DEFAULT_MEDIAN_CI_RESAMPLES`]; the mean CI's BCa method additionally runs a
+/// jackknife (one evaluation per reservoir sample) on top of these resamples.
+pub const DEFAULT_MEAN_CI_RESAMPLES: usize = 2000;
+
+impl MeanVerdict {
+    /// Maps a signed relative gap to a verdict (`rel_gap <= 0` ⇒ [`MeanVerdict::Insignificant`]).
+    pub fn from_rel_gap(rel_gap: f64) -> Self {
+        if rel_gap < MEAN_CHECK_MILD_THRESHOLD {
+            MeanVerdict::Insignificant
+        } else if rel_gap < MEAN_CHECK_SIGNIFICANT_THRESHOLD {
+            MeanVerdict::Mild
+        } else {
+            MeanVerdict::Significant
+        }
+    }
+}
+
+/// Result of [`BenchOut::mean_check`]: the naive and robust mean estimates, their relative gap, and
+/// a [`MeanVerdict`] classifying the disagreement.
+#[derive(Debug, Clone, Copy)]
+pub struct MeanCheck {
+    /// Naive arithmetic mean of the recorded values.
+    pub naive_mean: FpSeconds,
+    /// Robust (batching-bias-corrected) mean estimate ([`BenchOut::mean_rob`]).
+    pub mean_rob: FpSeconds,
+    /// Signed relative gap `(naive_mean - mean_rob) / mean_rob`.
+    pub rel_gap: f64,
+    /// Verdict classifying the gap.
+    pub verdict: MeanVerdict,
 }
 
 /// Contains the latency observations resulting from benchmarking a closure.
@@ -58,12 +141,15 @@ impl Default for CachedStats {
 /// The higher the number of recorded values, the better.
 /// Some statistical functions need at least 5 recorded values to return reasonable values.
 ///
-/// The `*_ln_*` methods provide statistics for `mean(ln(latency(f)))`, where `ln` is the natural logarithm.
-/// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-/// This assumption is widely supported by performance analysis theory and empirical data.
-/// Thus, the `*_ln_*` methods are useful for the analysis of median latencies.
-/// However, batching changes the statistical distribution of the recorded values -- the higher the batch size, the
-/// more the recorded values deviate from log-normal and approach a normal distribution.
+/// Inferential statistics are organized around the **mean**, the location parameter that batching
+/// preserves in expectation: the parametric `student_mean_*` methods provide t-based CIs and tests
+/// for `mean(latency(f))` directly on the recorded values (no log-normality assumption), valid under
+/// batching because batch means are approximately normal (CLT). [`Self::mean_check`] guards the
+/// naive mean against contamination by comparing it to the robust [`Self::mean_rob`]. For the
+/// **median**, [`Self::median_rob_ci`] gives a batching-valid BCa bootstrap interval around the
+/// batching-bias-corrected [`Self::median_rob`]; robust bootstrap intervals for the mean are
+/// available via [`Self::mean_rob_ci`]. The `*_ln_*` accessors ([`Self::mean_ln_r`],
+/// [`Self::stdev_ln_r`]) remain as descriptive statistics of `ln(latency(f))`.
 pub struct BenchOut {
     pub(crate) recording_unit: LatencyUnit,
     pub(crate) hist: Histogram<u64>,
@@ -73,7 +159,21 @@ pub struct BenchOut {
     pub(crate) sum_ln: f64,
     pub(crate) sum2_ln: f64,
     pub(crate) batch: Option<usize>,
+    /// Bounded reservoir of recorded observations (batch means, when batching), in seconds, used as
+    /// the resample pool for the bootstrap confidence intervals. Reservoir-sampled once full.
+    pub(crate) reservoir: Vec<f64>,
+    /// Capacity of `reservoir` (from [`BenchCfg::reservoir_capacity`]).
+    reservoir_capacity: usize,
+    /// Total number of observations offered to the reservoir (for Algorithm R).
+    n_seen: u64,
+    /// Seeded RNG driving reservoir replacement, so retention is deterministic given the data.
+    reservoir_rng: SplitMix64,
     cached_stats: Mutex<CachedStats>,
+    /// Reusable scratch histogram for the Rousseeuw-Croux pairwise-difference computations, pooled
+    /// so repeated `median_rob`/`mean_rob` calls (e.g. across bootstrap resamples) reuse one
+    /// allocation instead of allocating a fresh histogram each time. Intentionally *not* cleared by
+    /// [`Self::reset`], so it persists across the many resets a bootstrap performs.
+    rc_scratch: Mutex<Option<Histogram<u64>>>,
 }
 
 impl BenchOut {
@@ -88,6 +188,7 @@ impl BenchOut {
         let sum_ln = 0.;
         let sum2_ln = 0.;
         let batch = batch.map(|n| n.max(1));
+        let reservoir_capacity = cfg.reservoir_capacity();
         let cached_stats = Mutex::new(CachedStats::default());
 
         Self {
@@ -99,7 +200,12 @@ impl BenchOut {
             sum_ln,
             sum2_ln,
             batch,
+            reservoir: Vec::with_capacity(reservoir_capacity),
+            reservoir_capacity,
+            n_seen: 0,
+            reservoir_rng: SplitMix64::new(DEFAULT_BOOTSTRAP_SEED),
             cached_stats,
+            rc_scratch: Mutex::new(None),
         }
     }
 
@@ -134,7 +240,27 @@ impl BenchOut {
         self.n_nz = 0;
         self.sum_ln = 0.;
         self.sum2_ln = 0.;
+        self.reservoir.clear();
+        self.n_seen = 0;
+        self.reservoir_rng = SplitMix64::new(DEFAULT_BOOTSTRAP_SEED);
         self.cached_stats = Mutex::new(CachedStats::default());
+    }
+
+    /// Offers one observation (in seconds) to the bounded reservoir (Algorithm R).
+    #[inline(always)]
+    fn reservoir_offer(&mut self, value: f64) {
+        if self.reservoir_capacity == 0 {
+            return;
+        }
+        self.n_seen += 1;
+        if self.reservoir.len() < self.reservoir_capacity {
+            self.reservoir.push(value);
+        } else {
+            let j = self.reservoir_rng.next_index(self.n_seen as usize);
+            if j < self.reservoir_capacity {
+                self.reservoir[j] = value;
+            }
+        }
     }
 
     #[inline(always)]
@@ -158,6 +284,13 @@ impl BenchOut {
             self.n_nz += count as u64;
             self.sum_ln += ln * count_f64;
             self.sum2_ln += ln.powi(2) * count_f64;
+        }
+
+        // Offer each of the `count` observations to the bounded reservoir used for bootstrap CIs.
+        // This runs after the timed region (the caller measures inside `src.next()`), so it cannot
+        // perturb the sample it is deciding whether to keep.
+        for _ in 0..count {
+            self.reservoir_offer(mean_elapsed_f64);
         }
     }
 
@@ -257,10 +390,16 @@ impl BenchOut {
 
     /// Sample median of recorded values.
     ///
+    /// Computes only the 0.5 quantile directly (a single histogram scan), rather than materializing
+    /// a full [`SummaryStats`]; this matters because the robust estimators call `median_r` several
+    /// times per evaluation (and many times over during a bootstrap).
+    ///
     /// # Panics
     /// Panics if the number of recorded values is zero.
     pub fn median_r(&self) -> FpSeconds {
-        self.summary().p50
+        assert!(!self.hist.is_empty(), "number of recorded values is zero");
+        self.recording_unit
+            .fpsecs_from_value(self.hist.value_at_quantile(0.50))
     }
 
     //=== Helper functions for estimators ===
@@ -306,7 +445,7 @@ impl BenchOut {
         transf_in: impl Fn(u64) -> u64,
         transf_out: impl Fn(u64) -> f64,
     ) -> f64 {
-        let mut rc_hist = Histogram::new_from(&self.hist);
+        let mut rc_hist = self.take_rc_scratch();
 
         // Materialize the recorded entries once. Re-deriving `iter_recorded()` inside the
         // pairwise loop below (i.e. `self.hist.iter_recorded().skip(i + 1)`) would rebuild the
@@ -370,6 +509,7 @@ impl BenchOut {
         // `median_equivalent` convention used on the inputs above. (No-op for values in the
         // histogram's unit-resolution range, where buckets are exact.)
         let rth_smallest = rc_hist.median_equivalent(rc_hist.value_at_quantile(rank_quantile));
+        self.put_rc_scratch(rc_hist);
         transf_out(rth_smallest) * self.rousseeuw_croux_d()
     }
 
@@ -472,7 +612,7 @@ impl BenchOut {
         }
         let multiplyer = max / (max.ln() - m);
 
-        let mut rc_hist = Histogram::<u64>::new_from(&self.hist);
+        let mut rc_hist = self.take_rc_scratch();
         for iv in self.hist.iter_recorded() {
             let v = iv.value_iterated_to();
             if v == 0 {
@@ -487,6 +627,7 @@ impl BenchOut {
                 .expect("shouldn't happen as histogram is sized properly");
         }
         let median_abs_diff_x = rc_hist.value_at_quantile(0.5);
+        self.put_rc_scratch(rc_hist);
         let median_abs_diff = median_abs_diff_x as f64 / multiplyer;
         median_abs_diff / INV_PHI_0_75
     }
@@ -506,6 +647,178 @@ impl BenchOut {
         }
     }
 
+    //=== Bootstrap confidence intervals ===
+
+    #[doc(hidden)]
+    /// Bounded reservoir of recorded observations (in seconds) used as the bootstrap resample pool.
+    pub fn reservoir(&self) -> &[f64] {
+        &self.reservoir
+    }
+
+    /// Builds a single reusable scratch [`BenchOut`] for bootstrap resampling.
+    ///
+    /// It shares this instance's `sigfig` and batch size, but its histogram is sized only to the
+    /// reservoir's observed maximum (not the full 10 s range), so it — and the Rousseeuw-Croux
+    /// scratch histograms derived from it inside `median_rob`/`mean_rob` — stay small. The scratch
+    /// is reset and refilled per resample via [`Self::record_reset`], so the whole bootstrap
+    /// allocates its histograms once rather than once per resample.
+    fn bootstrap_scratch(&self) -> BenchOut {
+        let max_secs = self.reservoir.iter().copied().fold(0.0_f64, f64::max);
+        let high = self
+            .recording_unit
+            .value_from_fpsecs(FpSeconds(max_secs))
+            .max(1);
+        BenchOut {
+            recording_unit: self.recording_unit,
+            hist: new_hdrhist(high, self.hist.sigfig()),
+            sum: 0.,
+            sum2: 0.,
+            n_nz: 0,
+            sum_ln: 0.,
+            sum2_ln: 0.,
+            batch: self.batch,
+            reservoir: Vec::new(),
+            reservoir_capacity: 0,
+            n_seen: 0,
+            reservoir_rng: SplitMix64::new(DEFAULT_BOOTSTRAP_SEED),
+            cached_stats: Mutex::new(CachedStats::default()),
+            rc_scratch: Mutex::new(None),
+        }
+    }
+
+    /// Borrows the pooled Rousseeuw-Croux scratch histogram (creating it on first use, from this
+    /// instance's histogram geometry), reset to empty and ready to record into.
+    fn take_rc_scratch(&self) -> Histogram<u64> {
+        let mut lock = self.rc_scratch.lock().expect("mutex shouldn't be poisoned");
+        let mut h = lock.take().unwrap_or_else(|| Histogram::new_from(&self.hist));
+        h.reset();
+        h
+    }
+
+    /// Returns the pooled scratch histogram after use.
+    fn put_rc_scratch(&self, h: Histogram<u64>) {
+        *self.rc_scratch.lock().expect("mutex shouldn't be poisoned") = Some(h);
+    }
+
+    /// Clears this instance and records `samples` (in seconds), reusing the existing histogram
+    /// allocation. Used to refill a bootstrap scratch between resamples.
+    fn record_reset(&mut self, samples: &[f64]) {
+        self.reset();
+        for &v in samples {
+            self.capture_data(FpSeconds::from(v));
+        }
+    }
+
+    /// BC (bias-corrected) bootstrap confidence interval for the batching-bias-corrected robust
+    /// median ([`Self::median_rob`]), at confidence level `1 - alpha`.
+    ///
+    /// The interval is computed by resampling the recorded observations (batch means, when batching)
+    /// held in the bounded reservoir and recomputing `median_rob` on each resample. Unlike the
+    /// parametric mean interval, this makes no log-normality assumption and is valid under batching.
+    ///
+    /// Uses **BC** rather than BCa: for a median the jackknife acceleration is weak and unstable
+    /// (leave-one-out barely moves a median), so BC gives essentially the same coverage as BCa
+    /// while its cost is `O(n_resamples)`, independent of reservoir size. (The robust-*mean*
+    /// interval [`Self::mean_rob_ci`], a smoother statistic, keeps full BCa.)
+    ///
+    /// The interval is centered on `median_rob` computed on the reservoir sample, which may differ
+    /// negligibly from [`Self::median_rob`] (computed on the full histogram) when the reservoir is a
+    /// strict subsample.
+    ///
+    /// # Panics
+    /// Panics if the reservoir is empty (no recorded observations) or `alpha` is not in `(0, 1)`.
+    pub fn median_rob_ci(&self, alpha: f64) -> (FpSeconds, FpSeconds) {
+        let (low, high) = self.median_ci_dist().interval(alpha);
+        (low.into(), high.into())
+    }
+
+    /// Memoized (alpha-independent) BC bootstrap distribution backing [`Self::median_rob_ci`].
+    ///
+    /// Computed once at the default resample count/seed and cached in `cached_stats`, so repeated
+    /// `median_rob_ci` calls (e.g. at different confidence levels) only re-extract endpoints.
+    fn median_ci_dist(&self) -> BootDist {
+        self.memoized(CachedStats::median_ci_dist, || {
+            let mut scratch = self.bootstrap_scratch();
+            let stat = |samples: &[f64]| {
+                scratch.record_reset(samples);
+                scratch.median_rob().as_f64()
+            };
+            bc_dist(
+                &self.reservoir,
+                stat,
+                DEFAULT_MEDIAN_CI_RESAMPLES,
+                DEFAULT_BOOTSTRAP_SEED,
+            )
+        })
+    }
+
+    #[doc(hidden)]
+    /// [`Self::median_rob_ci`] with explicit resample count and seed (unmemoized; used by tests).
+    pub fn median_rob_ci_with(
+        &self,
+        alpha: f64,
+        n_resamples: usize,
+        seed: u64,
+    ) -> (FpSeconds, FpSeconds) {
+        let mut scratch = self.bootstrap_scratch();
+        let stat = |samples: &[f64]| {
+            scratch.record_reset(samples);
+            scratch.median_rob().as_f64()
+        };
+        let (low, high) = bc_ci(&self.reservoir, stat, n_resamples, alpha, seed);
+        (low.into(), high.into())
+    }
+
+    /// BCa bootstrap confidence interval for the batching-bias-corrected robust mean
+    /// ([`Self::mean_rob`]), at confidence level `1 - alpha`.
+    ///
+    /// This is the robust, distribution-free companion to the parametric mean interval
+    /// ([`Self::student_mean_ci`]); prefer it when [`Self::mean_check`] flags contamination.
+    ///
+    /// # Panics
+    /// Panics if the reservoir is empty (no recorded observations) or `alpha` is not in `(0, 1)`.
+    pub fn mean_rob_ci(&self, alpha: f64) -> (FpSeconds, FpSeconds) {
+        let (low, high) = self.mean_ci_dist().interval(alpha);
+        (low.into(), high.into())
+    }
+
+    /// Memoized (alpha-independent) BCa bootstrap distribution backing [`Self::mean_rob_ci`].
+    ///
+    /// Computed once at the default resample count/seed and cached in `cached_stats`, so repeated
+    /// `mean_rob_ci` calls only re-extract endpoints (the BCa jackknife runs at most once).
+    fn mean_ci_dist(&self) -> BootDist {
+        self.memoized(CachedStats::mean_ci_dist, || {
+            let mut scratch = self.bootstrap_scratch();
+            let stat = |samples: &[f64]| {
+                scratch.record_reset(samples);
+                scratch.mean_rob().as_f64()
+            };
+            bca_dist(
+                &self.reservoir,
+                stat,
+                DEFAULT_MEAN_CI_RESAMPLES,
+                DEFAULT_BOOTSTRAP_SEED,
+            )
+        })
+    }
+
+    #[doc(hidden)]
+    /// [`Self::mean_rob_ci`] with explicit resample count and seed (unmemoized; used by tests).
+    pub fn mean_rob_ci_with(
+        &self,
+        alpha: f64,
+        n_resamples: usize,
+        seed: u64,
+    ) -> (FpSeconds, FpSeconds) {
+        let mut scratch = self.bootstrap_scratch();
+        let stat = |samples: &[f64]| {
+            scratch.record_reset(samples);
+            scratch.mean_rob().as_f64()
+        };
+        let (low, high) = bca_ci(&self.reservoir, stat, n_resamples, alpha, seed);
+        (low.into(), high.into())
+    }
+
     /// Sample mean of the natural logarithms of recorded [`FpSeconds`] values.
     ///
     /// # Panics
@@ -523,154 +836,79 @@ impl BenchOut {
             .expect("number of non-zero observations is zero")
     }
 
-    #[allow(unused)]
-    /// Student's one-sample t statistic for
-    /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm in [`FpSeconds`]),
-    /// or equivalently, the equality of `median(latency(f))` and `exp(ln_mu0)`.
-    ///
-    /// Without batching, it can be assumed that
-    /// `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// Arguments:
-    /// - `ln_mu0`: hypothesized `mean(ln(latency(f)))`, or equivalently, `ln(median(latency(f)))`,
-    ///   where the latency is expressed in [`FpSeconds`].
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the following conditions is true:
-    /// - `number of non-zero recorded values <= 1`.
-    /// - `self.stdev_ln() == 0`.
-    fn student_ln_t(&self, ln_mu0: f64) -> f64 {
-        let moments = SampleMoments::new(self.n_nz, self.sum_ln, self.sum2_ln);
-        student_1samp_t(&moments, ln_mu0)
-            .expect("`number of non-zero recorded values <= 1` or `self.stdev_ln() == 0`")
+    /// Sample moments of the raw recorded values (in seconds), for the parametric mean inference.
+    fn moments_mean(&self) -> SampleMoments {
+        SampleMoments::new(self.n_r(), self.sum, self.sum2)
     }
 
-    #[allow(unused)]
-    /// Student's one-sample t statistic for
-    /// the equality of `mean(latency(f))` and `mu0` in [`FpSeconds`]),
+    /// Student's one-sample t statistic for the equality of `mean(latency(f))` and `mu0`.
     ///
-    /// For sufficiently high batch sizes, the recorded values can be assumed to be approximately normal.
-    ///
-    /// Arguments:
-    /// - `mu0`: hypothesized `mean(latency(f))`.
+    /// The mean is the location parameter that batching preserves in expectation (the grand mean of
+    /// batch means is unbiased for the true per-execution mean at every batch size). Under batching
+    /// the recorded batch means are approximately normal (CLT), so the Student's t machinery applies
+    /// directly to the raw recorded values; no log-normality assumption is used.
     ///
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
     /// - `number of recorded values <= 1`.
-    /// - `self.stdev() == 0`.
-    fn student_t(&self, mu0: FpSeconds) -> f64 {
-        let moments = SampleMoments::new(self.n_r(), self.sum, self.sum2);
-        student_1samp_t(&moments, mu0.into())
-            .expect("`number of recorded values <= 1` or `self.stdev_ln() == 0`")
+    /// - `self.stdev_r() == 0`.
+    pub fn student_mean_t(&self, mu0: FpSeconds) -> f64 {
+        student_1samp_t(&self.moments_mean(), mu0.into())
+            .expect("`number of recorded values <= 1` or `self.stdev_r() == 0`")
     }
 
-    #[allow(unused)]
-    /// Degrees of freedom for Student's t statistic for `mean(ln(latency(f)))` (where `ln` is the natural logarithm,
-    /// in [`FpSeconds`]).
-    ///
-    /// Without batching, it can be assumed that
-    /// `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// Thus, this statistics equivalently pertains to `ln(median(latency(f)))`.
-    fn student_ln_df(&self) -> f64 {
-        self.n_nz as f64 - 1.
+    /// Degrees of freedom for the one-sample Student's t statistic for `mean(latency(f))`.
+    pub fn student_mean_df(&self) -> f64 {
+        self.n_r() as f64 - 1.
     }
 
-    #[allow(unused)]
-    /// Degrees of freedom for Student's t statistic for `mean(latency(f))` with latency expressed in [`FpSeconds`]).
+    /// p-value of Student's one-sample t-test for the equality of `mean(latency(f))` and `mu0`.
     ///
-    /// For sufficiently high batch sizes, the recorded values can be assumed to be approximately normal.
-    fn student_df(&self) -> f64 {
-        self.n_nz as f64 - 1.
-    }
-
-    /// p-value of Student's one-sample t-test for
-    /// the equality of `mean(ln(latency(f)))` and `ln_mu0` (where `ln` is the natural logarithm, in [`FpSeconds`]),
-    /// or equivalently, the equality of `median(latency(f))` and `exp(ln_mu0)`.
-    ///
-    /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// Arguments:
-    /// - `ln_mu0`: hypothesized `mean(ln(latency(f)))`, or equivalently, `ln(median(latency(f)))`,
-    ///   where the latency is expressed in the recording unit.
+    /// See [`Self::student_mean_t`] for the batching rationale.
     ///
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - Number of non-zero observations <= 1.
-    /// - `self.stdev_ln()` == 0.
-    pub fn student_ln_p(&self, ln_mu0: f64, alt_hyp: AltHyp) -> f64 {
-        let moments = SampleMoments::new(self.n_nz, self.sum_ln, self.sum2_ln);
-        student_1samp_p(&moments, ln_mu0, alt_hyp)
-            .expect("`number of non-zero observations <= 1` or `self.stdev_ln() == 0`")
+    /// - `number of recorded values <= 1`.
+    /// - `self.stdev_r() == 0`.
+    pub fn student_mean_p(&self, mu0: FpSeconds, alt_hyp: AltHyp) -> f64 {
+        student_1samp_p(&self.moments_mean(), mu0.into(), alt_hyp)
+            .expect("`number of recorded values <= 1` or `self.stdev_r() == 0`")
     }
 
-    /// Student's one-sample confidence interval for
-    /// `mean(ln(latency(f)))` (where `ln` is the natural logarithm, in [`FpSeconds`]),
-    /// with confidence level `(1 - alpha)`.
+    /// Student's one-sample confidence interval for `mean(latency(f))`, expressed as a pair of
+    /// [`FpSeconds`] (low, high), with confidence level `(1 - alpha)`.
     ///
-    /// Assumes that `latency(f)` is approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
+    /// See [`Self::student_mean_t`] for the batching rationale. When [`Self::mean_check`] flags
+    /// contamination, prefer the robust bootstrap interval [`Self::mean_rob_ci`].
     ///
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `Number of non-zero observations <= 1`.
+    /// - `number of recorded values <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_ln_ci(&self, alpha: f64) -> Ci {
-        let moments = SampleMoments::new(self.n_nz, self.sum_ln, self.sum2_ln);
-        student_1samp_ci(&moments, alpha).expect(
-            "`number of non-zero observations <= 1` or `alpha` not in open interval `(0, 1)`",
-        )
+    pub fn student_mean_ci(&self, alpha: f64) -> (FpSeconds, FpSeconds) {
+        let Ci(low, high) = student_1samp_ci(&self.moments_mean(), alpha).expect(
+            "`number of recorded values <= 1` or `alpha` not in open interval `(0, 1)`",
+        );
+        (low.into(), high.into())
     }
 
-    /// Student's one-sample confidence interval for
-    /// `median(latency(f))`,
-    /// with confidence level `(1 - alpha)`.
-    ///
-    /// The confidence interval is expressed as a pair of [`FpSeconds`] representing the
-    /// low and high ends of the interval.
-    ///
-    /// Assumes that `latency(f)` is approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
+    /// Position of `value` with respect to Student's one-sample confidence interval for
+    /// `mean(latency(f))`, with confidence level `(1 - alpha)`.
     ///
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `Sample size <= 1`.
+    /// - `number of recorded values <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_median_ci(&self, alpha: f64) -> (FpSeconds, FpSeconds) {
-        let Ci(log_low, log_high) = self.student_ln_ci(alpha);
-        let low = log_low.exp().into();
-        let high = log_high.exp().into();
-        (low, high)
-    }
-
-    /// Position of `value` with respect to
-    /// Student's one-sample confidence interval for
-    /// `median(latency(f))`,
-    /// with confidence level `(1 - alpha)`.
-    ///
-    /// Assumes that `latency(f)` is approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the following conditions is true:
-    /// - `Sample size <= 1`.
-    /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_value_position_wrt_median_ci(
+    pub fn student_value_position_wrt_mean_ci(
         &self,
         value: FpSeconds,
         alpha: f64,
     ) -> PositionWrtCi {
-        let (low, high) = self.student_median_ci(alpha);
+        let (low, high) = self.student_mean_ci(alpha);
         if value < low {
             PositionWrtCi::Below
         } else if value > high {
@@ -680,28 +918,49 @@ impl BenchOut {
         }
     }
 
-    /// Student's one-sample test of the hypothesis that
-    /// `mean(ln(latency(f))) == ln_mu0` (where `ln` is the natural logarithm, in [`FpSeconds`]), or equivalently,
-    /// `median(latency(f)) == exp(ln_mu0)`.
+    /// Student's one-sample test of the hypothesis that `mean(latency(f)) == mu0`.
     ///
-    /// Under the assumption that `latency(f)` is approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// Arguments:
-    /// - `ln_mu0`: hypothesized `mean(ln(latency(f)))`, or equivalently, `ln(median(latency(f)))`,
-    ///   where the latency is expressed in the recording unit.
-    /// - `alt_hyp`: alternative hypothesis.
-    /// - `alpha`: confidence level is `1 - alpha`.
+    /// See [`Self::student_mean_t`] for the batching rationale.
     ///
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `number of non-zero observations <= 1`.
-    /// - `self.stdev_ln()` == 0.
+    /// - `number of recorded values <= 1`.
+    /// - `self.stdev_r() == 0`.
     /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_ln_test(&self, ln_mu0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
-        let moments = SampleMoments::new(self.n_nz, self.sum_ln, self.sum2_ln);
-        student_1samp_test(&moments, ln_mu0, alt_hyp, alpha).expect("`number of non-zero observations <= 1` or `self.stdev_ln() == 0` or `alpha` not in open interval `(0, 1)`")
+    pub fn student_mean_test(
+        &self,
+        mu0: FpSeconds,
+        alt_hyp: AltHyp,
+        alpha: f64,
+    ) -> HypTestResult {
+        student_1samp_test(&self.moments_mean(), mu0.into(), alt_hyp, alpha).expect(
+            "`number of recorded values <= 1` or `self.stdev_r() == 0` or `alpha` not in open interval `(0, 1)`",
+        )
+    }
+
+    /// Contamination diagnostic comparing the naive arithmetic mean against the robust mean.
+    ///
+    /// The parametric mean interval ([`Self::student_mean_ci`]) is efficient on clean data but
+    /// fragile under right-tail contamination (GC pauses, scheduler preemption), which inflates the
+    /// arithmetic mean while the robust [`Self::mean_rob`] resists it. `mean_check` reports both
+    /// estimates, their relative gap `(naive_mean - mean_rob) / mean_rob`, and a
+    /// [`MeanVerdict`]; a positive gap is the fingerprint of contamination. When the verdict is
+    /// not [`MeanVerdict::Insignificant`], prefer the robust estimate / [`Self::mean_rob_ci`].
+    ///
+    /// # Panics
+    /// Panics if the number of recorded values is zero.
+    pub fn mean_check(&self) -> MeanCheck {
+        let naive_mean = self.mean();
+        let mean_rob = self.mean_rob();
+        let rel_gap = (naive_mean.as_f64() - mean_rob.as_f64()) / mean_rob.as_f64();
+        let verdict = MeanVerdict::from_rel_gap(rel_gap);
+        MeanCheck {
+            naive_mean,
+            mean_rob,
+            rel_gap,
+            verdict,
+        }
     }
 
     #[cfg(feature = "_test_support")]
@@ -781,7 +1040,7 @@ mod test {
     use basic_stats::{
         approx_eq,
         core::{AcceptedHyp, PositionWrtCi},
-        normal::{normal_rand_samp, student_1samp_df, student_1samp_p},
+        normal::{student_1samp_df, student_1samp_p},
         rel_approx_eq,
     };
     use statrs::distribution::{ContinuousCDF, Normal};
@@ -989,79 +1248,58 @@ mod test {
 
         let cfg = BenchCfg::default();
 
-        let lognormal_samp = lognormal_samp(mu, sigma, samp_size);
+        // Materialize the sample so the crate's exact `sum`/`sum2` accumulators and the reference
+        // moments are computed over the very same raw second-values (the mean methods use the
+        // accumulators, not the histogram, so this is an exact-equality check).
+        let samp: Vec<FpSeconds> = lognormal_samp(mu, sigma, samp_size).collect();
         let mut out = BenchOut::new(&cfg, None);
-        out.record_from_iter(lognormal_samp);
+        out.record_from_iter(samp.iter().copied());
 
-        let normal_samp = normal_rand_samp(mu, sigma, samp_size).unwrap();
-        let moments_ln = SampleMoments::from_iterator(normal_samp);
+        let moments_ns = SampleMoments::from_iterator(samp.iter().map(|x| x.as_f64()));
 
         assert_eq!(out.n_r() as usize, samp_size);
 
-        // The true median should lie inside the CI
-        let true_median = FpSeconds(mu.exp());
-        let position = out.student_value_position_wrt_median_ci(true_median, ALPHA);
+        // The true (population) mean should lie inside the mean CI.
+        let true_mean = FpSeconds((mu + sigma * sigma / 2.0).exp());
+        let position = out.student_value_position_wrt_mean_ci(true_mean, ALPHA);
         assert_eq!(position, PositionWrtCi::In);
 
         {
-            let ratio_medians: f64 = 1.0;
-            let mu0 = mu - ratio_medians.ln();
+            // mu0 at the sample mean → t ≈ 0 → accept the null.
+            let mu0 = out.mean();
             let alt_hyp = AltHyp::Ne;
             let exp_accepted_hyp = AcceptedHyp::Null;
 
-            let exp_t = student_1samp_t(&moments_ln, mu0).unwrap();
-            let exp_df = student_1samp_df(&moments_ln).unwrap();
-            let exp_p = student_1samp_p(&moments_ln, mu0, alt_hyp).unwrap();
-            let exp_ln_ci = student_1samp_ci(&moments_ln, ALPHA).unwrap();
-            let exp_ci_ns_low = exp_ln_ci.0.exp();
-            let exp_ci_ns_high = exp_ln_ci.1.exp();
+            let exp_t = student_1samp_t(&moments_ns, mu0.as_f64()).unwrap();
+            let exp_df = student_1samp_df(&moments_ns).unwrap();
+            let exp_p = student_1samp_p(&moments_ns, mu0.as_f64(), alt_hyp).unwrap();
+            let exp_ci = student_1samp_ci(&moments_ns, ALPHA).unwrap();
 
-            approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON);
-            approx_eq!(exp_df, out.student_ln_df(), EPSILON);
-            rel_approx_eq!(exp_p, out.student_ln_p(mu0, alt_hyp), EPSILON);
-            rel_approx_eq_fpsecs!(
-                FpSeconds(exp_ci_ns_low),
-                out.student_median_ci(ALPHA).0,
-                EPSILON
-            );
-            rel_approx_eq_fpsecs!(
-                FpSeconds(exp_ci_ns_high),
-                out.student_median_ci(ALPHA).1,
-                EPSILON
-            );
-            let student_test = out.student_ln_test(mu0, alt_hyp, ALPHA);
-            println!("out.student_test={student_test:?}");
+            approx_eq!(exp_t, out.student_mean_t(mu0), EPSILON);
+            approx_eq!(exp_df, out.student_mean_df(), EPSILON);
+            rel_approx_eq!(exp_p, out.student_mean_p(mu0, alt_hyp), EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_ci.0), out.student_mean_ci(ALPHA).0, EPSILON);
+            rel_approx_eq_fpsecs!(FpSeconds(exp_ci.1), out.student_mean_ci(ALPHA).1, EPSILON);
+            let student_test = out.student_mean_test(mu0, alt_hyp, ALPHA);
+            println!("out.student_mean_test={student_test:?}");
             assert_eq!(exp_accepted_hyp, student_test.accepted());
         }
 
         {
-            let ratio_medians: f64 = 1.01;
-            let mu0 = mu - ratio_medians.ln();
+            // mu0 1% below the sample mean, one-sided Gt → reject the null (huge n, tiny SE).
+            let mu0 = out.mean() * 0.99;
             let alt_hyp = AltHyp::Gt;
             let exp_accepted_hyp = AcceptedHyp::Alt;
 
-            let exp_t = student_1samp_t(&moments_ln, mu0).unwrap();
-            let exp_df = student_1samp_df(&moments_ln).unwrap();
-            let exp_p = student_1samp_p(&moments_ln, mu0, alt_hyp).unwrap();
-            let exp_ln_ci = student_1samp_ci(&moments_ln, ALPHA).unwrap();
-            let exp_ci_ns_low = exp_ln_ci.0.exp();
-            let exp_ci_ns_high = exp_ln_ci.1.exp();
+            let exp_t = student_1samp_t(&moments_ns, mu0.as_f64()).unwrap();
+            let exp_df = student_1samp_df(&moments_ns).unwrap();
+            let exp_p = student_1samp_p(&moments_ns, mu0.as_f64(), alt_hyp).unwrap();
 
-            rel_approx_eq!(exp_t, out.student_ln_t(mu0), EPSILON);
-            approx_eq!(exp_df, out.student_ln_df(), EPSILON);
-            approx_eq!(exp_p, out.student_ln_p(mu0, alt_hyp), EPSILON);
-            rel_approx_eq_fpsecs!(
-                FpSeconds(exp_ci_ns_low),
-                out.student_median_ci(ALPHA).0,
-                EPSILON
-            );
-            rel_approx_eq_fpsecs!(
-                FpSeconds(exp_ci_ns_high),
-                out.student_median_ci(ALPHA).1,
-                EPSILON
-            );
-            let student_test = out.student_ln_test(mu0, alt_hyp, ALPHA);
-            println!("out.student_test={student_test:?}");
+            rel_approx_eq!(exp_t, out.student_mean_t(mu0), EPSILON);
+            approx_eq!(exp_df, out.student_mean_df(), EPSILON);
+            approx_eq!(exp_p, out.student_mean_p(mu0, alt_hyp), EPSILON);
+            let student_test = out.student_mean_test(mu0, alt_hyp, ALPHA);
+            println!("out.student_mean_test={student_test:?}");
             assert_eq!(exp_accepted_hyp, student_test.accepted());
         }
     }
@@ -1112,12 +1350,53 @@ mod test {
     }
 
     #[test]
-    fn test_student_ln_t_panics_on_single() {
+    fn test_student_mean_t_panics_on_single() {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::new(&cfg, None);
         out.record_from_iter([FpSeconds::from_millis(1)].into_iter());
-        let result = std::panic::catch_unwind(|| out.student_ln_t(0.0));
+        let result =
+            std::panic::catch_unwind(|| out.student_mean_t(FpSeconds::from_millis(1)));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_mean_check_verdict_bands() {
+        assert_eq!(MeanVerdict::from_rel_gap(-0.5), MeanVerdict::Insignificant);
+        assert_eq!(MeanVerdict::from_rel_gap(0.0), MeanVerdict::Insignificant);
+        assert_eq!(MeanVerdict::from_rel_gap(0.04), MeanVerdict::Insignificant);
+        assert_eq!(MeanVerdict::from_rel_gap(0.05), MeanVerdict::Mild);
+        assert_eq!(MeanVerdict::from_rel_gap(0.14), MeanVerdict::Mild);
+        assert_eq!(MeanVerdict::from_rel_gap(0.15), MeanVerdict::Significant);
+        assert_eq!(MeanVerdict::from_rel_gap(1.0), MeanVerdict::Significant);
+    }
+
+    #[test]
+    fn test_median_rob_ci_reproducible_and_brackets() {
+        // Batched lognormal data: the BCa median CI should be reproducible for a fixed seed and
+        // bracket the point estimate. Kept small on purpose: BCa cost is O(n_resamples + n_batches)
+        // robust-median recomputations, each an O(D^2) Rousseeuw-Croux pass, so this uses a modest
+        // batch count and resample count to stay fast.
+        let cfg = BenchCfg::default();
+        let mu = -6.0;
+        let sigma = *LO_STDEV_LN;
+        let n_batches = 80;
+        let samp: Vec<FpSeconds> = lognormal_samp(mu, sigma, n_batches * 8).collect();
+        let mut out = BenchOut::new(&cfg, Some(8));
+        // Record batch means: average groups of 8.
+        let batched = samp.chunks(8).filter(|c| c.len() == 8).map(|c| {
+            let s: f64 = c.iter().map(|x| x.as_f64()).sum();
+            FpSeconds(s / 8.0)
+        });
+        out.record_from_iter(batched);
+
+        let ci1 = out.median_rob_ci_with(ALPHA, 60, 7);
+        let ci2 = out.median_rob_ci_with(ALPHA, 60, 7);
+        assert_eq!(ci1, ci2, "fixed seed must give identical CI");
+        let center = out.median_rob();
+        assert!(
+            ci1.0 <= center && center <= ci1.1,
+            "CI {ci1:?} should bracket median_rob {center:?}"
+        );
     }
 
     #[test]

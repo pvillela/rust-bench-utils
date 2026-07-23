@@ -57,17 +57,16 @@ fn test_bench_run_to_comp_accept_null_hyp() {
         ratio
     );
 
-    // Cannot reject the null hypothesis that ln(median) difference is 0
-    let p = comp.welch_ln_p(0.0, AltHyp::Ne);
+    // Cannot reject the null hypothesis that the difference of means is 0
+    let p = comp.welch_mean_p(FpSeconds::ZERO, AltHyp::Ne);
     assert!(p > 0.05, "p-value should be > 0.05, got {}", p);
 
-    // The CI for ln-difference should contain 0.0
-    let ci = comp.welch_ln_ci(0.05);
+    // The CI for the difference of means should contain 0.0
     assert_eq!(
-        ci.position_of(0.0),
+        comp.welch_value_position_wrt_mean_diff_ci(FpSeconds::ZERO, 0.05),
         PositionWrtCi::In,
-        "CI {:?} should contain 0.0",
-        ci
+        "difference-of-means CI {:?} should contain 0.0",
+        comp.welch_mean_diff_ci(0.05)
     );
 }
 
@@ -99,12 +98,12 @@ fn test_bench_run_to_comp_reject_null_hyp() {
     let ratio = comp.ratio_medians_f1_f2_r();
     approx_eq!(10.0 / 9.0, ratio, 0.01);
 
-    // Must reject the null hypothesis that ln(median) difference is 0
-    let p = comp.welch_ln_p(0.0, AltHyp::Gt);
+    // Must reject the null hypothesis that the difference of means is 0
+    let p = comp.welch_mean_p(FpSeconds::ZERO, AltHyp::Gt);
     assert!(p < 0.05, "p-value should be < 0.05, got {}", p);
 
-    // The CI for the ratio should contain 10.0 / 9.0
-    let ci = comp.welch_ratio_ci(0.05);
+    // The CI for the ratio of means should contain 10.0 / 9.0
+    let ci = comp.ratio_means_ci(0.05);
     assert_eq!(
         ci.position_of(10.0 / 9.0),
         PositionWrtCi::In,

@@ -94,144 +94,66 @@ impl DuoOut {
         self.comp().mean_ratio_f1_f2_rob()
     }
 
-    /// Welch's t statistic for the hypothesis that
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm, in the recording unit),
-    /// or equivalently, `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
-    ///
-    /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// Arguments:
-    /// - `ln_d0`: hypothesized value of `mean(ln(latency(f1))) - mean(ln(latency(f2)))`, or equivalently,
-    ///   `ln(median(latency(f1)) / median(latency(f2)))`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_nz <= 1`.
-    /// - `self.out_f2().n_nz <= 1`.
-    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
-    pub fn welch_ln_t(&self, ln_d0: f64) -> f64 {
-        self.comp().welch_ln_t(ln_d0)
+    /// Ratio between the (naive arithmetic) means of `f1` and `f2`. Delegates to [`Comp::ratio_means_f1_f2`].
+    pub fn ratio_means_f1_f2(&self) -> f64 {
+        self.comp().ratio_means_f1_f2()
     }
 
-    /// Degrees of freedom for Welch's t statistic for
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2)))` (where `ln` is the natural logarithm, in the recording unit).
-    ///
-    /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    /// Thus, this statistic equivalently pertains to `ln(median(latency(f1)) / median(latency(f2)))`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_nz <= 1`.
-    /// - `self.out_f2().n_nz <= 1`.
-    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
-    pub fn welch_ln_df(&self) -> f64 {
-        self.comp().welch_ln_df()
+    /// Welch's two-sample t statistic for `mean(latency(f1)) - mean(latency(f2)) == d0`.
+    /// Delegates to [`Comp::welch_mean_t`].
+    pub fn welch_mean_t(&self, d0: FpSeconds) -> f64 {
+        self.comp().welch_mean_t(d0)
     }
 
-    /// p-value of Welch's two-sample t-test of the hypothesis that
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm, in the recording unit),
-    /// or equivalently, `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
-    ///
-    /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// Arguments:
-    /// - `ln_d0`: hypothesized value of `mean(ln(latency(f1))) - mean(ln(latency(f2)))`, or equivalently,
-    ///   `ln(median(latency(f1)) / median(latency(f2)))`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_nz <= 1`.
-    /// - `self.out_f2().n_nz <= 1`.
-    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
-    pub fn welch_ln_p(&self, ln_d0: f64, alt_hyp: AltHyp) -> f64 {
-        self.comp().welch_ln_p(ln_d0, alt_hyp)
+    /// Degrees of freedom for Welch's t statistic for `mean(latency(f1)) - mean(latency(f2))`.
+    /// Delegates to [`Comp::welch_mean_df`].
+    pub fn welch_mean_df(&self) -> f64 {
+        self.comp().welch_mean_df()
     }
 
-    /// Welch confidence interval for
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2)))` (where `ln` is the natural logarithm, in the recording unit),
-    /// with confidence level `(1 - alpha)`.
-    ///
-    /// Assumes that both `latency(f1)` and `latency(f2)` are approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// This is also the confidence interval for the difference of medians of logarithms under the above assumption.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_nz <= 1`.
-    /// - `self.out_f2().n_nz <= 1`.
-    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
-    /// - `alpha` not in open interval `(0, 1)`.
-    pub fn welch_ln_ci(&self, alpha: f64) -> Ci {
-        self.comp().welch_ln_ci(alpha)
+    /// p-value of Welch's two-sample t-test of `mean(latency(f1)) - mean(latency(f2)) == d0`.
+    /// Delegates to [`Comp::welch_mean_p`].
+    pub fn welch_mean_p(&self, d0: FpSeconds, alt_hyp: AltHyp) -> f64 {
+        self.comp().welch_mean_p(d0, alt_hyp)
     }
 
-    /// Welch confidence interval for
-    /// `median(latency(f1)) / median(latency(f2))`,
-    /// with confidence level `(1 - alpha)`.
-    ///
-    /// Assumes that both `latency(f1)` and `latency(f2)` are approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_nz <= 1`.
-    /// - `self.out_f2().n_nz <= 1`.
-    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
-    /// - `alpha` not in open interval `(0, 1)`.
-    pub fn welch_ratio_ci(&self, alpha: f64) -> Ci {
-        self.comp().welch_ratio_ci(alpha)
+    /// Welch confidence interval for the difference of means, with confidence level `(1 - alpha)`.
+    /// Delegates to [`Comp::welch_mean_diff_ci`].
+    pub fn welch_mean_diff_ci(&self, alpha: f64) -> (FpSeconds, FpSeconds) {
+        self.comp().welch_mean_diff_ci(alpha)
     }
 
-    /// Position of `value` with respect to the
-    /// Welch confidence interval for
-    /// `median(latency(f1)) / median(latency(f2))`,
-    /// with confidence level `(1 - alpha)`.
-    ///
-    /// Assumes that both `latency(f1)` and `latency(f2)` are approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_nz <= 1`.
-    /// - `self.out_f2().n_nz <= 1`.
-    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
-    /// - `alpha` not in open interval `(0, 1)`.
-    pub fn welch_value_position_wrt_ratio_ci(&self, value: f64, alpha: f64) -> PositionWrtCi {
-        self.comp().welch_value_position_wrt_ratio_ci(value, alpha)
+    /// Position of `value` with respect to the Welch difference-of-means confidence interval.
+    /// Delegates to [`Comp::welch_value_position_wrt_mean_diff_ci`].
+    pub fn welch_value_position_wrt_mean_diff_ci(
+        &self,
+        value: FpSeconds,
+        alpha: f64,
+    ) -> PositionWrtCi {
+        self.comp().welch_value_position_wrt_mean_diff_ci(value, alpha)
     }
 
-    /// Welch's two-sample t-test of the hypothesis that
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm, in the recording unit),
-    /// or equivalently, `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
-    ///
-    /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// Arguments:
-    /// - `ln_d0`: hypothesized value of `mean(ln(latency(f1))) - mean(ln(latency(f2)))`, or equivalently,
-    ///   `ln(median(latency(f1)) / median(latency(f2)))`.
-    /// - `alt_hyp`: alternative hypothesis.
-    /// - `alpha`: confidence level is `1 - alpha`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_nz <= 1`.
-    /// - `self.out_f2().n_nz <= 1`.
-    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
-    /// - `alpha` not in open interval `(0, 1)`.
-    pub fn welch_ln_test(&self, ln_d0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
-        self.comp().welch_ln_test(ln_d0, alt_hyp, alpha)
+    /// Welch's two-sample t-test of `mean(latency(f1)) - mean(latency(f2)) == d0`.
+    /// Delegates to [`Comp::welch_mean_test`].
+    pub fn welch_mean_test(&self, d0: FpSeconds, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
+        self.comp().welch_mean_test(d0, alt_hyp, alpha)
+    }
+
+    /// Delta-method confidence interval for the ratio of means. Delegates to [`Comp::ratio_means_ci`].
+    pub fn ratio_means_ci(&self, alpha: f64) -> Ci {
+        self.comp().ratio_means_ci(alpha)
+    }
+
+    /// Position of `value` with respect to the delta-method ratio-of-means confidence interval.
+    /// Delegates to [`Comp::welch_value_position_wrt_ratio_means_ci`].
+    pub fn welch_value_position_wrt_ratio_means_ci(&self, value: f64, alpha: f64) -> PositionWrtCi {
+        self.comp().welch_value_position_wrt_ratio_means_ci(value, alpha)
+    }
+
+    /// Percentile bootstrap confidence interval for the ratio of means.
+    /// Delegates to [`Comp::ratio_means_boot_ci`].
+    pub fn ratio_means_boot_ci(&self, alpha: f64) -> Ci {
+        self.comp().ratio_means_boot_ci(alpha)
     }
 
     #[cfg(feature = "_experimental")]

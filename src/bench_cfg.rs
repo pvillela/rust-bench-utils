@@ -17,6 +17,7 @@ pub struct BenchCfg {
     status_millis: u64,
     recording_unit: LatencyUnit,
     sigfig: u8,
+    reservoir_capacity: usize,
 }
 
 impl BenchCfg {
@@ -33,6 +34,14 @@ impl BenchCfg {
     /// ([`crate::BenchOut::rousseeuw_croux_q_ns`]/`_ls`) don't collapse toward the bucket-width
     /// quantization floor for tight-mode latency data.
     pub const DEFAULT_SIGFIG: u8 = 4;
+    /// Default capacity of the bounded reservoir of recorded batch means used for bootstrap CIs.
+    ///
+    /// [`crate::BenchOut`] retains a uniform random subsample of the recorded observations (batch
+    /// means, when batching) in a fixed-capacity reservoir, used by the bootstrap confidence
+    /// intervals ([`crate::BenchOut::median_rob_ci`] and friends). The cap bounds memory and keeps
+    /// the BCa jackknife (one statistic evaluation per retained sample) tractable, while remaining
+    /// far larger than needed for a stable robust-median interval.
+    pub const DEFAULT_RESERVOIR_CAPACITY: usize = 500;
 
     /// The number of milliseconds used to "warm-up" the benchmark.
     pub fn warmup_millis(&self) -> u64 {
@@ -56,6 +65,11 @@ impl BenchCfg {
         self.sigfig
     }
 
+    /// Capacity of the bounded reservoir of recorded batch means used for bootstrap CIs.
+    pub fn reservoir_capacity(&self) -> usize {
+        self.reservoir_capacity
+    }
+
     /// Sets the number of milliseconds used to "warm-up" the benchmark.
     pub fn with_warmup_millis(mut self, warmup_millis: u64) -> Self {
         self.warmup_millis = warmup_millis;
@@ -77,6 +91,12 @@ impl BenchCfg {
     /// Sets the number of significant figures for the HDR histogram.
     pub fn with_sigfig(mut self, sigfig: u8) -> Self {
         self.sigfig = sigfig;
+        self
+    }
+
+    /// Sets the capacity of the bounded reservoir of recorded batch means used for bootstrap CIs.
+    pub fn with_reservoir_capacity(mut self, reservoir_capacity: usize) -> Self {
+        self.reservoir_capacity = reservoir_capacity;
         self
     }
 
@@ -193,6 +213,7 @@ impl Default for BenchCfg {
             status_millis: Self::DEFAULT_STATUS_MILLIS,
             recording_unit: Self::DEFAULT_RECORDING_UNIT,
             sigfig: Self::DEFAULT_SIGFIG,
+            reservoir_capacity: Self::DEFAULT_RESERVOIR_CAPACITY,
         }
     }
 }
@@ -215,6 +236,10 @@ mod test {
         assert_eq!(cfg.recording_unit(), BenchCfg::DEFAULT_RECORDING_UNIT);
         assert_eq!(cfg.sigfig(), BenchCfg::DEFAULT_SIGFIG);
         assert_eq!(cfg.status_millis(), BenchCfg::DEFAULT_STATUS_MILLIS);
+        assert_eq!(
+            cfg.reservoir_capacity(),
+            BenchCfg::DEFAULT_RESERVOIR_CAPACITY
+        );
     }
 
     #[test]
@@ -223,12 +248,14 @@ mod test {
             .with_recording_unit(LatencyUnit::MICRO)
             .with_warmup_millis(100)
             .with_sigfig(5)
-            .with_status_millis(200);
+            .with_status_millis(200)
+            .with_reservoir_capacity(512);
 
         assert_eq!(cfg.warmup_millis(), 100);
         assert_eq!(cfg.recording_unit(), LatencyUnit::MICRO);
         assert_eq!(cfg.sigfig(), 5);
         assert_eq!(200, cfg.status_millis);
+        assert_eq!(cfg.reservoir_capacity(), 512);
     }
 
     #[test]

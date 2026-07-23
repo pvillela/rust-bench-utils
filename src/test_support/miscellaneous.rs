@@ -149,6 +149,28 @@ pub fn lognormal_moments_ln(mu: f64, sigma: f64, k: usize) -> SampleMoments {
     lognormal_moments_ln_jittered(mu, sigma, k, 3, 0.)
 }
 
+/// Computes natural-space sample moments (sum, sum of squares, count) of a jittered lognormal
+/// sample, matching the raw `sum`/`sum2` accumulators of the corresponding [`BenchOut`] (built via
+/// [`lognormal_out_jittered`]). Used to validate the parametric mean inference.
+pub fn lognormal_moments_jittered(
+    mu: f64,
+    sigma: f64,
+    samp_size: usize,
+    n_jitter: i64,
+    jitter_epsilon: f64,
+) -> SampleMoments {
+    let dataset = lognormal_samp_jittered(mu, sigma, samp_size, n_jitter, jitter_epsilon)
+        .map(|latency| latency.as_f64());
+    SampleMoments::from_iterator(dataset)
+}
+
+/// Computes natural-space sample moments of a non-jittered lognormal sample.
+///
+/// Equivalent to [`lognormal_moments_jittered`] with `n_jitter=3` and `jitter_epsilon=0.0`.
+pub fn lognormal_moments(mu: f64, sigma: f64, k: usize) -> SampleMoments {
+    lognormal_moments_jittered(mu, sigma, k, 3, 0.)
+}
+
 /// Writer backed by a [`Vec<u8>`] that can process backspace characters ("\u{8}") properly like stdout and stderr do.
 ///
 /// Used for testing of status reporting by this crate and `bench_diff`.

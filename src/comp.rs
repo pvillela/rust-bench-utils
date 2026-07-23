@@ -1,7 +1,10 @@
-use crate::{BenchOut, FpSeconds};
+use crate::{
+    BenchOut, DEFAULT_MEAN_CI_RESAMPLES, FpSeconds,
+    dev_support::{DEFAULT_BOOTSTRAP_SEED, two_sample_ratio_means_ci},
+};
 use basic_stats::{
     core::{AltHyp, Ci, HypTestResult, PositionWrtCi, SampleMoments},
-    normal::{welch_ci, welch_df, welch_p, welch_t, welch_test},
+    normal::{welch_ci, welch_df, welch_p, welch_t, welch_test, z_alpha},
 };
 
 #[cfg(feature = "_experimental")]
@@ -16,13 +19,11 @@ use basic_stats::wilcoxon::RankSum;
 /// time-dependent noise. See crate [`bench_diff`](https://docs.rs/bench_diff/latest/bench_diff/) for a discussion
 /// of time-dependent noise and why the use `bench_diff` should be preferred for latency comparisons.
 ///
-/// The `*_ln_*` methods provide statistics for `mean(ln(latency(f1))) - mean(ln(latency(f2)))`,
-/// where `ln` is the natural logarithm.
-/// Under the assumption that latency distributions are approximately log-normal,
-/// `mean(ln(latency(f))) == ln(median(latency(f)))`.
-/// This assumption is widely supported by performance analysis theory and empirical data.
-/// Thus, the `*_ln_*` methods are useful for the analysis of differences of natural logarithms of median latencies,
-/// or equivalently, the ratio of median latencies.
+/// The `welch_mean_*` methods provide parametric two-sample inference for the difference of means
+/// `mean(latency(f1)) - mean(latency(f2))`, and [`Self::ratio_means_ci`] for the ratio of means. The
+/// mean is the location parameter that batching preserves in expectation, so these are valid under
+/// batching with no log-normality assumption. The robust companions ([`Self::mean_diff_f1_f2_rob`],
+/// [`Self::mean_ratio_f1_f2_rob`], [`Self::ratio_means_boot_ci`]) resist contamination.
 pub struct Comp<'a>(pub(crate) &'a BenchOut, pub(crate) &'a BenchOut);
 
 impl<'a> Comp<'a> {
@@ -119,168 +120,179 @@ impl<'a> Comp<'a> {
         self.0.mean_rob().as_f64() / self.1.mean_rob().as_f64()
     }
 
-    fn moments_ln_f1(&self) -> SampleMoments {
-        SampleMoments::new(self.0.n_nz, self.0.sum_ln, self.0.sum2_ln)
+    /// Ratio between the (naive arithmetic) means of `f1` and `f2`.
+    ///
+    /// # Panics
+    /// Panics if `self.out_f1().n() == 0` or `self.out_f2().n() == 0`.
+    pub fn ratio_means_f1_f2(&self) -> f64 {
+        self.0.mean().as_f64() / self.1.mean().as_f64()
     }
 
-    fn moments_ln_f2(&self) -> SampleMoments {
-        SampleMoments::new(self.1.n_nz, self.1.sum_ln, self.1.sum2_ln)
+    fn moments_mean_f1(&self) -> SampleMoments {
+        SampleMoments::new(self.0.n_r(), self.0.sum, self.0.sum2)
     }
 
-    /// Welch's t statistic for the hypothesis that
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm, in the recording unit),
-    /// or equivalently, `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
+    fn moments_mean_f2(&self) -> SampleMoments {
+        SampleMoments::new(self.1.n_r(), self.1.sum, self.1.sum2)
+    }
+
+    /// Welch's two-sample t statistic for the hypothesis that
+    /// `mean(latency(f1)) - mean(latency(f2)) == d0`.
     ///
-    /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// Arguments:
-    /// - `ln_d0`: hypothesized value of `mean(ln(latency(f1))) - mean(ln(latency(f2)))`, or equivalently,
-    ///   `ln(median(latency(f1)) / median(latency(f2)))`.
+    /// Under batching the recorded batch means are approximately normal (CLT) and their grand means
+    /// are unbiased for the true per-execution means, so Welch's t applies directly to the raw
+    /// recorded values with no log-normality assumption.
     ///
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_nz <= 1`.
-    /// - `self.out_f2().n_nz <= 1`.
-    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
-    pub fn welch_ln_t(&self, ln_d0: f64) -> f64 {
-        welch_t(&self.moments_ln_f1(), &self.moments_ln_f2(), ln_d0).expect(
-            "`number of non-zero observations <= 1` for either sample or `both standard deviations == 0`",
+    /// - `self.out_f1().n_r() <= 1`.
+    /// - `self.out_f2().n_r() <= 1`.
+    /// - `self.out_f1().stdev_r() == 0` and `self.out_f2().stdev_r() == 0`.
+    pub fn welch_mean_t(&self, d0: FpSeconds) -> f64 {
+        welch_t(&self.moments_mean_f1(), &self.moments_mean_f2(), d0.into()).expect(
+            "`number of recorded values <= 1` for either sample or `both standard deviations == 0`",
         )
     }
 
-    /// Degrees of freedom for Welch's t statistic for
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2)))` (where `ln` is the natural logarithm, in the recording unit).
-    ///
-    /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    /// Thus, this statistic equivalently pertains to `ln(median(latency(f1)) / median(latency(f2)))`.
+    /// Degrees of freedom for Welch's t statistic for `mean(latency(f1)) - mean(latency(f2))`.
     ///
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_nz <= 1`.
-    /// - `self.out_f2().n_nz <= 1`.
-    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
-    pub fn welch_ln_df(&self) -> f64 {
-        welch_df(&self.moments_ln_f1(), &self.moments_ln_f2()).expect(
-            "`number of non-zero observations <= 1` for either sample or `both standard deviations == 0`",
+    /// - `self.out_f1().n_r() <= 1`.
+    /// - `self.out_f2().n_r() <= 1`.
+    /// - `self.out_f1().stdev_r() == 0` and `self.out_f2().stdev_r() == 0`.
+    pub fn welch_mean_df(&self) -> f64 {
+        welch_df(&self.moments_mean_f1(), &self.moments_mean_f2()).expect(
+            "`number of recorded values <= 1` for either sample or `both standard deviations == 0`",
         )
     }
 
     /// p-value of Welch's two-sample t-test of the hypothesis that
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm, in the recording unit),
-    /// or equivalently, `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
-    ///
-    /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// Arguments:
-    /// - `ln_d0`: hypothesized value of `mean(ln(latency(f1))) - mean(ln(latency(f2)))`, or equivalently,
-    ///   `ln(median(latency(f1)) / median(latency(f2)))`.
+    /// `mean(latency(f1)) - mean(latency(f2)) == d0`.
     ///
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_nz <= 1`.
-    /// - `self.out_f2().n_nz <= 1`.
-    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
-    pub fn welch_ln_p(&self, ln_d0: f64, alt_hyp: AltHyp) -> f64 {
-        welch_p(&self.moments_ln_f1(), &self.moments_ln_f2(), ln_d0, alt_hyp).expect(
-            "`number of non-zero observations <= 1` for either sample or `both standard deviations == 0`",
+    /// - `self.out_f1().n_r() <= 1`.
+    /// - `self.out_f2().n_r() <= 1`.
+    /// - `self.out_f1().stdev_r() == 0` and `self.out_f2().stdev_r() == 0`.
+    pub fn welch_mean_p(&self, d0: FpSeconds, alt_hyp: AltHyp) -> f64 {
+        welch_p(&self.moments_mean_f1(), &self.moments_mean_f2(), d0.into(), alt_hyp).expect(
+            "`number of recorded values <= 1` for either sample or `both standard deviations == 0`",
         )
     }
 
-    /// Welch confidence interval for
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2)))` (where `ln` is the natural logarithm, in the recording unit),
+    /// Welch confidence interval for the difference of means
+    /// `mean(latency(f1)) - mean(latency(f2))`, expressed as a pair of [`FpSeconds`] (low, high),
     /// with confidence level `(1 - alpha)`.
-    ///
-    /// Assumes that both `latency(f1)` and `latency(f2)` are approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// This is also the confidence interval for the difference of medians of logarithms under the above assumption.
     ///
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_nz <= 1`.
-    /// - `self.out_f2().n_nz <= 1`.
-    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
+    /// - `self.out_f1().n_r() <= 1`.
+    /// - `self.out_f2().n_r() <= 1`.
+    /// - `self.out_f1().stdev_r() == 0` and `self.out_f2().stdev_r() == 0`.
     /// - `alpha` not in open interval `(0, 1)`.
-    pub fn welch_ln_ci(&self, alpha: f64) -> Ci {
-        welch_ci(&self.moments_ln_f1(), &self.moments_ln_f2(), alpha).expect("`number of non-zero observations <= 1` for either sample, `both standard deviations == 0`, or `alpha` not in open interval `(0, 1)`")
+    pub fn welch_mean_diff_ci(&self, alpha: f64) -> (FpSeconds, FpSeconds) {
+        let Ci(low, high) = welch_ci(&self.moments_mean_f1(), &self.moments_mean_f2(), alpha).expect("`number of recorded values <= 1` for either sample, `both standard deviations == 0`, or `alpha` not in open interval `(0, 1)`");
+        (low.into(), high.into())
     }
 
-    /// Welch confidence interval for
-    /// `median(latency(f1)) / median(latency(f2))`,
-    /// with confidence level `(1 - alpha)`.
-    ///
-    /// Assumes that both `latency(f1)` and `latency(f2)` are approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
+    /// Position of `value` with respect to the Welch confidence interval for the difference of means
+    /// `mean(latency(f1)) - mean(latency(f2))`, with confidence level `(1 - alpha)`.
     ///
     /// # Panics
     ///
-    /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_nz <= 1`.
-    /// - `self.out_f2().n_nz <= 1`.
-    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
-    /// - `alpha` not in open interval `(0, 1)`.
-    pub fn welch_ratio_ci(&self, alpha: f64) -> Ci {
-        let Ci(log_low, log_high) = self.welch_ln_ci(alpha);
-        let low = log_low.exp();
-        let high = log_high.exp();
-        Ci(low, high)
-    }
-
-    /// Position of `value` with respect to the
-    /// Welch confidence interval for
-    /// `median(latency(f1)) / median(latency(f2))`,
-    /// with confidence level `(1 - alpha)`.
-    ///
-    /// Assumes that both `latency(f1)` and `latency(f2)` are approximately log-normal.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_nz <= 1`.
-    /// - `self.out_f2().n_nz <= 1`.
-    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
-    /// - `alpha` not in open interval `(0, 1)`.
-    pub fn welch_value_position_wrt_ratio_ci(&self, value: f64, alpha: f64) -> PositionWrtCi {
-        let ci = self.welch_ratio_ci(alpha);
-        ci.position_of(value)
+    /// Panics under the same conditions as [`Self::welch_mean_diff_ci`].
+    pub fn welch_value_position_wrt_mean_diff_ci(
+        &self,
+        value: FpSeconds,
+        alpha: f64,
+    ) -> PositionWrtCi {
+        let (low, high) = self.welch_mean_diff_ci(alpha);
+        if value < low {
+            PositionWrtCi::Below
+        } else if value > high {
+            PositionWrtCi::Above
+        } else {
+            PositionWrtCi::In
+        }
     }
 
     /// Welch's two-sample t-test of the hypothesis that
-    /// `mean(ln(latency(f1))) - mean(ln(latency(f2))) == ln_d0` (where `ln` is the natural logarithm, in the recording unit),
-    /// or equivalently, `median(latency(f1)) / median(latency(f2)) == exp(ln_d0)`.
-    ///
-    /// Under the assumption that latencies are approximately log-normal, `mean(ln(latency(f))) == ln(median(latency(f)))`.
-    /// This assumption is widely supported by performance analysis theory and empirical data.
-    ///
-    /// Arguments:
-    /// - `ln_d0`: hypothesized value of `mean(ln(latency(f1))) - mean(ln(latency(f2)))`, or equivalently,
-    ///   `ln(median(latency(f1)) / median(latency(f2)))`.
-    /// - `alt_hyp`: alternative hypothesis.
-    /// - `alpha`: confidence level is `1 - alpha`.
+    /// `mean(latency(f1)) - mean(latency(f2)) == d0`.
     ///
     /// # Panics
     ///
     /// Panics if any of the following conditions is true:
-    /// - `self.out_f1().n_nz <= 1`.
-    /// - `self.out_f2().n_nz <= 1`.
-    /// - `self.out_f1().stdev_ln() == 0` and `self.out_f2().stdev_ln() == 0`.
+    /// - `self.out_f1().n_r() <= 1`.
+    /// - `self.out_f2().n_r() <= 1`.
+    /// - `self.out_f1().stdev_r() == 0` and `self.out_f2().stdev_r() == 0`.
     /// - `alpha` not in open interval `(0, 1)`.
-    pub fn welch_ln_test(&self, ln_d0: f64, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
+    pub fn welch_mean_test(&self, d0: FpSeconds, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
         welch_test(
-            &self.moments_ln_f1(),
-            &self.moments_ln_f2(),
-            ln_d0,
+            &self.moments_mean_f1(),
+            &self.moments_mean_f2(),
+            d0.into(),
             alt_hyp,
             alpha,
-        ).expect("`number of non-zero observations <= 1` for either sample, `both standard deviations == 0`, or `alpha` not in open interval `(0, 1)`")
+        ).expect("`number of recorded values <= 1` for either sample, `both standard deviations == 0`, or `alpha` not in open interval `(0, 1)`")
+    }
+
+    /// Confidence interval for the ratio of means `mean(latency(f1)) / mean(latency(f2))`,
+    /// with confidence level `(1 - alpha)`, via the delta method.
+    ///
+    /// The interval is built on `ln(x̄1 / x̄2)` with variance
+    /// `s1²/(n1·x̄1²) + s2²/(n2·x̄2²)` (Welch-style, unequal variances), then exponentiated. This is
+    /// well-behaved for latencies, whose means are bounded away from zero. For a distribution-free
+    /// alternative, see [`Self::ratio_means_boot_ci`].
+    ///
+    /// # Panics
+    /// Panics if either sample has fewer than 2 recorded values or `alpha` is not in `(0, 1)`.
+    pub fn ratio_means_ci(&self, alpha: f64) -> Ci {
+        assert!(alpha > 0.0 && alpha < 1.0, "alpha must be in (0, 1)");
+        let x1 = self.0.mean().as_f64();
+        let x2 = self.1.mean().as_f64();
+        let s1 = self.0.stdev_r().as_f64();
+        let s2 = self.1.stdev_r().as_f64();
+        let n1 = self.0.n_r() as f64;
+        let n2 = self.1.n_r() as f64;
+        let var_ln = s1 * s1 / (n1 * x1 * x1) + s2 * s2 / (n2 * x2 * x2);
+        let se = var_ln.sqrt();
+        let center = x1.ln() - x2.ln();
+        let z = z_alpha(alpha / 2.0).expect("alpha / 2 is in (0, 1)");
+        Ci((center - z * se).exp(), (center + z * se).exp())
+    }
+
+    /// Position of `value` with respect to the delta-method ratio-of-means confidence interval,
+    /// with confidence level `(1 - alpha)`.
+    pub fn welch_value_position_wrt_ratio_means_ci(
+        &self,
+        value: f64,
+        alpha: f64,
+    ) -> PositionWrtCi {
+        self.ratio_means_ci(alpha).position_of(value)
+    }
+
+    /// Percentile bootstrap confidence interval for the ratio of means
+    /// `mean(latency(f1)) / mean(latency(f2))`, with confidence level `(1 - alpha)`.
+    ///
+    /// Two-sample bootstrap: independently resamples the recorded observations in each output's
+    /// bounded reservoir and recomputes the ratio of resample means. Distribution-free companion to
+    /// [`Self::ratio_means_ci`].
+    ///
+    /// # Panics
+    /// Panics if either reservoir is empty or `alpha` is not in `(0, 1)`.
+    pub fn ratio_means_boot_ci(&self, alpha: f64) -> Ci {
+        two_sample_ratio_means_ci(
+            self.0.reservoir(),
+            self.1.reservoir(),
+            DEFAULT_MEAN_CI_RESAMPLES,
+            alpha,
+            DEFAULT_BOOTSTRAP_SEED,
+        )
     }
 
     #[cfg(feature = "_experimental")]
@@ -307,6 +319,10 @@ impl<'a> Comp<'a> {
     #[cfg(feature = "_experimental")]
     /// Wilcoxon rank sum *W* statistic for `latency(f1)` and `latency(f2)`.
     /// Gated by feature **"_experimental"**.
+    ///
+    /// Distribution-free companion to the mean suite: it assumes no particular latency distribution.
+    /// Note that under batching the recorded observations are batch means, so this tests for a shift
+    /// in the distribution of the *batch means* rather than of per-execution latencies.
     pub fn wilcoxon_rank_sum_w(&self) -> f64 {
         self.rank_sum().w()
     }
@@ -366,11 +382,11 @@ mod test {
     use crate::multi::LatencySrc;
     use crate::multi::test_support::ConstLatencySrc;
     use crate::test_support::{
-        HI_STDEV_LN, LO_STDEV_LN, lognormal_moments_ln, lognormal_moments_ln_jittered,
-        lognormal_out, lognormal_out_jittered,
+        HI_STDEV_LN, LO_STDEV_LN, lognormal_moments, lognormal_moments_jittered, lognormal_out,
+        lognormal_out_jittered,
     };
     use crate::{BenchCfg, LatencyUnit};
-    use basic_stats::{approx_eq, core::AcceptedHyp};
+    use basic_stats::approx_eq;
 
     const EPSILON: f64 = 0.001;
     const JITTER_EPSILON: f64 = EPSILON;
@@ -425,46 +441,54 @@ mod test {
 
         let mu_a = 8.;
         let out_a = lognormal_out(&cfg, mu_a, sigma_lo, samp_size);
-        let moments_ln_a = lognormal_moments_ln(mu_a, sigma_lo, samp_size);
+        let moments_a = lognormal_moments(mu_a, sigma_lo, samp_size);
         let out_aj =
             lognormal_out_jittered(&cfg, mu_a, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
-        let moments_ln_aj =
-            lognormal_moments_ln_jittered(mu_a, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
+        let moments_aj =
+            lognormal_moments_jittered(mu_a, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
 
         let median_ratio_a_b: f64 = 1.01;
         let mu_b = mu_a - median_ratio_a_b.ln();
         let out_bj =
             lognormal_out_jittered(&cfg, mu_b, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
-        let moments_ln_bj =
-            lognormal_moments_ln_jittered(mu_b, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
+        let moments_bj =
+            lognormal_moments_jittered(mu_b, sigma_hi, samp_size, n_jitter, JITTER_EPSILON);
 
-        #[derive(Debug)]
         struct TestArgs<'a> {
             ratio_medians: f64,
-            ln_d0: f64,
+            d0: FpSeconds,
             o1: &'a BenchOut,
-            mom_ln1: &'a SampleMoments,
+            mom1: &'a SampleMoments,
             o2: &'a BenchOut,
-            mom_ln2: &'a SampleMoments,
+            mom2: &'a SampleMoments,
             alt_hyp: AltHyp,
-            accepted_hyp: AcceptedHyp,
+        }
+
+        // Independent reference implementation of the delta-method ratio-of-means CI.
+        fn expected_ratio_means_ci(m1: &SampleMoments, m2: &SampleMoments, alpha: f64) -> Ci {
+            let x1 = m1.mean().unwrap();
+            let x2 = m2.mean().unwrap();
+            let s1 = m1.stdev().unwrap();
+            let s2 = m2.stdev().unwrap();
+            let n1 = m1.n() as f64;
+            let n2 = m2.n() as f64;
+            let var_ln = s1 * s1 / (n1 * x1 * x1) + s2 * s2 / (n2 * x2 * x2);
+            let se = var_ln.sqrt();
+            let center = x1.ln() - x2.ln();
+            let z = z_alpha(alpha / 2.0).unwrap();
+            Ci((center - z * se).exp(), (center + z * se).exp())
         }
 
         let run_test = |args: TestArgs<'_>| {
             let TestArgs {
                 ratio_medians,
-                ln_d0,
+                d0,
                 o1,
-                mom_ln1,
+                mom1,
                 o2,
-                mom_ln2,
+                mom2,
                 alt_hyp,
-                accepted_hyp,
             } = args;
-
-            println!(
-                "ratio_medians={ratio_medians}, ln_d0={ln_d0}, alt_hyp={alt_hyp:?}, accepted_hyp={accepted_hyp:?}"
-            );
 
             let comp = Comp::new(o1, o2);
             let f1_out = comp.out_f1();
@@ -473,6 +497,7 @@ mod test {
             assert!(are_eq_bench_out(o1, f1_out));
             assert!(are_eq_bench_out(o2, f2_out));
 
+            // Unchanged descriptive comparisons.
             assert_eq!(
                 f1_out.median_r() - f2_out.median_r(),
                 comp.diff_medians_f1_f2_r()
@@ -484,113 +509,74 @@ mod test {
             );
             assert_eq!(f1_out.mean() - f2_out.mean(), comp.mean_diff_f1_f2());
             assert_eq!(
+                f1_out.mean().as_f64() / f2_out.mean().as_f64(),
+                comp.ratio_means_f1_f2()
+            );
+            assert_eq!(
                 f1_out.mean_ln_r() - f2_out.mean_ln_r(),
                 comp.mean_diff_ln_f1_f2()
             );
+
+            // Parametric mean suite vs. basic_stats on the natural-space moments.
+            let d0f = d0.as_f64();
+            assert_eq!(welch_t(mom1, mom2, d0f).unwrap(), comp.welch_mean_t(d0));
+            assert_eq!(welch_df(mom1, mom2).unwrap(), comp.welch_mean_df());
             assert_eq!(
-                welch_t(mom_ln1, mom_ln2, ln_d0).unwrap(),
-                comp.welch_ln_t(ln_d0)
+                welch_p(mom1, mom2, d0f, alt_hyp).unwrap(),
+                comp.welch_mean_p(d0, alt_hyp)
             );
-            assert_eq!(welch_df(mom_ln1, mom_ln2).unwrap(), comp.welch_ln_df());
+            let exp_ci = welch_ci(mom1, mom2, ALPHA).unwrap();
+            let (lo, hi) = comp.welch_mean_diff_ci(ALPHA);
+            assert_eq!(FpSeconds(exp_ci.0), lo);
+            assert_eq!(FpSeconds(exp_ci.1), hi);
+
+            // Delta-method ratio-of-means CI vs. the independent reference.
             assert_eq!(
-                welch_p(mom_ln1, mom_ln2, ln_d0, alt_hyp).unwrap(),
-                comp.welch_ln_p(ln_d0, alt_hyp)
+                expected_ratio_means_ci(mom1, mom2, ALPHA),
+                comp.ratio_means_ci(ALPHA)
             );
+
+            // Test delegates to basic_stats' Welch test.
             assert_eq!(
-                welch_ci(mom_ln1, mom_ln2, ALPHA).unwrap(),
-                comp.welch_ln_ci(ALPHA)
-            );
-            let ln_ci = welch_ci(mom_ln1, mom_ln2, ALPHA).unwrap();
-            assert_eq!(Ci(ln_ci.0.exp(), ln_ci.1.exp()), comp.welch_ratio_ci(ALPHA));
-            assert_eq!(
-                PositionWrtCi::In,
-                comp.welch_value_position_wrt_ratio_ci(ratio_medians, ALPHA)
-            );
-            assert_eq!(
-                PositionWrtCi::In,
-                comp.welch_value_position_wrt_ratio_ci(ratio_medians, ALPHA)
-            );
-            println!(
-                "welch_ln_test={:?}",
-                comp.welch_ln_test(ln_d0, alt_hyp, ALPHA)
-            );
-            assert_eq!(
-                accepted_hyp,
-                comp.welch_ln_test(ln_d0, alt_hyp, ALPHA).accepted()
+                welch_test(mom1, mom2, d0f, alt_hyp, ALPHA)
+                    .unwrap()
+                    .accepted(),
+                comp.welch_mean_test(d0, alt_hyp, ALPHA).accepted()
             );
         };
 
-        {
-            let ratio_medians = 1.0_f64;
-            let ln_d0 = 0.;
+        // Scenario 1: hypothesized difference of means 0.
+        run_test(TestArgs {
+            ratio_medians: 1.0,
+            d0: FpSeconds::ZERO,
+            o1: &out_a,
+            mom1: &moments_a,
+            o2: &out_aj,
+            mom2: &moments_aj,
+            alt_hyp: AltHyp::Ne,
+        });
 
-            let o1 = &out_a;
-            let mom_ln1 = &moments_ln_a;
-            let o2 = &out_aj;
-            let mom_ln2 = &moments_ln_aj;
-            let alt_hyp = AltHyp::Ne;
-            let accepted_hyp = AcceptedHyp::Null;
+        // Scenario 2: hypothesized difference 0, one-sided.
+        run_test(TestArgs {
+            ratio_medians: median_ratio_a_b,
+            d0: FpSeconds::ZERO,
+            o1: &out_a,
+            mom1: &moments_a,
+            o2: &out_bj,
+            mom2: &moments_bj,
+            alt_hyp: AltHyp::Gt,
+        });
 
-            let args = TestArgs {
-                ratio_medians,
-                ln_d0,
-                o1,
-                mom_ln1,
-                o2,
-                mom_ln2,
-                alt_hyp,
-                accepted_hyp,
-            };
-            run_test(args);
-        }
-
-        {
-            let ratio_medians = median_ratio_a_b;
-            let ln_d0 = 0.;
-
-            let o1 = &out_a;
-            let mom_ln1 = &moments_ln_a;
-            let o2 = &out_bj;
-            let mom_ln2 = &moments_ln_bj;
-            let alt_hyp = AltHyp::Gt;
-            let accepted_hyp = AcceptedHyp::Alt;
-
-            let args = TestArgs {
-                ratio_medians,
-                ln_d0,
-                o1,
-                mom_ln1,
-                o2,
-                mom_ln2,
-                alt_hyp,
-                accepted_hyp,
-            };
-            run_test(args);
-        }
-
-        {
-            let ratio_medians = median_ratio_a_b;
-            let ln_d0 = ratio_medians.ln();
-
-            let o1 = &out_a;
-            let mom_ln1 = &moments_ln_a;
-            let o2 = &out_bj;
-            let mom_ln2 = &moments_ln_bj;
-            let alt_hyp = AltHyp::Gt;
-            let accepted_hyp = AcceptedHyp::Null;
-
-            let args = TestArgs {
-                ratio_medians,
-                ln_d0,
-                o1,
-                mom_ln1,
-                o2,
-                mom_ln2,
-                alt_hyp,
-                accepted_hyp,
-            };
-            run_test(args);
-        }
+        // Scenario 3: hypothesized difference at the observed difference of means → t ≈ 0.
+        run_test(TestArgs {
+            ratio_medians: median_ratio_a_b,
+            d0: out_a.mean() - out_bj.mean(),
+            o1: &out_a,
+            mom1: &moments_a,
+            o2: &out_bj,
+            mom2: &moments_bj,
+            alt_hyp: AltHyp::Ne,
+        });
     }
 
     #[test]
@@ -604,25 +590,25 @@ mod test {
         let comp = Comp::new(&out1, &out2);
 
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_t(0.0)))
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_t(FpSeconds::ZERO)))
                 .is_err()
         );
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_df())).is_err()
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_df())).is_err()
         );
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                comp.welch_ln_p(0.0, AltHyp::Ne)
+                comp.welch_mean_p(FpSeconds::ZERO, AltHyp::Ne)
             }))
             .is_err()
         );
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_ci(0.05)))
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_diff_ci(0.05)))
                 .is_err()
         );
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                comp.welch_ln_test(0.0, AltHyp::Ne, 0.05)
+                comp.welch_mean_test(FpSeconds::ZERO, AltHyp::Ne, 0.05)
             }))
             .is_err()
         );
@@ -639,25 +625,25 @@ mod test {
         let comp = Comp::new(&out1, &out2);
 
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_t(0.0)))
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_t(FpSeconds::ZERO)))
                 .is_err()
         );
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_df())).is_err()
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_df())).is_err()
         );
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                comp.welch_ln_p(0.0, AltHyp::Ne)
+                comp.welch_mean_p(FpSeconds::ZERO, AltHyp::Ne)
             }))
             .is_err()
         );
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_ci(0.05)))
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_diff_ci(0.05)))
                 .is_err()
         );
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                comp.welch_ln_test(0.0, AltHyp::Ne, 0.05)
+                comp.welch_mean_test(FpSeconds::ZERO, AltHyp::Ne, 0.05)
             }))
             .is_err()
         );
@@ -673,25 +659,25 @@ mod test {
         let comp = Comp::new(&out1, &out2);
 
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_t(0.0)))
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_t(FpSeconds::ZERO)))
                 .is_err()
         );
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_df())).is_err()
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_df())).is_err()
         );
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                comp.welch_ln_p(0.0, AltHyp::Ne)
+                comp.welch_mean_p(FpSeconds::ZERO, AltHyp::Ne)
             }))
             .is_err()
         );
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_ln_ci(0.05)))
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_diff_ci(0.05)))
                 .is_err()
         );
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                comp.welch_ln_test(0.0, AltHyp::Ne, 0.05)
+                comp.welch_mean_test(FpSeconds::ZERO, AltHyp::Ne, 0.05)
             }))
             .is_err()
         );
