@@ -68,26 +68,44 @@ impl Default for CachedStats {
 
 /// Severity of the naive-mean-vs-robust-mean disagreement reported by [`BenchOut::mean_check`].
 ///
-/// The bands are keyed on the signed relative gap `(naive_mean - mean_rob) / mean_rob`; a
-/// non-positive gap (no right-tail contamination) is always [`MeanVerdict::Insignificant`].
+/// The bands are keyed on the **standardized gap** `std_gap = rel_gap · √g / σ_Y` (where
+/// `rel_gap = (naive_mean − mean_rob)/mean_rob`, `g` is the number of recorded batch means, and
+/// `σ_Y = rc_q_ls` is their robust log-scale spread). Standardizing by `σ_Y/√g` — the scale of the
+/// gap's clean-data sampling noise — makes a single set of cutoffs control false alarms across batch
+/// sizes and sample sizes (empirically calibrated in
+/// `analysis/Mean_check_threshold_calibration.md`). A non-positive gap (no right-tail contamination)
+/// is always [`MeanVerdict::Insignificant`].
+///
+/// **High-dispersion caveat:** the standardization assumes `mean_rob` is (near-)unbiased, which
+/// holds while the recorded batch means are near-normal. Under **extreme per-execution skew**
+/// (very heavy-tailed latency, per-execution `σ ≳ 1.5`) `mean_rob` carries a genuine
+/// log-normal-model bias; because that bias does *not* shrink with `√g`, standardizing amplifies it
+/// and the verdict can over-flag even on clean data. This regime is not cleanly identifiable from
+/// `σ_Y` alone (calibration data: a small `σ_Y` heavy-tail cell can be as unreliable as a large one),
+/// so treat a non-`Insignificant` verdict on data you believe is clean as a hint you are in it.
+/// [`MeanCheck::sigma_y`] is reported as a partial signal — a large `σ_Y` (typically unbatched /
+/// heavy-tailed) means less reliability — and batching (which drives `σ_Y = σ/√k` down and pushes
+/// the batch means toward normal) is the fix. See `analysis/Mean_check_threshold_calibration.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MeanVerdict {
-    /// Gap below [`MEAN_CHECK_MILD_THRESHOLD`]: naive mean is trustworthy.
+    /// Standardized gap below [`MEAN_CHECK_MILD_Z`]: naive mean is trustworthy.
     Insignificant,
-    /// Gap in `[MEAN_CHECK_MILD_THRESHOLD, MEAN_CHECK_SIGNIFICANT_THRESHOLD)`: possible contamination.
+    /// Standardized gap in `[MEAN_CHECK_MILD_Z, MEAN_CHECK_SIGNIFICANT_Z)`: possible contamination.
     Mild,
-    /// Gap at or above [`MEAN_CHECK_SIGNIFICANT_THRESHOLD`]: the naive mean is likely contaminated.
+    /// Standardized gap at or above [`MEAN_CHECK_SIGNIFICANT_Z`]: the naive mean is likely contaminated.
     Significant,
 }
 
-/// Lower bound of the [`MeanVerdict::Mild`] band for the mean-disagreement relative gap.
+/// Lower bound of the [`MeanVerdict::Mild`] band for the standardized mean-disagreement gap.
 ///
-/// Starting default (5%); to be validated/tuned against simulation data.
-pub const MEAN_CHECK_MILD_THRESHOLD: f64 = 0.05;
-/// Lower bound of the [`MeanVerdict::Significant`] band for the mean-disagreement relative gap.
+/// Calibrated so clean data flags `Mild` at most ~5% of the time across the near-normal operating
+/// range (`σ_Y ≲ 0.1`, `σ ≤ 1`); see `analysis/Mean_check_threshold_calibration.md`.
+pub const MEAN_CHECK_MILD_Z: f64 = 2.5;
+/// Lower bound of the [`MeanVerdict::Significant`] band for the standardized mean-disagreement gap.
 ///
-/// Starting default (15%); to be validated/tuned against simulation data.
-pub const MEAN_CHECK_SIGNIFICANT_THRESHOLD: f64 = 0.15;
+/// Calibrated so clean data flags `Significant` at most ~1% of the time across the near-normal
+/// operating range; see `analysis/Mean_check_threshold_calibration.md`.
+pub const MEAN_CHECK_SIGNIFICANT_Z: f64 = 4.0;
 
 /// Default number of bootstrap resamples for the BC median CI ([`BenchOut::median_rob_ci`]).
 ///
@@ -103,11 +121,13 @@ pub const DEFAULT_MEDIAN_CI_RESAMPLES: usize = 1000;
 pub const DEFAULT_MEAN_CI_RESAMPLES: usize = 2000;
 
 impl MeanVerdict {
-    /// Maps a signed relative gap to a verdict (`rel_gap <= 0` ⇒ [`MeanVerdict::Insignificant`]).
-    pub fn from_rel_gap(rel_gap: f64) -> Self {
-        if rel_gap < MEAN_CHECK_MILD_THRESHOLD {
+    /// Maps a signed standardized gap `std_gap = rel_gap · √g / σ_Y` to a verdict
+    /// (`std_gap < MEAN_CHECK_MILD_Z` ⇒ [`MeanVerdict::Insignificant`], so non-positive gaps are
+    /// always insignificant).
+    pub fn from_std_gap(std_gap: f64) -> Self {
+        if std_gap < MEAN_CHECK_MILD_Z {
             MeanVerdict::Insignificant
-        } else if rel_gap < MEAN_CHECK_SIGNIFICANT_THRESHOLD {
+        } else if std_gap < MEAN_CHECK_SIGNIFICANT_Z {
             MeanVerdict::Mild
         } else {
             MeanVerdict::Significant
@@ -115,8 +135,8 @@ impl MeanVerdict {
     }
 }
 
-/// Result of [`BenchOut::mean_check`]: the naive and robust mean estimates, their relative gap, and
-/// a [`MeanVerdict`] classifying the disagreement.
+/// Result of [`BenchOut::mean_check`]: the naive and robust mean estimates, their relative gap, the
+/// standardized gap, the robust log-scale spread, and a [`MeanVerdict`] classifying the disagreement.
 #[derive(Debug, Clone, Copy)]
 pub struct MeanCheck {
     /// Naive arithmetic mean of the recorded values.
@@ -125,7 +145,12 @@ pub struct MeanCheck {
     pub mean_rob: FpSeconds,
     /// Signed relative gap `(naive_mean - mean_rob) / mean_rob`.
     pub rel_gap: f64,
-    /// Verdict classifying the gap.
+    /// Standardized gap `rel_gap · √g / σ_Y` — the statistic the [`MeanVerdict`] bands key on.
+    pub std_gap: f64,
+    /// Robust log-scale spread of the recorded batch means, `σ_Y = rc_q_ls`. A partial signal for
+    /// the high-dispersion regime where the verdict is less reliable (see [`MeanVerdict`]).
+    pub sigma_y: f64,
+    /// Verdict classifying the standardized gap.
     pub verdict: MeanVerdict,
 }
 
@@ -944,9 +969,12 @@ impl BenchOut {
     /// The parametric mean interval ([`Self::student_mean_ci`]) is efficient on clean data but
     /// fragile under right-tail contamination (GC pauses, scheduler preemption), which inflates the
     /// arithmetic mean while the robust [`Self::mean_rob`] resists it. `mean_check` reports both
-    /// estimates, their relative gap `(naive_mean - mean_rob) / mean_rob`, and a
-    /// [`MeanVerdict`]; a positive gap is the fingerprint of contamination. When the verdict is
-    /// not [`MeanVerdict::Insignificant`], prefer the robust estimate / [`Self::mean_rob_ci`].
+    /// estimates, their relative gap `(naive_mean - mean_rob) / mean_rob`, the standardized gap
+    /// `rel_gap · √g / σ_Y`, the robust log-scale spread `σ_Y`, and a [`MeanVerdict`]; a positive
+    /// gap is the fingerprint of contamination. The verdict keys on the *standardized* gap so its
+    /// false-alarm rate is stable across batch/sample sizes (see [`MeanVerdict`], including the
+    /// high-dispersion caveat). When the verdict is not [`MeanVerdict::Insignificant`], prefer the
+    /// robust estimate / [`Self::mean_rob_ci`].
     ///
     /// # Panics
     /// Panics if the number of recorded values is zero.
@@ -954,11 +982,22 @@ impl BenchOut {
         let naive_mean = self.mean();
         let mean_rob = self.mean_rob();
         let rel_gap = (naive_mean.as_f64() - mean_rob.as_f64()) / mean_rob.as_f64();
-        let verdict = MeanVerdict::from_rel_gap(rel_gap);
+        let sigma_y = self.rousseeuw_croux_q_ls();
+        let g = self.n_r();
+        // Standardize by the gap's clean-data sampling scale σ_Y/√g. Degenerate σ_Y (all batch
+        // means equal) ⇒ no dispersion to standardize against ⇒ treat as insignificant.
+        let std_gap = if sigma_y > 0.0 && g > 0 {
+            rel_gap * (g as f64).sqrt() / sigma_y
+        } else {
+            0.0
+        };
+        let verdict = MeanVerdict::from_std_gap(std_gap);
         MeanCheck {
             naive_mean,
             mean_rob,
             rel_gap,
+            std_gap,
+            sigma_y,
             verdict,
         }
     }
@@ -1361,13 +1400,29 @@ mod test {
 
     #[test]
     fn test_mean_check_verdict_bands() {
-        assert_eq!(MeanVerdict::from_rel_gap(-0.5), MeanVerdict::Insignificant);
-        assert_eq!(MeanVerdict::from_rel_gap(0.0), MeanVerdict::Insignificant);
-        assert_eq!(MeanVerdict::from_rel_gap(0.04), MeanVerdict::Insignificant);
-        assert_eq!(MeanVerdict::from_rel_gap(0.05), MeanVerdict::Mild);
-        assert_eq!(MeanVerdict::from_rel_gap(0.14), MeanVerdict::Mild);
-        assert_eq!(MeanVerdict::from_rel_gap(0.15), MeanVerdict::Significant);
-        assert_eq!(MeanVerdict::from_rel_gap(1.0), MeanVerdict::Significant);
+        // Bands key on the standardized gap; non-positive gaps are always insignificant.
+        assert_eq!(MeanVerdict::from_std_gap(-5.0), MeanVerdict::Insignificant);
+        assert_eq!(MeanVerdict::from_std_gap(0.0), MeanVerdict::Insignificant);
+        assert_eq!(
+            MeanVerdict::from_std_gap(MEAN_CHECK_MILD_Z - 0.01),
+            MeanVerdict::Insignificant
+        );
+        assert_eq!(
+            MeanVerdict::from_std_gap(MEAN_CHECK_MILD_Z),
+            MeanVerdict::Mild
+        );
+        assert_eq!(
+            MeanVerdict::from_std_gap(MEAN_CHECK_SIGNIFICANT_Z - 0.01),
+            MeanVerdict::Mild
+        );
+        assert_eq!(
+            MeanVerdict::from_std_gap(MEAN_CHECK_SIGNIFICANT_Z),
+            MeanVerdict::Significant
+        );
+        assert_eq!(
+            MeanVerdict::from_std_gap(MEAN_CHECK_SIGNIFICANT_Z + 10.0),
+            MeanVerdict::Significant
+        );
     }
 
     #[test]

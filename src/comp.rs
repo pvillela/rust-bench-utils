@@ -179,7 +179,13 @@ impl<'a> Comp<'a> {
     /// - `self.out_f2().n_r() <= 1`.
     /// - `self.out_f1().stdev_r() == 0` and `self.out_f2().stdev_r() == 0`.
     pub fn welch_mean_p(&self, d0: FpSeconds, alt_hyp: AltHyp) -> f64 {
-        welch_p(&self.moments_mean_f1(), &self.moments_mean_f2(), d0.into(), alt_hyp).expect(
+        welch_p(
+            &self.moments_mean_f1(),
+            &self.moments_mean_f2(),
+            d0.into(),
+            alt_hyp,
+        )
+        .expect(
             "`number of recorded values <= 1` for either sample or `both standard deviations == 0`",
         )
     }
@@ -268,11 +274,7 @@ impl<'a> Comp<'a> {
 
     /// Position of `value` with respect to the delta-method ratio-of-means confidence interval,
     /// with confidence level `(1 - alpha)`.
-    pub fn welch_value_position_wrt_ratio_means_ci(
-        &self,
-        value: f64,
-        alpha: f64,
-    ) -> PositionWrtCi {
+    pub fn welch_value_position_wrt_ratio_means_ci(&self, value: f64, alpha: f64) -> PositionWrtCi {
         self.ratio_means_ci(alpha).position_of(value)
     }
 
@@ -287,6 +289,10 @@ impl<'a> Comp<'a> {
     /// Panics if either reservoir is empty or `alpha` is not in `(0, 1)`.
     pub fn ratio_means_boot_ci(&self, alpha: f64) -> Ci {
         two_sample_ratio_means_ci(
+            // Unlike the single-sample robust CIs ([`BenchOut::median_rob_ci`]/[`BenchOut::mean_rob_ci`]),
+            // this is **not** memoized: it resamples only *naive arithmetic means* (no per-resample robust
+            // estimator or histogram), so it is inexpensive (~10ms at the defaults) and simply recomputed
+            // on each call — which also keeps [`Comp`] stateless and transient.
             self.0.reservoir(),
             self.1.reservoir(),
             DEFAULT_MEAN_CI_RESAMPLES,
@@ -590,11 +596,14 @@ mod test {
         let comp = Comp::new(&out1, &out2);
 
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_t(FpSeconds::ZERO)))
-                .is_err()
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || comp.welch_mean_t(FpSeconds::ZERO)
+            ))
+            .is_err()
         );
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_df())).is_err()
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_df()))
+                .is_err()
         );
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -603,8 +612,10 @@ mod test {
             .is_err()
         );
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_diff_ci(0.05)))
-                .is_err()
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || comp.welch_mean_diff_ci(0.05)
+            ))
+            .is_err()
         );
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -625,11 +636,14 @@ mod test {
         let comp = Comp::new(&out1, &out2);
 
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_t(FpSeconds::ZERO)))
-                .is_err()
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || comp.welch_mean_t(FpSeconds::ZERO)
+            ))
+            .is_err()
         );
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_df())).is_err()
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_df()))
+                .is_err()
         );
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -638,8 +652,10 @@ mod test {
             .is_err()
         );
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_diff_ci(0.05)))
-                .is_err()
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || comp.welch_mean_diff_ci(0.05)
+            ))
+            .is_err()
         );
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -659,11 +675,14 @@ mod test {
         let comp = Comp::new(&out1, &out2);
 
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_t(FpSeconds::ZERO)))
-                .is_err()
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || comp.welch_mean_t(FpSeconds::ZERO)
+            ))
+            .is_err()
         );
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_df())).is_err()
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_df()))
+                .is_err()
         );
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -672,8 +691,10 @@ mod test {
             .is_err()
         );
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| comp.welch_mean_diff_ci(0.05)))
-                .is_err()
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || comp.welch_mean_diff_ci(0.05)
+            ))
+            .is_err()
         );
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
