@@ -240,7 +240,13 @@ pub fn bca_dist(
     let mut loo = Vec::with_capacity(n.saturating_sub(1));
     for i in 0..n {
         loo.clear();
-        loo.extend(sample.iter().enumerate().filter(|&(j, _)| j != i).map(|(_, &v)| v));
+        loo.extend(
+            sample
+                .iter()
+                .enumerate()
+                .filter(|&(j, _)| j != i)
+                .map(|(_, &v)| v),
+        );
         jack.push(statistic(&loo));
     }
     let jack_mean = jack.iter().sum::<f64>() / n as f64;
@@ -298,14 +304,17 @@ pub fn bc_ci(
 ///
 /// # Panics
 /// Panics if either sample is empty or `alpha` is not in `(0, 1)`.
-pub fn two_sample_ratio_means_ci(
+pub(crate) fn two_sample_ratio_means_ci(
     a: &[f64],
     b: &[f64],
     n_resamples: usize,
     alpha: f64,
     seed: u64,
 ) -> basic_stats::core::Ci {
-    assert!(!a.is_empty() && !b.is_empty(), "both samples must be non-empty");
+    assert!(
+        !a.is_empty() && !b.is_empty(),
+        "both samples must be non-empty"
+    );
     assert!(alpha > 0.0 && alpha < 1.0, "alpha must be in (0, 1)");
     let mut rng = SplitMix64::new(seed);
     let na = a.len();
@@ -360,30 +369,45 @@ mod test {
     #[test]
     fn test_percentile_ci_reproducible_and_brackets_mean() {
         // Symmetric data: mean ~ 10; CI should bracket it and be reproducible for a fixed seed.
-        let sample: Vec<f64> = (0..200).map(|i| 10.0 + ((i % 21) as f64 - 10.0) * 0.1).collect();
+        let sample: Vec<f64> = (0..200)
+            .map(|i| 10.0 + ((i % 21) as f64 - 10.0) * 0.1)
+            .collect();
         let ci1 = percentile_ci(&sample, mean, 500, 0.05, 12345);
         let ci2 = percentile_ci(&sample, mean, 500, 0.05, 12345);
         assert_eq!(ci1, ci2, "fixed seed must give identical CI");
-        assert!(ci1.0 < 10.0 && ci1.1 > 10.0, "CI should bracket the mean: {ci1:?}");
+        assert!(
+            ci1.0 < 10.0 && ci1.1 > 10.0,
+            "CI should bracket the mean: {ci1:?}"
+        );
     }
 
     #[test]
     fn test_bca_ci_reproducible_and_brackets_mean() {
-        let sample: Vec<f64> = (0..200).map(|i| 10.0 + ((i % 21) as f64 - 10.0) * 0.1).collect();
+        let sample: Vec<f64> = (0..200)
+            .map(|i| 10.0 + ((i % 21) as f64 - 10.0) * 0.1)
+            .collect();
         let ci1 = bca_ci(&sample, mean, 500, 0.05, 12345);
         let ci2 = bca_ci(&sample, mean, 500, 0.05, 12345);
         assert_eq!(ci1, ci2, "fixed seed must give identical CI");
-        assert!(ci1.0 < 10.0 && ci1.1 > 10.0, "CI should bracket the mean: {ci1:?}");
+        assert!(
+            ci1.0 < 10.0 && ci1.1 > 10.0,
+            "CI should bracket the mean: {ci1:?}"
+        );
         assert!(ci1.0 < ci1.1);
     }
 
     #[test]
     fn test_bc_ci_reproducible_and_brackets_mean() {
-        let sample: Vec<f64> = (0..200).map(|i| 10.0 + ((i % 21) as f64 - 10.0) * 0.1).collect();
+        let sample: Vec<f64> = (0..200)
+            .map(|i| 10.0 + ((i % 21) as f64 - 10.0) * 0.1)
+            .collect();
         let ci1 = bc_ci(&sample, mean, 500, 0.05, 12345);
         let ci2 = bc_ci(&sample, mean, 500, 0.05, 12345);
         assert_eq!(ci1, ci2, "fixed seed must give identical CI");
-        assert!(ci1.0 < 10.0 && ci1.1 > 10.0, "CI should bracket the mean: {ci1:?}");
+        assert!(
+            ci1.0 < 10.0 && ci1.1 > 10.0,
+            "CI should bracket the mean: {ci1:?}"
+        );
         assert!(ci1.0 < ci1.1);
     }
 

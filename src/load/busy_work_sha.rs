@@ -1,4 +1,5 @@
-use crate::{FpSeconds, RunLength, latency};
+use crate::{BenchCfg, FpSeconds, LatencyUnit, RunLength, bench_run_arg_cfg, latency};
+use log::debug;
 use sha2::{Digest, Sha256};
 use std::{hint::black_box, time::Duration};
 
@@ -71,20 +72,40 @@ impl BusyWork {
     /// (= accumulated calibration effort).
     /// The total calibration takes longer than `run_length` because a warm-up period is added.
     pub fn calibrate_with_budget(budget: RunLength) -> Calibration {
-        Self::warmup(budget);
-        Self::calibrate_internal(budget)
+        // Warm-up and use the resulting preliminary calibration to prepare arguments for more accurate
+        // linear calibration.
+        let Calibration {
+            unit_ltncy: prelim_unit_ltncy,
+        } = Self::warmup(budget);
+        let (budget_count, budget_dur) = budget.count_and_time();
+        let count_for_dur = FpSeconds::from_duration(budget_dur) / prelim_unit_ltncy;
+        let est_count = count_for_dur.min(budget_count as f64);
+        let iter_effort = est_count.sqrt().round().max(1.0) as u32;
+        let adj_budget = match budget {
+            RunLength::Count(count) => RunLength::Count(count.div_ceil(iter_effort as usize)),
+            RunLength::Time(_) => budget,
+            RunLength::CountWithTimeout(count, time) => {
+                RunLength::CountWithTimeout(count.div_ceil(iter_effort as usize), time)
+            }
+        };
+
+        let calibr = Self::calibrate_linear(adj_budget, iter_effort);
+        debug!(
+            "BusyWork::calibrate_with_budget >>> budget={budget:?}, prelim_unit_ltncy={prelim_unit_ltncy:?}, adj_budget={adj_budget:?}, iter_effort={iter_effort}, calibr={calibr:?}"
+        );
+        calibr
     }
 
     /// Does the warm-up for [`Self::calibrate_with_budget`].
-    fn warmup(budget: RunLength) {
-        Self::calibrate_internal(budget);
+    fn warmup(budget: RunLength) -> Calibration {
+        Self::calibrate_exponential(budget)
     }
 
-    /// Core estimation of the mean latency of one unit of `effort`,
-    /// using an iterative process. Used by both [`Self::warmup`] and [`Self::calibrate_with_budget`].
+    /// Estimation of the mean latency of one unit of `effort`, using an exponential iterative process
+    /// and a naive estimator of mean.
     /// `calibration_budget` limits the length of the iterative process by time and/or count
     /// (= accumulated calibration effort).
-    fn calibrate_internal(budget: RunLength) -> Calibration {
+    fn calibrate_exponential(budget: RunLength) -> Calibration {
         let (budget_count, budget_dur) = budget.count_and_time();
         let budget_fps = FpSeconds::from_duration(budget_dur);
 
@@ -116,6 +137,19 @@ impl BusyWork {
         }
 
         unreachable!("above loop must return at some point")
+    }
+
+    /// Estimation of the mean latency of one unit of `effort`, using a linear iterative process and
+    /// a robust estimator of mean.
+    /// `calibration_budget` limits the length of the iterative process by time and/or count
+    /// (= accumulated calibration effort).
+    fn calibrate_linear(budget: RunLength, iter_effort: u32) -> Calibration {
+        let cfg = BenchCfg::default()
+            .with_warmup_millis(0)
+            .with_recording_unit(LatencyUnit::sub_sec(11));
+        let out = bench_run_arg_cfg(&cfg, || Self::work(iter_effort), budget, None);
+        let unit_ltncy = out.mean_rob() / iter_effort as f64;
+        Calibration { unit_ltncy }
     }
 }
 

@@ -2,6 +2,8 @@
 
 This file provides guidance to coding agents when working with code in this repository.
 
+**After completing modifications to any Rust file, ensure it conforms to standard rust formatting, e.g., by running `rustfmt` on it.**
+
 ## Build, test, and lint
 
 ```bash

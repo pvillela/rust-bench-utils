@@ -14,6 +14,19 @@ use basic_stats::{
 use hdrhistogram::Histogram;
 use std::{fmt::Debug, iter, ops::DerefMut, sync::Mutex};
 
+/// Default number of bootstrap resamples for the BC median CI ([`BenchOut::median_rob_ci`]).
+///
+/// Separate from [`DEFAULT_MEAN_CI_RESAMPLES`] so the median (BC) and mean (BCa) intervals can be
+/// tuned independently; the median CI's BC method has no jackknife, so its cost is `O(resamples)`.
+const DEFAULT_MEDIAN_CI_RESAMPLES: usize = 1000;
+
+/// Default number of bootstrap resamples for the BCa mean CIs ([`BenchOut::mean_rob_ci`],
+/// [`crate::Comp::ratio_means_boot_ci`]).
+///
+/// Separate from [`DEFAULT_MEDIAN_CI_RESAMPLES`]; the mean CI's BCa method additionally runs a
+/// jackknife (one evaluation per reservoir sample) on top of these resamples.
+pub(crate) const DEFAULT_MEAN_CI_RESAMPLES: usize = 2000;
+
 /// Constructs a [`Histogram<u64>`]. The arguments correspond to [Histogram::high] and [Histogram::sigfig].
 pub(crate) fn new_hdrhist(hist_high: u64, hist_sigfig: u8) -> Histogram<u64> {
     let mut hist = Histogram::<u64>::new_with_max(hist_high, hist_sigfig)
@@ -88,46 +101,22 @@ impl Default for CachedStats {
 /// the batch means toward normal) is the fix. See `analysis/Mean_check_threshold_calibration.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MeanVerdict {
-    /// Standardized gap below [`MEAN_CHECK_MILD_Z`]: naive mean is trustworthy.
+    /// Standardized gap below [`MeanCheck::MILD_Z`]: naive mean is trustworthy.
     Insignificant,
-    /// Standardized gap in `[MEAN_CHECK_MILD_Z, MEAN_CHECK_SIGNIFICANT_Z)`: possible contamination.
+    /// Standardized gap in `[MeanCheck::MILD_Z, MeanCheck::SIGNIFICANT_Z)`: possible contamination.
     Mild,
-    /// Standardized gap at or above [`MEAN_CHECK_SIGNIFICANT_Z`]: the naive mean is likely contaminated.
+    /// Standardized gap at or above [`MeanCheck::SIGNIFICANT_Z`]: the naive mean is likely contaminated.
     Significant,
 }
 
-/// Lower bound of the [`MeanVerdict::Mild`] band for the standardized mean-disagreement gap.
-///
-/// Calibrated so clean data flags `Mild` at most ~5% of the time across the near-normal operating
-/// range (`σ_Y ≲ 0.1`, `σ ≤ 1`); see `analysis/Mean_check_threshold_calibration.md`.
-pub const MEAN_CHECK_MILD_Z: f64 = 2.5;
-/// Lower bound of the [`MeanVerdict::Significant`] band for the standardized mean-disagreement gap.
-///
-/// Calibrated so clean data flags `Significant` at most ~1% of the time across the near-normal
-/// operating range; see `analysis/Mean_check_threshold_calibration.md`.
-pub const MEAN_CHECK_SIGNIFICANT_Z: f64 = 4.0;
-
-/// Default number of bootstrap resamples for the BC median CI ([`BenchOut::median_rob_ci`]).
-///
-/// Separate from [`DEFAULT_MEAN_CI_RESAMPLES`] so the median (BC) and mean (BCa) intervals can be
-/// tuned independently; the median CI's BC method has no jackknife, so its cost is `O(resamples)`.
-pub const DEFAULT_MEDIAN_CI_RESAMPLES: usize = 1000;
-
-/// Default number of bootstrap resamples for the BCa mean CIs ([`BenchOut::mean_rob_ci`],
-/// [`crate::Comp::ratio_means_boot_ci`]).
-///
-/// Separate from [`DEFAULT_MEDIAN_CI_RESAMPLES`]; the mean CI's BCa method additionally runs a
-/// jackknife (one evaluation per reservoir sample) on top of these resamples.
-pub const DEFAULT_MEAN_CI_RESAMPLES: usize = 2000;
-
 impl MeanVerdict {
     /// Maps a signed standardized gap `std_gap = rel_gap · √g / σ_Y` to a verdict
-    /// (`std_gap < MEAN_CHECK_MILD_Z` ⇒ [`MeanVerdict::Insignificant`], so non-positive gaps are
+    /// (`std_gap < MeanCheck::MILD_Z` ⇒ [`MeanVerdict::Insignificant`], so non-positive gaps are
     /// always insignificant).
-    pub fn from_std_gap(std_gap: f64) -> Self {
-        if std_gap < MEAN_CHECK_MILD_Z {
+    fn from_std_gap(std_gap: f64) -> Self {
+        if std_gap < MeanCheck::MILD_Z {
             MeanVerdict::Insignificant
-        } else if std_gap < MEAN_CHECK_SIGNIFICANT_Z {
+        } else if std_gap < MeanCheck::SIGNIFICANT_Z {
             MeanVerdict::Mild
         } else {
             MeanVerdict::Significant
@@ -152,6 +141,20 @@ pub struct MeanCheck {
     pub sigma_y: f64,
     /// Verdict classifying the standardized gap.
     pub verdict: MeanVerdict,
+}
+
+impl MeanCheck {
+    /// Lower bound of the [`MeanVerdict::Mild`] band for the standardized mean-disagreement gap.
+    ///
+    /// Calibrated so clean data flags `Mild` at most ~5% of the time across the near-normal operating
+    /// range (`σ_Y ≲ 0.1`, `σ ≤ 1`); see `analysis/Mean_check_threshold_calibration.md`.
+    pub const MILD_Z: f64 = 2.5;
+
+    /// Lower bound of the [`MeanVerdict::Significant`] band for the standardized mean-disagreement gap.
+    ///
+    /// Calibrated so clean data flags `Significant` at most ~1% of the time across the near-normal
+    /// operating range; see `analysis/Mean_check_threshold_calibration.md`.
+    pub const SIGNIFICANT_Z: f64 = 4.0;
 }
 
 /// Contains the latency observations resulting from benchmarking a closure.
@@ -715,7 +718,9 @@ impl BenchOut {
     /// instance's histogram geometry), reset to empty and ready to record into.
     fn take_rc_scratch(&self) -> Histogram<u64> {
         let mut lock = self.rc_scratch.lock().expect("mutex shouldn't be poisoned");
-        let mut h = lock.take().unwrap_or_else(|| Histogram::new_from(&self.hist));
+        let mut h = lock
+            .take()
+            .unwrap_or_else(|| Histogram::new_from(&self.hist));
         h.reset();
         h
     }
@@ -914,9 +919,8 @@ impl BenchOut {
     /// - `number of recorded values <= 1`.
     /// - `alpha` not in open interval `(0, 1)`.
     pub fn student_mean_ci(&self, alpha: f64) -> (FpSeconds, FpSeconds) {
-        let Ci(low, high) = student_1samp_ci(&self.moments_mean(), alpha).expect(
-            "`number of recorded values <= 1` or `alpha` not in open interval `(0, 1)`",
-        );
+        let Ci(low, high) = student_1samp_ci(&self.moments_mean(), alpha)
+            .expect("`number of recorded values <= 1` or `alpha` not in open interval `(0, 1)`");
         (low.into(), high.into())
     }
 
@@ -953,12 +957,7 @@ impl BenchOut {
     /// - `number of recorded values <= 1`.
     /// - `self.stdev_r() == 0`.
     /// - `alpha` not in open interval `(0, 1)`.
-    pub fn student_mean_test(
-        &self,
-        mu0: FpSeconds,
-        alt_hyp: AltHyp,
-        alpha: f64,
-    ) -> HypTestResult {
+    pub fn student_mean_test(&self, mu0: FpSeconds, alt_hyp: AltHyp, alpha: f64) -> HypTestResult {
         student_1samp_test(&self.moments_mean(), mu0.into(), alt_hyp, alpha).expect(
             "`number of recorded values <= 1` or `self.stdev_r() == 0` or `alpha` not in open interval `(0, 1)`",
         )
@@ -1393,8 +1392,7 @@ mod test {
         let cfg = BenchCfg::default();
         let mut out = BenchOut::new(&cfg, None);
         out.record_from_iter([FpSeconds::from_millis(1)].into_iter());
-        let result =
-            std::panic::catch_unwind(|| out.student_mean_t(FpSeconds::from_millis(1)));
+        let result = std::panic::catch_unwind(|| out.student_mean_t(FpSeconds::from_millis(1)));
         assert!(result.is_err());
     }
 
@@ -1404,23 +1402,23 @@ mod test {
         assert_eq!(MeanVerdict::from_std_gap(-5.0), MeanVerdict::Insignificant);
         assert_eq!(MeanVerdict::from_std_gap(0.0), MeanVerdict::Insignificant);
         assert_eq!(
-            MeanVerdict::from_std_gap(MEAN_CHECK_MILD_Z - 0.01),
+            MeanVerdict::from_std_gap(MeanCheck::MILD_Z - 0.01),
             MeanVerdict::Insignificant
         );
         assert_eq!(
-            MeanVerdict::from_std_gap(MEAN_CHECK_MILD_Z),
+            MeanVerdict::from_std_gap(MeanCheck::MILD_Z),
             MeanVerdict::Mild
         );
         assert_eq!(
-            MeanVerdict::from_std_gap(MEAN_CHECK_SIGNIFICANT_Z - 0.01),
+            MeanVerdict::from_std_gap(MeanCheck::SIGNIFICANT_Z - 0.01),
             MeanVerdict::Mild
         );
         assert_eq!(
-            MeanVerdict::from_std_gap(MEAN_CHECK_SIGNIFICANT_Z),
+            MeanVerdict::from_std_gap(MeanCheck::SIGNIFICANT_Z),
             MeanVerdict::Significant
         );
         assert_eq!(
-            MeanVerdict::from_std_gap(MEAN_CHECK_SIGNIFICANT_Z + 10.0),
+            MeanVerdict::from_std_gap(MeanCheck::SIGNIFICANT_Z + 10.0),
             MeanVerdict::Significant
         );
     }
