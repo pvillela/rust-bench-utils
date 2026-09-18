@@ -1,7 +1,7 @@
 ---
 name: "general"
 description: "Use this agent when you need a capable general-purpose subagent to handle autonomous tasks of any kind. This agent is a versatile problem-solver suitable for any task type — coding, analysis, research, content generation, debugging, or creative work — when you want the task executed as a subagent with the subagent-specified model. Since it can handle anything the top-level agent can, deploy it whenever you need to parallelize work, isolate a complex task, or run subtasks independently."
-model: deepseek-v4-flash
+model: sonnet
 color: blue
 memory: project
 ---

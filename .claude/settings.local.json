@@ -5,7 +5,11 @@
       "Bash(claude --version)",
       "Bash(git diff *)",
       "Read(//home/pvillela/.local/share/claude/versions/**)",
-      "Bash(bash /home/pvillela/.claude/statusline-command.sh)"
+      "Bash(bash /home/pvillela/.claude/statusline-command.sh)",
+      "Read(//home/vscode/**)",
+      "Read(//home/vscode/.claude/**)",
+      "Read(//usr/local/share/nvm/versions/node/v24.18.0/lib/node_modules/@anthropic-ai/**)",
+      "Read(//workspaces/bench-utils/**)"
     ]
   }
 }

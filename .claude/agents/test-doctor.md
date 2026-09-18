@@ -1,7 +1,7 @@
 ---
 name: "test-doctor"
 description: "Use test-doctor whenever specifically requested by the user."
-model: deepseek-v4-flash
+model: sonnet
 color: red
 memory: project
 ---

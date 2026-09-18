@@ -1,7 +1,7 @@
 ---
 name: "doc-comments-checker"
 description: "Use doc-comments-checker whenever specifically requested by the user."
-model: deepseek-v4-flash
+model: sonnet
 color: green
 memory: project
 ---

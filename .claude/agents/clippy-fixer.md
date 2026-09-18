@@ -1,7 +1,7 @@
 ---
 name: "clippy-fixer"
 description: "Use clippy-fixer whenever specifically requested by the user."
-model: deepseek-v4-flash
+model: sonnet
 color: green
 memory: project
 ---
