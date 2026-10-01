@@ -6,6 +6,13 @@ sudo chsh -s /bin/bash $(whoami)
 
 echo "=== Running postCreate Setup ==="
 
+# Git identity. The container has no ~/.gitconfig of its own and the host's is not mounted, so
+# without this every commit fails on "unable to auto-detect email address". Ahead of the installs
+# below so a surprise here does not leave a half-built toolchain.
+echo "Configuring Git identity ..."
+git config --global user.name "pvillela"
+git config --global user.email "pvillela@gmail.com"
+
 # Local binary folder
 export LOCAL_BIN="$HOME/.local/bin"
 mkdir -p ${LOCAL_BIN}
@@ -34,11 +41,11 @@ echo "Installing oh-my-pi ..."
 # bun install -g @oh-my-pi/pi-coding-agent
 curl -fsSL https://omp.sh/install | sh
 
-echo "Installing Gemini CLI ..."
-(source ${NVM_DIR}/nvm.sh && npm install -g @google/gemini-cli)
+# echo "Installing Gemini CLI ..."
+# (source ${NVM_DIR}/nvm.sh && npm install -g @google/gemini-cli)
 
 echo "Installing herdr ..."
-curl curl -fsSL https://herdr.dev/install.sh | sh
+curl -fsSL https://herdr.dev/install.sh | sh
 
 echo "Installing Zellij ..."
 ZELLIJ_VERSION=0.44.3
