@@ -404,7 +404,7 @@ impl BenchOut {
     /// Panics if the number of recorded values is zero.
     pub fn stdev_r(&self) -> FpSeconds {
         let stdev_r = sample_stdev(self.n_r(), self.sum, self.sum2)
-            .expect("number of recorded values is zero");
+            .expect("number of recorded values is less than 2");
         stdev_r.into()
     }
 
