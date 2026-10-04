@@ -26,7 +26,7 @@ pub struct SummaryStats {
     /// 25th percentile recorded value.
     pub p25: FpSeconds,
     /// 50th percentile recorded value.
-    pub p50: FpSeconds,
+    pub median_r: FpSeconds,
     /// 75th percentile recorded value.
     pub p75: FpSeconds,
     /// 90th percentile recorded value.
@@ -61,7 +61,7 @@ impl SummaryStats {
             p5: ru.fpsecs_from_value(hist.value_at_quantile(0.05)),
             p10: ru.fpsecs_from_value(hist.value_at_quantile(0.10)),
             p25: ru.fpsecs_from_value(hist.value_at_quantile(0.25)),
-            p50: ru.fpsecs_from_value(hist.value_at_quantile(0.50)),
+            median_r: ru.fpsecs_from_value(hist.value_at_quantile(0.50)),
             p75: ru.fpsecs_from_value(hist.value_at_quantile(0.75)),
             p90: ru.fpsecs_from_value(hist.value_at_quantile(0.90)),
             p95: ru.fpsecs_from_value(hist.value_at_quantile(0.95)),
@@ -121,7 +121,7 @@ mod test {
 
         rel_approx_eq!(exp_mean, summary.mean.0, EPSILON);
         rel_approx_eq!(exp_stdev, summary.stdev.0, EPSILON);
-        rel_approx_eq!(exp_median, summary.p50.0, EPSILON);
+        rel_approx_eq!(exp_median, summary.median_r.0, EPSILON);
         rel_approx_eq!(exp_p1, summary.p1.0, EPSILON);
         rel_approx_eq!(exp_p5, summary.p5.0, EPSILON);
         rel_approx_eq!(exp_p10, summary.p10.0, EPSILON);

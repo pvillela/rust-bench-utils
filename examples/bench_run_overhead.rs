@@ -1,24 +1,28 @@
-//! Demonstrates the measurement overhead per [`bench_utils::bench_run`] execution iteration.
+//! Demonstrates the clock overhead per [`bench_utils::bench_run`] execution iteration.
 //!
-//! On my current computer, the overhead is ~13ns.
+//! We define "clock overhead" as the time between the two clock reads around each timed
+//! execution or batch, incurred once per recorded value whatever the batch size.
+//!
+//! On my current computer, the clock overhead is ~13ns.
 //!
 //! ```
 //! cargo run -r --example bench_run_overhead --features _test_support
 //! ```
 
 use bench_utils::{
-    BenchCfg, BenchOut, FpSeconds, LatencyUnit, RunLength,
-    multi::{LatencySrc, bench_run_arg_cfg, bench_run_x, test_support::LatencySrc0},
-    overhead,
+    BenchCfg, BenchOut, RunLength,
+    multi::{bench_run_x, test_support::LatencySrc0},
+    overhead, overhead_x,
     status::DefaultStatus,
 };
-use std::{io, iter, time::Instant};
+use std::{io, time::Instant};
 
-fn my_bench_run_with_status_arg_cfg(
-    cfg: &BenchCfg,
-    src: impl LatencySrc<1>,
-    run_length: RunLength,
-) -> BenchOut {
+/// This function uses [`bench_utils::multi::bench_run_x`] with
+/// [`bench_utils::multi::test_support::LatencySrc0`] instead of using an empty clusure.
+/// This was done on purpose to demonstrate, by comparison with the runs below using
+/// [`bench_utils::overhead_x`], that the two approaches yield similar values for clock
+/// overhead.
+fn my_bench_run_with_status_arg_cfg(cfg: &BenchCfg, exec_count: usize) -> BenchOut {
     let mut w = io::sink();
     let s = DefaultStatus::new(
         &mut w,
@@ -26,92 +30,101 @@ fn my_bench_run_with_status_arg_cfg(
         "Executing bench_run".to_owned(),
     );
 
-    bench_run_x(cfg, src, run_length, s).into()
+    bench_run_x(cfg, LatencySrc0, RunLength::Count(exec_count), s).into()
 }
 
-#[inline(always)]
-fn no_status(cfg: &BenchCfg, run_length: RunLength) -> Option<(FpSeconds, usize)> {
-    let out = bench_run_arg_cfg(&cfg, LatencySrc0, run_length);
-    Some((out.mean(), out.n() as usize))
+fn overhead_x_with_status(exec_count: usize, groups: usize) -> (BenchOut, BenchOut) {
+    // Warmup.
+    let cfg_w = BenchCfg::default().with_warmup_millis(1000);
+    my_bench_run_with_status_arg_cfg(&cfg_w, exec_count);
+
+    let cfg = BenchCfg::default().with_warmup_millis(0);
+    let mut pooled_out = BenchOut::new(&cfg, None);
+    let mut grouped_out = BenchOut::new(&cfg, None);
+    for _ in 0..groups {
+        let out = my_bench_run_with_status_arg_cfg(&cfg, exec_count);
+        pooled_out.record_from_iter_with_counts(out.iter_with_counts());
+        grouped_out.capture_data_with_counts((out.median_r(), 1));
+    }
+    (pooled_out, grouped_out)
 }
 
-#[inline(always)]
-fn with_status(cfg: &BenchCfg, run_length: RunLength) -> Option<(FpSeconds, usize)> {
-    let out = my_bench_run_with_status_arg_cfg(&cfg, LatencySrc0, run_length);
-    Some((out.mean(), out.n_r() as usize))
-}
-
-// fn run_no_status(cfg: &BenchCfg, run_length: RunLength, samp_size: usize) {
-//     println!("*** no_status, run_length={run_length:?}");
-//     let start = Instant::now();
-//     let target_fn = || no_status(cfg, run_length);
-//     let src = iter::from_fn(target_fn).take(samp_size);
-//     let mut out = BenchOut::new(&cfg, None);
-//     out.record_from_iter_with_counts(src);
-//     println!("elapsed={:?}, {:?}", start.elapsed(), out.summary());
-// }
-
-fn run_no_status(_cfg: &BenchCfg, run_length: RunLength, samp_size: usize) {
-    println!("*** no_status, run_length={run_length:?}");
+fn run_overhead() {
+    println!("*** overhead");
     let start = Instant::now();
-    let pooled_out = overhead(run_length.count_and_time().0 * samp_size, Some(samp_size));
-    println!("elapsed={:?}, {:?}", start.elapsed(), pooled_out.summary());
+    let out = overhead();
+    println!("elapsed={:?}, {:?}", start.elapsed(), out.summary(),);
 }
 
-fn run_with_status(cfg: &BenchCfg, run_length: RunLength, samp_size: usize) {
-    println!("*** with_status, run_length={run_length:?}");
+fn run_overhead_x_no_status(exec_count: usize, groups: usize) {
+    println!("\n***** overhead_x (no-status): exec_count={exec_count}, groups={groups}");
+
     let start = Instant::now();
-    let target_fn = || with_status(cfg, run_length);
-    let src = iter::from_fn(target_fn).take(samp_size);
-    let mut out = BenchOut::new(&cfg, None);
-    out.record_from_iter_with_counts(src);
-    println!("elapsed={:?}, {:?}", start.elapsed(), out.summary());
+    let (pooled_out, grouped_out) = overhead_x(exec_count, groups);
+    println!(
+        "elapsed={:?}, \n== pooled={:?}, \n== grouped={:?}",
+        start.elapsed(),
+        pooled_out.summary(),
+        grouped_out.summary()
+    );
+}
+
+fn run_overhead_x_with_status(exec_count: usize, groups: usize) {
+    println!("\n***** overhead_x_with_status: exec_count={exec_count}, groups={groups}");
+
+    let start = Instant::now();
+    let (pooled_out, grouped_out) = overhead_x_with_status(exec_count, groups);
+    println!(
+        "elapsed={:?}, \n== pooled={:?}, \n== grouped={:?}",
+        start.elapsed(),
+        pooled_out.summary(),
+        grouped_out.summary()
+    );
 }
 
 fn main() {
     _ = env_logger::try_init();
 
-    let cfg = BenchCfg::default()
-        .with_warmup_millis(0)
-        .with_recording_unit(LatencyUnit::sub_sec(12));
-    let samp_size = 100;
+    let groups = 100;
+
+    run_overhead();
 
     //=== no_status
 
     {
-        // {
-        //     let run_length = RunLength::Count(1);
-        //     run_no_status(&cfg, run_length, samp_size);
-        // }
-
         {
-            let run_length = RunLength::Count(10);
-            run_no_status(&cfg, run_length, samp_size);
+            let exec_count = 1;
+            run_overhead_x_no_status(exec_count, groups);
         }
 
         {
-            let run_length = RunLength::Count(100);
-            run_no_status(&cfg, run_length, samp_size);
+            let exec_count = 10;
+            run_overhead_x_no_status(exec_count, groups);
         }
 
         {
-            let run_length = RunLength::Count(1000);
-            run_no_status(&cfg, run_length, samp_size);
+            let exec_count = 100;
+            run_overhead_x_no_status(exec_count, groups);
         }
 
         {
-            let run_length = RunLength::Count(10_000);
-            run_no_status(&cfg, run_length, samp_size);
+            let exec_count = 1000;
+            run_overhead_x_no_status(exec_count, groups);
         }
 
         {
-            let run_length = RunLength::Count(100_000);
-            run_no_status(&cfg, run_length, samp_size);
+            let exec_count = 10_000;
+            run_overhead_x_no_status(exec_count, groups);
         }
 
         {
-            let run_length = RunLength::Count(1_000_000);
-            run_no_status(&cfg, run_length, samp_size);
+            let exec_count = 100_000;
+            run_overhead_x_no_status(exec_count, groups);
+        }
+
+        {
+            let exec_count = 1_000_000;
+            run_overhead_x_no_status(exec_count, groups);
         }
     }
 
@@ -119,38 +132,38 @@ fn main() {
 
     {
         {
-            let run_length = RunLength::Count(1);
-            run_with_status(&cfg, run_length, samp_size);
+            let exec_count = 1;
+            run_overhead_x_with_status(exec_count, groups);
         }
 
         {
-            let run_length = RunLength::Count(10);
-            run_no_status(&cfg, run_length, samp_size);
+            let exec_count = 10;
+            run_overhead_x_with_status(exec_count, groups);
         }
 
         {
-            let run_length = RunLength::Count(100);
-            run_with_status(&cfg, run_length, samp_size);
+            let exec_count = 100;
+            run_overhead_x_with_status(exec_count, groups);
         }
 
         {
-            let run_length = RunLength::Count(1000);
-            run_with_status(&cfg, run_length, samp_size);
+            let exec_count = 1000;
+            run_overhead_x_with_status(exec_count, groups);
         }
 
         {
-            let run_length = RunLength::Count(10_000);
-            run_with_status(&cfg, run_length, samp_size);
+            let exec_count = 10_000;
+            run_overhead_x_with_status(exec_count, groups);
         }
 
         {
-            let run_length = RunLength::Count(100_000);
-            run_with_status(&cfg, run_length, samp_size);
+            let exec_count = 100_000;
+            run_overhead_x_with_status(exec_count, groups);
         }
 
         {
-            let run_length = RunLength::Count(1_000_000);
-            run_with_status(&cfg, run_length, samp_size);
+            let exec_count = 1_000_000;
+            run_overhead_x_with_status(exec_count, groups);
         }
     }
 }

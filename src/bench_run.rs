@@ -1,9 +1,7 @@
 //! Implements functions to collect latency statistics for a closure.
 
-use std::hint::black_box;
-
 use crate::{
-    BenchCfg, BenchOut, FpSeconds, LatencyUnit, RunLength,
+    BenchCfg, BenchOut, RunLength,
     dev_support::bsz,
     multi::{self, LatencySrc1, LatencySrc1b},
     status::Status,
@@ -143,80 +141,65 @@ pub fn bench_run_with_status(
     bench_run_with_status_arg_cfg(&cfg, f, run_length, batch).into()
 }
 
-// /// Computes the overhead of `bench_run` by benchmarking a no-op function.
-// pub fn overhead(cfg: &BenchCfg, run_length: RunLength, samp_size: usize) -> BenchOut {
-//     let target_fn = || {
-//         let out = multi::bench_run_arg_cfg(&cfg, LatencySrc0, run_length);
-//         Some((out.mean(), out.n() as usize))
-//     };
-//     let src = iter::from_fn(target_fn).take(samp_size);
-//     let mut out = BenchOut::new(&cfg, None);
-//     out.record_from_iter_with_counts(src);
-//     out
-// }
-
-#[allow(unused)]
-/// Computes the measurement overhead of `bench_run` by benchmarking a no-op function.
-/// This is the core implementation, used by the other `overhead` functions.
-/// It executes `samp_size` benchmarks of a no-op function, where each benchmark has
-/// a run-length of `RunLength::Count(`exec_count`)`.
+/// Computes the clock overhead of `bench_run` by benchmarking a no-op function.
+/// It executes `groups` benchmarks of a no-op function, where each benchmark has
+/// a run-length of `RunLength::Count(exec_count)`, with no batching.
+///
+/// We define "clock overhead" as the time between the two clock reads around each timed
+/// execution or batch, incurred once per recorded value whatever the batch size.
+/// The values provided by this function depend on the operating system's clock read
+/// resolution. On Linux, the resolution is 1 ns.
 ///
 /// This function returns a pair of [`BenchOut`]s.
-/// The first `BenchOut` contains is the pooled data from the `exec_count * samp_size`
-/// executions of the no-op function.
-/// The second `BenchOut` contains one observation for each of the `samp_size` runs of
-/// `bench_run`.
-fn priv_overhead_details(exec_count: usize, samp_size: usize) -> (BenchOut, BenchOut) {
+/// The first `BenchOut` contains the pooled data from the `exec_count * groups` executions
+/// of the no-op function.
+/// The second `BenchOut` contains one median observation for each of the `groups` runs
+/// of `bench_run`.
+///
+/// The key statistics of interest are the pooled [`median_r`](BenchOut::median_r) and the
+/// grouped [`stdev_r`](BenchOut::stdev_r).
+/// The first is a robust estimate of the overhead, the second measures the variability
+/// of the estimate across runs.
+///
+/// # Panics
+/// If `exec_count == 0` or `groups == 0`.
+pub fn overhead_x(exec_count: usize, groups: usize) -> (BenchOut, BenchOut) {
+    assert!(
+        exec_count > 0 && groups > 0,
+        "both `exec_count` and `groups` must be > 0"
+    );
     let target_fn = || ();
-    let cfg = BenchCfg::default()
-        .with_warmup_millis(100)
-        .with_recording_unit(LatencyUnit::sub_sec(12));
+    let cfg = BenchCfg::default().with_warmup_millis(0);
 
     // Warmup.
-    let cfg0 = cfg.clone().with_warmup_millis(0);
-    bench_run_arg_cfg(&cfg0, target_fn, RunLength::Count(exec_count), None);
+    let cfg_w = BenchCfg::default().with_warmup_millis(1000);
+    bench_run_arg_cfg(&cfg_w, target_fn, RunLength::Count(exec_count), None);
 
     let mut pooled_out = BenchOut::new(&cfg, None);
-    let mut batched_out = BenchOut::new(&cfg, Some(exec_count));
-    for _ in 0..samp_size {
+    let mut grouped_out = BenchOut::new(&cfg, None);
+    for _ in 0..groups {
         let out = bench_run_arg_cfg(&cfg, target_fn, RunLength::Count(exec_count), None);
         pooled_out.record_from_iter_with_counts(out.iter_with_counts());
-        batched_out.capture_data_with_counts((out.mean(), 1));
+        grouped_out.capture_data_with_counts((out.median_r(), 1));
     }
-    (pooled_out, batched_out)
+    (pooled_out, grouped_out)
 }
 
-/// Computes measurement overhead of `bench_run` by benchmarking a no-op function.
-/// The `median_r` value from the returned `BenchOut` is an estimate of the measurement
-/// overhead.
+/// Computes the clock overhead of `bench_run` by benchmarking a no-op function
+/// with a large pre-configured execution count and no batching.
+/// The [`median_r`](BenchOut::median_r) value from the returned `BenchOut` is an estimate
+/// of the clock overhead.
 ///
-/// # Arguments
-/// - `exec_count` - the benchmark's run length is `RunLength::Count(exec_count)`.
-/// - `batch` defines the batching regime. Set it to `None` unless the `mean`
-///   value from the `BenchOut` with `batch = None` is less tha 10 ns, in which case
-///   the batch value should be gradually increased until the mean is greater than
-///   or equal to 10 ns.
-pub fn overhead(exec_count: usize, batch: Option<usize>) -> BenchOut {
+/// We define "clock overhead" as the time between the two clock reads around each timed
+/// execution or batch, incurred once per recorded value whatever the batch size.
+/// The values provided by this function depend on the operating system's clock read
+/// resolution. On Linux, the resolution is 1 ns.
+pub fn overhead() -> BenchOut {
+    const EXEC_COUNT: usize = 10_000;
     let target_fn = || ();
-    let cfg = BenchCfg::default()
-        .with_warmup_millis(1000)
-        .with_recording_unit(LatencyUnit::sub_sec(12));
-    bench_run_arg_cfg(&cfg, target_fn, RunLength::Count(exec_count), batch)
+    let cfg = BenchCfg::default().with_warmup_millis(1000);
+    bench_run_arg_cfg(&cfg, target_fn, RunLength::Count(EXEC_COUNT), None)
 }
-
-// #[cfg(feature = "_test_support")]
-// /// Computes the measurement overhead of `bench_run` by benchmarking a no-op function.
-// /// It executes `samp_size` benchmarks of a no-op function, where each benchmark has
-// /// a run-length of `RunLength::Count(`exec_count`)`.
-// ///
-// /// This function returns a pair of [`BenchOut`]s.
-// /// The first `BenchOut` contains is the pooled data from the `exec_count * samp_size`
-// /// executions of the no-op function.
-// /// The second `BenchOut` contains one observation for each of the `samp_size` runs of
-// /// `bench_run`.
-// pub fn overhead_details(exec_count: usize, samp_size: usize) -> (BenchOut, BenchOut) {
-//     priv_overhead_details(exec_count, samp_size)
-// }
 
 #[cfg(test)]
 #[cfg(feature = "_test")]

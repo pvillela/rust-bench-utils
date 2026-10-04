@@ -293,7 +293,7 @@ impl BenchOut {
 
     #[inline(always)]
     /// Updates `self` with an elapsed time observation for the target function.
-    pub(crate) fn capture_data_with_counts(&mut self, latency_with_count: (FpSeconds, usize)) {
+    pub fn capture_data_with_counts(&mut self, latency_with_count: (FpSeconds, usize)) {
         let (mean_latency, count) = latency_with_count;
         let mean_elapsed_u64 = self.recording_unit.value_from_fpsecs(mean_latency);
         self.hist
@@ -324,7 +324,7 @@ impl BenchOut {
 
     #[inline(always)]
     /// Updates `self` with an elapsed time observation for the target function.
-    pub(crate) fn capture_data(&mut self, mean_latency: FpSeconds) {
+    pub fn capture_data(&mut self, mean_latency: FpSeconds) {
         self.capture_data_with_counts((mean_latency, 1));
     }
 
@@ -1247,7 +1247,7 @@ mod test {
         println!("exp_p25={:?}, summary.p25={:?}", exp_p25, summary.p25);
         println!(
             "exp_median={:?}, summary.median={:?}",
-            exp_median, summary.p50
+            exp_median, summary.median_r
         );
         println!("exp_p75={:?}, summary.p75={:?}", exp_p75, summary.p75);
         println!("exp_p90={:?}, summary.p90={:?}", exp_p90, summary.p90);
@@ -1266,7 +1266,7 @@ mod test {
         rel_approx_eq!(exp_p5, summary.p5.as_f64(), EPSILON);
         rel_approx_eq!(exp_p10, summary.p10.as_f64(), EPSILON);
         rel_approx_eq!(exp_p25, summary.p25.as_f64(), EPSILON);
-        rel_approx_eq!(exp_median, summary.p50.as_f64(), EPSILON);
+        rel_approx_eq!(exp_median, summary.median_r.as_f64(), EPSILON);
         rel_approx_eq!(exp_p75, summary.p75.as_f64(), EPSILON);
         rel_approx_eq!(exp_p90, summary.p90.as_f64(), EPSILON);
         rel_approx_eq!(exp_p95, summary.p95.as_f64(), EPSILON);
