@@ -9,6 +9,7 @@
 use bench_utils::{
     BenchCfg, BenchOut, FpSeconds, LatencyUnit, RunLength,
     multi::{LatencySrc, bench_run_arg_cfg, bench_run_x, test_support::LatencySrc0},
+    overhead,
     status::DefaultStatus,
 };
 use std::{io, iter, time::Instant};
@@ -40,14 +41,21 @@ fn with_status(cfg: &BenchCfg, run_length: RunLength) -> Option<(FpSeconds, usiz
     Some((out.mean(), out.n_r() as usize))
 }
 
-fn run_no_status(cfg: &BenchCfg, run_length: RunLength, samp_size: usize) {
+// fn run_no_status(cfg: &BenchCfg, run_length: RunLength, samp_size: usize) {
+//     println!("*** no_status, run_length={run_length:?}");
+//     let start = Instant::now();
+//     let target_fn = || no_status(cfg, run_length);
+//     let src = iter::from_fn(target_fn).take(samp_size);
+//     let mut out = BenchOut::new(&cfg, None);
+//     out.record_from_iter_with_counts(src);
+//     println!("elapsed={:?}, {:?}", start.elapsed(), out.summary());
+// }
+
+fn run_no_status(_cfg: &BenchCfg, run_length: RunLength, samp_size: usize) {
     println!("*** no_status, run_length={run_length:?}");
     let start = Instant::now();
-    let target_fn = || no_status(cfg, run_length);
-    let src = iter::from_fn(target_fn).take(samp_size);
-    let mut out = BenchOut::new(&cfg, None);
-    out.record_from_iter_with_counts(src);
-    println!("elapsed={:?}, {:?}", start.elapsed(), out.summary());
+    let pooled_out = overhead(run_length.count_and_time().0 * samp_size, Some(samp_size));
+    println!("elapsed={:?}, {:?}", start.elapsed(), pooled_out.summary());
 }
 
 fn run_with_status(cfg: &BenchCfg, run_length: RunLength, samp_size: usize) {
@@ -71,10 +79,10 @@ fn main() {
     //=== no_status
 
     {
-        {
-            let run_length = RunLength::Count(1);
-            run_no_status(&cfg, run_length, samp_size);
-        }
+        // {
+        //     let run_length = RunLength::Count(1);
+        //     run_no_status(&cfg, run_length, samp_size);
+        // }
 
         {
             let run_length = RunLength::Count(10);
