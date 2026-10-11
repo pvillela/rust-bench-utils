@@ -1,7 +1,7 @@
 //! Implements functions to collect latency statistics for a closure.
 
 use crate::{
-    BenchCfg, BenchOut, RunLength,
+    BenchCfg, BenchOut, FpSeconds, RunLength,
     dev_support::bsz,
     multi::{self, LatencySrc1, LatencySrc1b},
     status::Status,
@@ -199,6 +199,19 @@ pub fn overhead() -> BenchOut {
     let target_fn = || ();
     let cfg = BenchCfg::default().with_warmup_millis(1000);
     bench_run_arg_cfg(&cfg, target_fn, RunLength::Count(EXEC_COUNT), None)
+}
+
+/// Suggested batch size for benchmarking a target function, given a rough estimate of
+/// the target function's latency (`target_latency`) and a relative error tolerance (`tolerance`).
+/// The returned value should be rounded up to the next integer.
+///
+/// Calculates batch size `B` such that `overhead() / (target_latency * B) = tolerance`.
+/// A `tolerance` value of `0.01` is a reasonable choice.
+///
+/// A `target_latency` estimate can be obtained by benchmarking the target function with
+/// `batch = None`.
+pub fn suggested_batch_size(target_latency: FpSeconds, tolerance: f64) -> f64 {
+    overhead().median_r() / (target_latency * tolerance)
 }
 
 #[cfg(test)]
