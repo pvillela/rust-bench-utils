@@ -8,6 +8,16 @@ use std::{hint::black_box, time::Duration};
 
 #[derive(Debug, Clone, Copy)]
 /// Output from [`BusyWork`] calibration functions.
+///
+/// A calibration models the mean latency of the [`BusyWork`] closure as proportional to its `effort`
+/// argument, with the latency of one unit of effort measured at calibration time. This is an
+/// approximation:
+/// - The latency of the closure is only approximately proportional to `effort`.
+/// - The speed of the machine may differ between the time of calibration and the time the closure is
+///   executed, e.g., due to CPU frequency changes.
+///
+/// Consequently, the mean latency actually achieved typically differs from the calibrated latency by
+/// a few percent, and may differ by more on machines whose CPU frequency varies.
 pub struct Calibration {
     unit_ltncy: FpSeconds,
     /// The clock overhead of [`bench_run`](crate::bench_run) computed during calibration.
@@ -16,12 +26,18 @@ pub struct Calibration {
 
 impl Calibration {
     /// Returns the calibrated latency corresponding to the `effort` argument.
+    ///
+    /// This is an estimate of the mean latency of the [`BusyWork`] closure for `effort`; see
+    /// [`Calibration`] for its accuracy.
     pub fn latency_for_effort(&self, effort: u32) -> FpSeconds {
         self.unit_ltncy * effort as f64
     }
 
     /// Returns a pair whose second component is the closest achievable mean latency and whose first component
     /// is the effort corresponding to the second component.
+    ///
+    /// "Closest achievable" is with respect to this calibration, whose smallest achievable latency is that of
+    /// one unit of effort; see [`Calibration`] for its accuracy.
     pub fn effort_for_latency(&self, latency: FpSeconds) -> (u32, FpSeconds) {
         let ratio = latency / self.unit_ltncy;
         let effort = ratio.round().max(1.0);
@@ -56,7 +72,7 @@ impl BusyWork {
 
     #[inline(always)]
     /// Does a significant amount of computation, based on SHA-256 (using the 'sha2' crate).
-    /// Its latency is proportional to `effort`.
+    /// Its latency is approximately proportional to `effort`.
     fn work(effort: u32) {
         for _ in 0..black_box(effort) {
             let buf = [0u8; 64];
@@ -66,7 +82,7 @@ impl BusyWork {
         }
     }
 
-    const TOLERANCE: f64 = 0.01;
+    const TOLERANCE: f64 = 0.005;
     const ITER_EFFORT: u32 = 1;
     const WARMUP_MILLIS: u64 = 500;
     const DEFAULT_BUDGET: RunLength = RunLength::Time(Duration::from_millis(10));
@@ -82,9 +98,11 @@ impl BusyWork {
     /// Returns a [`Calibration`] object that can be used to estimate the effort required to achieve
     /// a desired mean latency, using an iterative process.
     ///
-    /// `calibration_budget` limits the length of the iterative process by time and/or count
+    /// `budget` limits the length of the iterative process by time and/or count
     /// (= accumulated calibration effort).
-    /// The total calibration takes longer than `run_length` because a warm-up period is added.
+    /// The total calibration takes longer than `budget` because a warm-up period is added.
+    ///
+    /// See [`Calibration`] for the accuracy of the result.
     pub fn calibrate_with_budget(budget: RunLength) -> Calibration {
         // Warm-up and use the resulting preliminary calibration to prepare arguments for more accurate
         // linear calibration.
@@ -124,7 +142,7 @@ impl BusyWork {
 
     /// Estimation of the mean latency of one unit of `effort`, using an exponential iterative process
     /// and a naive estimator of mean.
-    /// `calibration_budget` limits the length of the iterative process by time and/or count
+    /// `budget` limits the length of the iterative process by time and/or count
     /// (= accumulated calibration effort).
     fn calibrate_exponential(budget: RunLength) -> Calibration {
         let (budget_count, budget_dur) = budget.count_and_time();
@@ -165,7 +183,7 @@ impl BusyWork {
 
     /// Estimation of the mean latency of one unit of `effort`, using a linear iterative process and
     /// a robust estimator of mean.
-    /// `calibration_budget` limits the length of the iterative process by time and/or count
+    /// `budget` limits the length of the iterative process by time and/or count
     /// (= accumulated calibration effort).
     fn calibrate_linear(
         budget: RunLength,
@@ -188,7 +206,7 @@ impl BusyWork {
 #[cfg(test)]
 #[cfg(feature = "_bench")]
 mod tcommon {
-    pub const TOLERANCE: f64 = 0.004;
+    pub const TOLERANCE: f64 = 0.005;
     pub const WARMUP_MILLIS: u64 = 500;
 }
 
@@ -397,7 +415,7 @@ mod validate_ratio {
     fn test_busy_work_ratio_10_micro() {
         const EPSILON: f64 = 0.02;
         const SAMP_SIZE: usize = 200;
-        let tgt1 = Duration::from_micros(1);
+        let tgt1 = Duration::from_micros(10);
         let (adjusted_ratio, latency_ratio) = run(tgt1, RATIO, SAMP_SIZE);
         rel_approx_eq!(adjusted_ratio, latency_ratio, EPSILON);
     }
@@ -507,7 +525,7 @@ mod validate_proportionality {
 
     #[test]
     fn test_busy_work_proportionality_3600() {
-        const SAMP_SIZE: usize = 50;
+        const SAMP_SIZE: usize = 100;
         let norm_ratio = run(3_600, SAMP_SIZE);
         rel_approx_eq!(1.0, norm_ratio, EPSILON);
     }
