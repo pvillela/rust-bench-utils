@@ -10,6 +10,8 @@ use std::{hint::black_box, time::Duration};
 /// Output from [`BusyWork`] calibration functions.
 pub struct Calibration {
     unit_ltncy: FpSeconds,
+    /// The clock overhead of [`bench_run`](crate::bench_run) computed during calibration.
+    overhead: FpSeconds,
 }
 
 impl Calibration {
@@ -25,6 +27,11 @@ impl Calibration {
         let effort = ratio.round().max(1.0);
         let calibr_ltncy = self.unit_ltncy * effort;
         (effort as u32, calibr_ltncy)
+    }
+
+    /// The clock overhead of [`bench_run`](crate::bench_run) computed during calibration.
+    pub fn overhead(&self) -> FpSeconds {
+        self.overhead
     }
 }
 
@@ -81,12 +88,14 @@ impl BusyWork {
     pub fn calibrate_with_budget(budget: RunLength) -> Calibration {
         // Warm-up and use the resulting preliminary calibration to prepare arguments for more accurate
         // linear calibration.
-        let (wcalib, overhead) = Self::warmup(Self::WARMUP_MILLIS);
-        let prelim_unit_ltncy = wcalib.unit_ltncy;
+        let Calibration {
+            unit_ltncy: prelim_unit_ltncy,
+            overhead,
+        } = Self::warmup(Self::WARMUP_MILLIS);
 
         let batch =
             suggested_batch_size(prelim_unit_ltncy, overhead, Self::TOLERANCE).ceil() as usize;
-        let calib = Self::calibrate_linear(budget, Self::ITER_EFFORT, Some(batch));
+        let calib = Self::calibrate_linear(budget, Self::ITER_EFFORT, Some(batch), overhead);
         debug!(
             "BusyWork::calibrate_with_budget >>> budget={budget:?}, prelim_unit_ltncy={prelim_unit_ltncy:?}, iter_effort={}, calibr={calib:?}",
             Self::ITER_EFFORT
@@ -94,9 +103,8 @@ impl BusyWork {
         calib
     }
 
-    /// Does the warm-up for [`Self::calibrate_with_budget`]. Returns a preliminary calibration and the
-    /// clock overhead of `bench_run` (which is used to calculate downstream batch size).
-    fn warmup(warmup_millis: u64) -> (Calibration, FpSeconds) {
+    /// Does the warm-up for [`Self::calibrate_with_budget`].
+    fn warmup(warmup_millis: u64) -> Calibration {
         const NAIVE_RUN_LENGTH: RunLength = RunLength::Time(Duration::from_millis(10));
 
         let naive_calib = Self::calibrate_exponential(NAIVE_RUN_LENGTH);
@@ -108,9 +116,10 @@ impl BusyWork {
             RunLength::Time(Duration::from_millis(warmup_millis)),
             Self::ITER_EFFORT,
             Some(batch),
+            overhead,
         );
 
-        (calib, overhead)
+        calib
     }
 
     /// Estimation of the mean latency of one unit of `effort`, using an exponential iterative process
@@ -144,7 +153,10 @@ impl BusyWork {
                 // The last iteration should have been the most efficient due to previous warming;
                 // if that's not the case, return the accumulated estimate.
                 let unit_ltncy = iter_unit_ltncy.min(acc_unit_ltncy.as_f64()).into();
-                return Calibration { unit_ltncy };
+                return Calibration {
+                    unit_ltncy,
+                    overhead: FpSeconds::ZERO,
+                };
             }
         }
 
@@ -155,25 +167,29 @@ impl BusyWork {
     /// a robust estimator of mean.
     /// `calibration_budget` limits the length of the iterative process by time and/or count
     /// (= accumulated calibration effort).
-    fn calibrate_linear(budget: RunLength, iter_effort: u32, batch: Option<usize>) -> Calibration {
+    fn calibrate_linear(
+        budget: RunLength,
+        iter_effort: u32,
+        batch: Option<usize>,
+        overhead: FpSeconds,
+    ) -> Calibration {
         let cfg = BenchCfg::default()
             .with_warmup_millis(0)
             .with_recording_unit(LatencyUnit::sub_sec(11));
         let out = bench_run_arg_cfg(&cfg, || Self::work(iter_effort), budget, batch);
         let unit_ltncy = out.mean_rob() / iter_effort as f64;
-        Calibration { unit_ltncy }
+        Calibration {
+            unit_ltncy,
+            overhead,
+        }
     }
 }
 
 #[cfg(test)]
 #[cfg(feature = "_bench")]
 mod tcommon {
-    use crate::{FpSeconds, overhead};
-    use std::sync::LazyLock;
-
     pub const TOLERANCE: f64 = 0.004;
     pub const WARMUP_MILLIS: u64 = 500;
-    pub static OVERHEAD: LazyLock<FpSeconds> = LazyLock::new(|| overhead().median_r());
 }
 
 #[cfg(test)]
@@ -191,14 +207,15 @@ mod validate_latency {
         _ = env_logger::try_init();
 
         let start = Instant::now();
-        let (effort, tgt_fpsecs) = BusyWork::calibrate().effort_for_latency(tgt.into());
+        let calib = BusyWork::calibrate();
+        let (effort, tgt_fpsecs) = calib.effort_for_latency(tgt.into());
         let f = BusyWork::fun(effort);
 
         let cfg = BenchCfg::default()
             .with_recording_unit(LatencyUnit::sub_sec(12))
             .with_warmup_millis(tcommon::WARMUP_MILLIS);
-        let batch = suggested_batch_size(tgt_fpsecs, *tcommon::OVERHEAD, tcommon::TOLERANCE).ceil()
-            as usize;
+        let batch =
+            suggested_batch_size(tgt_fpsecs, calib.overhead(), tcommon::TOLERANCE).ceil() as usize;
 
         let out = bench_run_arg_cfg(&cfg, f, RunLength::Count(batch * samp_size), Some(batch));
         let latency_fpsecs = out.mean_rob();
@@ -309,15 +326,16 @@ mod validate_ratio {
         _ = env_logger::try_init();
 
         let start = Instant::now();
-        let (effort2, _) = BusyWork::calibrate().effort_for_latency(tgt1.into());
+        let calib = BusyWork::calibrate();
+        let (effort2, _) = calib.effort_for_latency(tgt1.into());
         let effort1 = (effort2 as f64 * ratio).round() as u32;
         let adjusted_ratio = effort1 as f64 / effort2 as f64;
         let f1 = BusyWork::fun(effort1);
         let f2 = BusyWork::fun(effort2);
 
         let cfg = BenchCfg::default().with_warmup_millis(tcommon::WARMUP_MILLIS);
-        let batch = suggested_batch_size(tgt1.into(), *tcommon::OVERHEAD, tcommon::TOLERANCE).ceil()
-            as usize;
+        let batch =
+            suggested_batch_size(tgt1.into(), calib.overhead(), tcommon::TOLERANCE).ceil() as usize;
 
         let out = duo::bench_run_arg_cfg(
             &cfg,
