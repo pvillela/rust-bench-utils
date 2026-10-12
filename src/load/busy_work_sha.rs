@@ -84,7 +84,7 @@ impl BusyWork {
 
     const TOLERANCE: f64 = 0.005;
     const ITER_EFFORT: u32 = 1;
-    const WARMUP_MILLIS: u64 = 500;
+    const WARMUP_MILLIS: u64 = 100;
     const DEFAULT_BUDGET: RunLength = RunLength::Time(Duration::from_millis(10));
 
     /// Returns a [`Calibration`] object that can be used to estimate the effort required to achieve
@@ -207,7 +207,7 @@ impl BusyWork {
 #[cfg(feature = "_bench")]
 mod tcommon {
     pub const TOLERANCE: f64 = 0.005;
-    pub const WARMUP_MILLIS: u64 = 500;
+    pub const WARMUP_MILLIS: u64 = 100;
 }
 
 #[cfg(test)]

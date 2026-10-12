@@ -168,11 +168,14 @@ pub fn overhead_x(exec_count: usize, groups: usize) -> (BenchOut, BenchOut) {
         exec_count > 0 && groups > 0,
         "both `exec_count` and `groups` must be > 0"
     );
+
+    const WARMUP_MILLIS: u64 = 100;
+
     let target_fn = || ();
     let cfg = BenchCfg::default().with_warmup_millis(0);
 
     // Warmup.
-    let cfg_w = BenchCfg::default().with_warmup_millis(1000);
+    let cfg_w = BenchCfg::default().with_warmup_millis(WARMUP_MILLIS);
     bench_run_arg_cfg(&cfg_w, target_fn, RunLength::Count(exec_count), None);
 
     let mut pooled_out = BenchOut::new(&cfg, None);
