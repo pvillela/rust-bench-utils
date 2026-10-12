@@ -202,16 +202,20 @@ pub fn overhead() -> BenchOut {
 }
 
 /// Suggested batch size for benchmarking a target function, given a rough estimate of
-/// the target function's latency (`target_latency`) and a relative error tolerance (`tolerance`).
+/// the target function's latency (`rough_latency`), the clock `overhead` of bench_run,
+/// and a relative error tolerance (`tolerance`).
 /// The returned value should be rounded up to the next integer.
 ///
-/// Calculates batch size `B` such that `overhead() / (target_latency * B) = tolerance`.
+/// Calculates batch size `B` such that `overhead / (rough_latency * B) = tolerance`.
+///
+/// `overhead` can be obtained by running [`overhead().median_r()`](overhead).
+///
 /// A `tolerance` value of `0.01` is a reasonable choice.
 ///
-/// A `target_latency` estimate can be obtained by benchmarking the target function with
+/// A `rough_latency` estimate can be obtained by benchmarking the target function with
 /// `batch = None`.
-pub fn suggested_batch_size(target_latency: FpSeconds, tolerance: f64) -> f64 {
-    overhead().median_r() / (target_latency * tolerance)
+pub fn suggested_batch_size(rough_latency: FpSeconds, overhead: FpSeconds, tolerance: f64) -> f64 {
+    overhead / (rough_latency * tolerance)
 }
 
 #[cfg(test)]
