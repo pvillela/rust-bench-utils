@@ -298,27 +298,27 @@ impl RunLength {
         }
     }
 
-    /// Estimated number of iterations.
-    pub(crate) fn estimated_count(&self, iters_per_second: f64) -> usize {
-        assert!(iters_per_second > 0.0, "iters_per_second must be positive");
+    /// Estimated number of executions.
+    pub(crate) fn estimated_count(&self, execs_per_second: f64) -> usize {
+        assert!(execs_per_second > 0.0, "iters_per_second must be positive");
         match self {
             Self::Count(count) => *count,
-            Self::Time(duration) => (duration.as_secs_f64() * iters_per_second).round() as usize,
+            Self::Time(duration) => (duration.as_secs_f64() * execs_per_second).round() as usize,
             Self::CountWithTimeout(count, duration) => {
                 let count_from_duration =
-                    (duration.as_secs_f64() * iters_per_second).round() as usize;
+                    (duration.as_secs_f64() * execs_per_second).round() as usize;
                 *count.min(&count_from_duration)
             }
         }
     }
 
     /// Estimated run duration.
-    pub(crate) fn estimated_time(&self, iters_per_second: f64) -> Duration {
+    pub(crate) fn estimated_time(&self, execs_per_second: f64) -> Duration {
         match self {
-            Self::Count(count) => Duration::from_secs_f64(*count as f64 / iters_per_second),
+            Self::Count(count) => Duration::from_secs_f64(*count as f64 / execs_per_second),
             Self::Time(duration) => *duration,
             Self::CountWithTimeout(count, duration) => {
-                let duration_from_count = Duration::from_secs_f64(*count as f64 / iters_per_second);
+                let duration_from_count = Duration::from_secs_f64(*count as f64 / execs_per_second);
                 *duration.min(&duration_from_count)
             }
         }

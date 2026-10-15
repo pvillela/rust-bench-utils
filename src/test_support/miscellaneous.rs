@@ -4,7 +4,7 @@
 
 use crate::{BenchCfg, BenchOut, FpSeconds};
 use basic_stats::{core::SampleMoments, normal::normal_rand_samp};
-use std::{io::Write, sync::LazyLock, time::Duration};
+use std::{io::Write, sync::LazyLock};
 
 /// Low log-standard-deviation value for test sample generation.
 ///
@@ -217,20 +217,4 @@ impl StringWriter {
     pub fn as_str(&self) -> Result<&str, std::str::Utf8Error> {
         std::str::from_utf8(&self.buf)
     }
-}
-
-/// Returns the batch size required for a sample size of `samp_size` given a total observation count of
-/// `total_count`.
-pub fn batch_for_samp_size(samp_size: usize, total_count: usize) -> usize {
-    assert!(
-        total_count >= samp_size,
-        "batch_for_samp_size >>> total_count={total_count} must be >= samp_size={samp_size}"
-    );
-    total_count / samp_size
-}
-
-/// Returns the count required for the repeated execution of target latency `tgt_ltncy` to equal or
-/// exceed `acc_ltncy`.
-pub fn count_for_acc_ltncy(tgt_ltncy: Duration, acc_ltncy: Duration) -> usize {
-    acc_ltncy.as_nanos().div_ceil(tgt_ltncy.as_nanos()) as usize
 }

@@ -26,10 +26,11 @@ impl<const K: usize> BenchState<K> {
     ) {
         assert!(status_count > 0, "status_count must be > 0");
 
+        let batch = src.batch();
         let bsz = src.bsz();
-        let adj_run_length = batched_run_length(run_length, src.batch());
+        let adj_run_length = batched_run_length(run_length, batch);
         let (iters, run_time) = adj_run_length.count_and_time();
-        debug!("execute >>> iters={iters}, run_time={run_time:?}");
+        debug!("execute >>> iters={iters}, batch={batch:?}, run_time={run_time:?}");
         assert!(iters > 0, "iters must be > 0");
 
         let mut acc_latency = FpSeconds::ZERO; // enables testing with synthetic latency sources
@@ -62,7 +63,7 @@ impl<const K: usize> BenchState<K> {
                 if (i % status_count == 0 || finished)
                     && let Some(exec_status) = &mut status
                 {
-                    exec_status(i);
+                    exec_status(i * bsz);
                 }
 
                 if finished {
@@ -95,20 +96,23 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     mut s: S,
 ) -> BenchOut<K> {
     debug!("bench_run_x >>> run_length={run_length:?}");
-    let mut state = BenchOut::new(cfg, src.batch());
-    let iters_per_second = cfg.iters_per_sec(&mut src, run_length);
-    debug!("bench_run_x >>> execs_per_second={iters_per_second}");
+    let batch = src.batch();
+    let mut state = BenchOut::new(cfg, batch);
+    let execs_per_sec = cfg.execs_per_sec(&mut src, run_length);
+    debug!(
+        "bench_run_x >>> iters_per_second={execs_per_sec}, batch={batch:?}, execs_per_sec={execs_per_sec}"
+    );
 
     let warmup_run_length = RunLength::Time(Duration::from_millis(cfg.warmup_millis()));
-    let warmup_est_time = warmup_run_length.estimated_time(iters_per_second);
-    let warmup_est_count = warmup_run_length.estimated_count(iters_per_second);
-    let main_est_time = run_length.estimated_time(iters_per_second);
-    let main_est_count = run_length.estimated_count(iters_per_second);
+    let warmup_est_time = warmup_run_length.estimated_time(execs_per_sec);
+    let warmup_est_count = warmup_run_length.estimated_count(execs_per_sec);
+    let main_est_time = run_length.estimated_time(execs_per_sec);
+    let main_est_count = run_length.estimated_count(execs_per_sec);
 
     // Warm-up.
     let warmup_status = S::part_apply(s.warmup_status(), warmup_est_time, warmup_est_count);
     let warmup_status_count = if warmup_status.is_some() {
-        cfg.status_count(iters_per_second)
+        cfg.status_count(execs_per_sec)
     } else {
         usize::MAX
     };
@@ -127,7 +131,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     // Execute.
     let main_status = S::part_apply(s.main_status(), main_est_time, main_est_count);
     let main_status_count = if main_status.is_some() {
-        cfg.status_count(iters_per_second)
+        cfg.status_count(execs_per_sec)
     } else {
         usize::MAX
     };
@@ -279,7 +283,7 @@ mod status {
             "Executing bench_run".to_owned(),
         );
 
-        let execs_per_second = cfg.iters_per_sec(&mut src, run_length);
+        let execs_per_second = cfg.execs_per_sec(&mut src, run_length);
 
         let out = bench_run_x(&cfg, src, run_length, status);
 
