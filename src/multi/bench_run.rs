@@ -2,7 +2,7 @@
 
 use crate::{
     BenchCfg, FpSeconds, RunLength,
-    dev_support::batched_run_length,
+    dev_support::batched_iters_run_length,
     multi::{BenchOut, LatencySrc},
     status::{DefaultStatus, NoStatus, Status},
 };
@@ -16,7 +16,7 @@ type BenchState<const K: usize> = BenchOut<K>;
 
 impl<const K: usize> BenchState<K> {
     /// Executes target closures repeatedly and captures latencies.
-    /// `exec_status` is invoked once for every `status_count` invocations of the closures.
+    /// `exec_status` is invoked once for (approximately) every `status_count` invocations of the closures.
     fn execute(
         &mut self,
         src: &mut impl LatencySrc<K>,
@@ -28,10 +28,13 @@ impl<const K: usize> BenchState<K> {
 
         let batch = src.batch();
         let bsz = src.bsz();
-        let adj_run_length = batched_run_length(run_length, batch);
+        let adj_run_length = batched_iters_run_length(run_length, batch);
         let (iters, run_time) = adj_run_length.count_and_time();
         debug!("execute >>> iters={iters}, batch={batch:?}, run_time={run_time:?}");
         assert!(iters > 0, "iters must be > 0");
+
+        // `status_count` is in closure invocations; convert it to iterations of `src`.
+        let status_iters = status_count.div_ceil(bsz);
 
         let mut acc_latency = FpSeconds::ZERO; // enables testing with synthetic latency sources
         let start = Instant::now();
@@ -51,7 +54,7 @@ impl<const K: usize> BenchState<K> {
 
             if i == iters
                 || elapsed >= run_time
-                || i.is_multiple_of(status_count)
+                || i.is_multiple_of(status_iters)
                 || acc_latency.as_duration() >= run_time
                 || src_finished
             {
@@ -60,7 +63,7 @@ impl<const K: usize> BenchState<K> {
                     || acc_latency.as_duration() >= run_time
                     || src_finished;
 
-                if (i % status_count == 0 || finished)
+                if (i.is_multiple_of(status_iters) || finished)
                     && let Some(exec_status) = &mut status
                 {
                     exec_status(i * bsz);
@@ -99,9 +102,7 @@ pub fn bench_run_x<'a, const K: usize, S: Status<'a>>(
     let batch = src.batch();
     let mut state = BenchOut::new(cfg, batch);
     let execs_per_sec = cfg.execs_per_sec(&mut src, run_length);
-    debug!(
-        "bench_run_x >>> iters_per_second={execs_per_sec}, batch={batch:?}, execs_per_sec={execs_per_sec}"
-    );
+    debug!("bench_run_x >>> batch={batch:?}, execs_per_sec={execs_per_sec}");
 
     let warmup_run_length = RunLength::Time(Duration::from_millis(cfg.warmup_millis()));
     let warmup_est_time = warmup_run_length.estimated_time(execs_per_sec);
@@ -291,8 +292,8 @@ mod status {
         println!("** {status_str}");
 
         let re = Regex::new(
-            r"Warming up for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) executions.
-Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) executions.",
+            r"Warming up for \(approx.\) (\d+(?:\.\d+)?) millis: (\d+) of \(approx.\) (\d+) executions.
+Executing bench_run for \(approx.\) (\d+(?:\.\d+)?) millis: (\d+) of \(approx.\) (\d+) executions.",
         )
         .expect("invalid regex");
 
@@ -307,7 +308,7 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
         println!();
 
         {
-            assert_eq!(caps[1], warmup_millis.to_string());
+            assert_eq!(caps[1].parse::<f64>().unwrap(), warmup_millis as f64);
             let warmup_est_count = caps[3].parse::<u64>().unwrap();
             rel_approx_eq!(
                 warmup_est_count as f64,
@@ -318,8 +319,8 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
 
         {
             rel_approx_eq!(
-                caps[4].parse::<u64>().unwrap() as f64,
-                run_length.estimated_time(execs_per_second).as_millis() as f64,
+                caps[4].parse::<f64>().unwrap(),
+                run_length.estimated_time(execs_per_second).as_secs_f64() * 1000.0,
                 epsilon
             );
             let exec_last = caps[5].parse::<u64>().unwrap();
@@ -504,6 +505,53 @@ Executing bench_run for \(approx.\) (\d+) millis: (\d+) of \(approx.\) (\d+) exe
                 status_millis,
                 target_latency,
                 EPSILON,
+            );
+        }
+
+        #[test]
+        fn test_batched_1_10_1_400() {
+            const EPSILON: f64 = 0.001;
+            const BATCH: usize = 10;
+
+            let warmup_millis: u64 = 1;
+            let target_latency = Duration::from_micros(10);
+            let status_millis: u64 = 1;
+            let run_length = RunLength::Count(400);
+
+            run(
+                ConstLatencySrc::new([target_latency.into()], BATCH),
+                warmup_millis,
+                run_length,
+                status_millis,
+                target_latency,
+                EPSILON,
+            );
+
+            // Check the frequency of status updates. Unlike `StringWriter`, `Vec<u8>` retains the
+            // backspaces and the status updates they would erase.
+            let cfg = BenchCfg::default()
+                .with_warmup_millis(warmup_millis)
+                .with_status_millis(status_millis);
+            let mut w: Vec<u8> = Vec::new();
+            let status = DefaultStatus::new(
+                &mut w,
+                "Warming up".to_owned(),
+                "Executing bench_run".to_owned(),
+            );
+            let src = ConstLatencySrc::new([target_latency.into()], BATCH);
+            bench_run_x(&cfg, src, run_length, status);
+
+            // With ~100 executions per status update and 400 executions in total, the main phase
+            // must report intermediate status updates before the final one.
+            let status_str = String::from_utf8(w).expect("status output is not UTF-8");
+            let main_str = status_str
+                .split("Executing bench_run")
+                .nth(1)
+                .expect("no main status output");
+            let n_updates = main_str.matches(" executions.").count();
+            assert!(
+                n_updates >= 2,
+                "expected intermediate main status updates, got n_updates={n_updates}: {main_str:?}"
             );
         }
     }

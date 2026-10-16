@@ -1,4 +1,6 @@
-use crate::{LatencyUnit, RunLength, dev_support::batched_run_length, latency, multi::LatencySrc};
+use crate::{
+    LatencyUnit, RunLength, dev_support::batched_iters_run_length, latency, multi::LatencySrc,
+};
 use log::{Level, debug, log_enabled};
 use std::time::{Duration, Instant};
 
@@ -100,7 +102,7 @@ impl BenchCfg {
         self
     }
 
-    fn execs_per_sec_budget(&self, run_length: RunLength) -> RunLength {
+    fn iters_per_sec_budget(&self, iters_run_length: RunLength) -> RunLength {
         const WARMUP_DIVISOR: u32 = 3;
         const RUN_DIVISOR: u32 = 30;
 
@@ -119,7 +121,7 @@ impl BenchCfg {
         let adj_warmup_run_length = RunLength::Time(Duration::from_millis(
             self.warmup_millis / WARMUP_DIVISOR as u64,
         ));
-        let adj_main_run_length = match run_length {
+        let adj_main_run_length = match iters_run_length {
             RunLength::Count(count) => RunLength::Count(count / RUN_DIVISOR as usize),
             RunLength::Time(dur) => RunLength::Time(dur / RUN_DIVISOR),
             RunLength::CountWithTimeout(count, dur) => {
@@ -128,7 +130,7 @@ impl BenchCfg {
         };
 
         let run_lengths = [adj_warmup_run_length, adj_main_run_length];
-        debug!("execs_per_sec_budget >>> run_lengths[warmup, main]={run_lengths:?}");
+        debug!("iters_per_sec_budget >>> run_lengths[warmup, main]={run_lengths:?}");
 
         let counts = run_lengths
             .iter()
@@ -138,7 +140,7 @@ impl BenchCfg {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        debug!("execs_per_sec_budget >>> counts={counts:?}");
+        debug!("iters_per_sec_budget >>> counts={counts:?}");
 
         let durs = run_lengths
             .iter()
@@ -148,11 +150,11 @@ impl BenchCfg {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        debug!("execs_per_sec_budget >>> durs={durs:?}");
+        debug!("iters_per_sec_budget >>> durs={durs:?}");
 
         let median_count = median(counts);
         let median_dur = median(durs);
-        debug!("execs_per_sec_budget >>> median_count={median_count:?}, median_dur={median_dur:?}");
+        debug!("iters_per_sec_budget >>> median_count={median_count:?}, median_dur={median_dur:?}");
 
         let budget = match (median_count, median_dur) {
             (Some(count), Some(dur)) => {
@@ -163,7 +165,7 @@ impl BenchCfg {
             (None, None) => unreachable!("impossible"),
         };
 
-        debug!("execs_per_sec_budget >>> budget={budget:?}");
+        debug!("iters_per_sec_budget >>> budget={budget:?}");
         budget
     }
 
@@ -176,7 +178,7 @@ impl BenchCfg {
     /// # May return [`f64::INFINITY`]:
     /// Returns `f64::INFINITY` if the aggregate latency for any iteration is zero.
     /// In particular, this can happen if `src` is finite and its length is less than or equal to one half
-    /// of the estimation budget count (see [`latency::iters_per_sec`] and [`Self::execs_per_sec_budget`]).
+    /// of the estimation budget count (see [`latency::iters_per_sec`] and [`Self::iters_per_sec_budget`]).
     pub(crate) fn execs_per_sec<const K: usize>(
         &self,
         src: &mut impl LatencySrc<K>,
@@ -188,16 +190,18 @@ impl BenchCfg {
             None
         };
 
-        let adj_run_length = batched_run_length(run_length, src.batch());
-        let budget = self.execs_per_sec_budget(adj_run_length);
-        let ips = latency::iters_per_sec(src.aggregate(), budget);
+        let batch = src.batch();
+        let iters_run_length = batched_iters_run_length(run_length, batch);
+        let iters_budget = self.iters_per_sec_budget(iters_run_length);
+        let ips = latency::iters_per_sec(src.aggregate(), iters_budget);
+        let eps = ips * src.bsz() as f64;
 
         debug!(
-            "execs_per_sec >>> execs_per_sec={ips:?}, elapsed={:?}",
+            "execs_per_sec >>> iters_per_sec={ips:?}, batch={batch:?}, execs_per_sec={eps:?}, elapsed={:?}",
             start.map(|start| start.elapsed())
         );
 
-        ips * src.bsz() as f64
+        eps
     }
 
     /// Number of executions between status updates, derived from `execs_per_second`.
@@ -223,7 +227,7 @@ impl Default for BenchCfg {
 #[cfg(feature = "_test")]
 mod test {
     use crate::multi::LatencySrc1;
-    use crate::multi::test_support::LognormalLatencySrc;
+    use crate::multi::test_support::{ConstLatencySrc, LognormalLatencySrc};
     use crate::{BenchCfg, FpSeconds, LatencyUnit, RunLength};
     use basic_stats::rel_approx_eq;
     use std::time::Duration;
@@ -422,5 +426,15 @@ mod test {
         assert!(eps > 0.0);
         // Expected: ~200 (1000ms / 5ms)
         rel_approx_eq!(200.0, eps, 0.50);
+    }
+
+    #[test]
+    fn test_src_execs_per_sec_batched() {
+        let cfg = BenchCfg::default();
+        // Each iteration of `src` is a batch of 10 executions of 1ms each.
+        let mut src = ConstLatencySrc::<1>::new([FpSeconds::from_millis(1)], 10);
+        let eps = cfg.execs_per_sec(&mut src, RunLength::Count(500));
+        // Expected: 1000ms / 1ms = 1000.0 executions (not 100.0 iterations) per second
+        rel_approx_eq!(1000.0, eps, 0.001);
     }
 }

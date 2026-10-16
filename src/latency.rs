@@ -1,4 +1,3 @@
-use crate::dev_support::{midpoint_value, quickmedian};
 use log::trace;
 use std::{
     fmt::Debug,
@@ -23,16 +22,6 @@ pub fn latency_n(mut f: impl FnMut(), n: usize) -> Duration {
         f();
     }
     start.elapsed()
-}
-
-/// Returns the median of the latecies for the execution `n_batches` times of [`latency_n`]`(f, batch)`.
-pub fn median_batch_latency(mut f: impl FnMut(), batch: usize, n_batches: usize) -> FpSeconds {
-    let mut latencies: Vec<FpSeconds> = Vec::<FpSeconds>::with_capacity(n_batches);
-    for _ in 0..n_batches {
-        latencies.push(FpSeconds::from_duration(latency_n(&mut f, batch)) / batch);
-    }
-    quickmedian(&mut latencies);
-    midpoint_value(&latencies)
 }
 
 /// A floating point duration of seconds. Useful for representing duration values or fractions with
@@ -272,23 +261,23 @@ impl LatencyUnit {
     }
 }
 
-/// Specifies how long a benchmark should run for. Encapsulates a target number of iterations for the benchmark to run
-/// and a time duration. The benchmark run length can be set as a number of iterations, a time duration, or
-/// a number of iterations with a timeout duration.
+/// Specifies how long a benchmark should run for. Encapsulates a target number of executions for the benchmark to run
+/// and a time duration. The benchmark run length can be set as a number of executions, a time duration, or
+/// a number of executions with a timeout duration.
 #[derive(Debug, Clone, Copy)]
 pub enum RunLength {
-    /// Run for a fixed number of iterations.
+    /// Run for a fixed number of executions.
     Count(usize),
     /// Run for a fixed duration.
     Time(Duration),
-    /// Run for a fixed number of iterations, but stop early if the given duration is exceeded.
+    /// Run for a fixed number of executions, but stop early if the given duration is exceeded.
     CountWithTimeout(usize, Duration),
 }
 
 impl RunLength {
-    /// Returns both the number of iterations and time duration specified for the benchmark to run.
+    /// Returns both the number of executions and time duration specified for the benchmark to run.
     ///
-    /// The benchmark ends when the specified number of iterations is reached (or exceeded)
+    /// The benchmark ends when the specified number of executions is reached (or exceeded)
     /// or when the time duration is reached (or exceeded), whichever comes first.
     pub fn count_and_time(&self) -> (usize, Duration) {
         match self {
@@ -300,7 +289,7 @@ impl RunLength {
 
     /// Estimated number of executions.
     pub(crate) fn estimated_count(&self, execs_per_second: f64) -> usize {
-        assert!(execs_per_second > 0.0, "iters_per_second must be positive");
+        assert!(execs_per_second > 0.0, "execs_per_second must be positive");
         match self {
             Self::Count(count) => *count,
             Self::Time(duration) => (duration.as_secs_f64() * execs_per_second).round() as usize,

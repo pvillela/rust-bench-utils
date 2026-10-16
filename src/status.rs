@@ -132,13 +132,15 @@ impl<'a, W: Write> DefaultStatus<'a, W> {
 
         move |est_time: Duration, est_count: usize, i: usize| {
             if status_len == 0 {
-                write!(
-                    w,
-                    "{} for (approx.) {} millis: ",
-                    preamble.clone(),
-                    est_time.as_millis()
-                )
-                .expect("unexpected error writing to `Write` object `w`");
+                // Show fractional millis for short durations, which would otherwise be truncated to
+                // a misleading whole number (possibly 0).
+                let millis = if est_time < Duration::from_millis(10) {
+                    format!("{:.3}", est_time.as_secs_f64() * 1000.0)
+                } else {
+                    est_time.as_millis().to_string()
+                };
+                write!(w, "{} for (approx.) {} millis: ", preamble.clone(), millis)
+                    .expect("unexpected error writing to `Write` object `w`");
                 w.flush().expect("unexpected I/O error");
             }
             write!(w, "{}", "\u{8}".repeat(status_len))
@@ -305,6 +307,21 @@ mod test {
             assert!(
                 output.contains("10000 executions"),
                 "output should contain '10000 executions': {output}"
+            );
+        }
+
+        // Test fractional millis for short durations
+        {
+            let mut w = StringWriter::new();
+            {
+                let mut ds = DefaultStatus::new(&mut w, "Warm".to_owned(), "Exec".to_owned());
+                let mut exec_fn = ds.main_status().unwrap();
+                exec_fn(Duration::from_micros(560), 200, 200);
+            }
+            let output = w.as_str().unwrap();
+            assert!(
+                output.contains("0.560 millis"),
+                "output should contain '0.560 millis': {output}"
             );
         }
     }
